@@ -311,6 +311,10 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
         channels.close();
         openAgentSetup();
       }}
+      onCreateChat={() => {
+        channels.close();
+        openAgentSetup("chat");
+      }}
       onEditAgent={editAgent}
       duplicateSupported={activeServerSupportsCapability("agent-duplication")}
       duplicatingAgentIds={duplicatingAgentIds()}

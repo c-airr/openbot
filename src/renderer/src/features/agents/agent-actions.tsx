@@ -43,6 +43,9 @@ import { agentsPort } from "./agents-port";
  * Conversation cleanup belongs to its domain. This command removes the agent
  * and asks each domain to remove the state that it owns.
  */
+/** The longest chat name taken from the first message. */
+const CHAT_NAME_LENGTH = 48;
+
 const AgentActions = createSimpleContext({
   name: "Agent actions",
   init: () => {
@@ -79,11 +82,12 @@ const AgentActions = createSimpleContext({
     const { selectAgent } = useNavigation();
     const [duplicatingSectionIds, setDuplicatingSectionIds] = createSignal<Set<string>>(new Set());
 
+    const createModelSupported = () =>
+      activeServer()?.kind !== "remote" || activeServerSupportsCapability(TEAM_AGENT_CREATE_MODEL_CAPABILITY);
+
     /** Asks the host for the agent. */
     function requestNewAgent(draft: NewAgentDraft) {
-      const createModelSupported =
-        activeServer()?.kind !== "remote" || activeServerSupportsCapability(TEAM_AGENT_CREATE_MODEL_CAPABILITY);
-      return agentsPort().agent.createAgent(newAgentInput(draft, createModelSupported));
+      return agentsPort().agent.createAgent(newAgentInput(draft, createModelSupported()));
     }
 
     /** Synchronous, so a caller that also selects the agent does both in the same update. */
@@ -123,6 +127,37 @@ const AgentActions = createSimpleContext({
         analytics.track("agent_action", { action: "create", result: "succeeded", ...(properties ?? {}) });
       } catch (error) {
         analytics.track("agent_action", { action: "create", result: "failed", failure_code: "create_failed" });
+        const { t, errorMessage } = currentText();
+        setAgentSetupError(errorMessage(error, t("agent.error.createFailed")));
+      } finally {
+        setCreatingAgent(false);
+      }
+    }
+
+    /**
+     * Fork: a chat is an agent whose first message is the user's own, named after that message and
+     * put in the Chats section. A failed move leaves it in the default section.
+     */
+    async function createChat(draft: FirstAgentDraft = agentSetupDraft()) {
+      const message = draft.purpose.trim();
+      if (creatingAgent() || !message) return;
+      setCreatingAgent(true);
+      setAgentSetupError(null);
+      try {
+        const name = (message.split("\n")[0] ?? "").slice(0, CHAT_NAME_LENGTH).trim();
+        const input = newAgentInput({ ...draft, name, purpose: "Chat" }, createModelSupported());
+        const newAgent = addNewAgent(await agentsPort().agent.createAgent({ ...input, initialMessage: message }));
+        setAgentSetupOpen(false);
+        clearDirectSelection();
+        setActiveAgentId(newAgent.id);
+        const sectionName = currentText().t("agent.chat.section");
+        const section = sidebarLayout().sections.find((item) => item.name === sectionName);
+        void applySidebarLayoutAction(
+          section
+            ? { type: "assign", agentId: newAgent.id, sectionId: section.id }
+            : { type: "create", name: sectionName, agentId: newAgent.id },
+        ).catch(() => undefined);
+      } catch (error) {
         const { t, errorMessage } = currentText();
         setAgentSetupError(errorMessage(error, t("agent.error.createFailed")));
       } finally {
@@ -416,6 +451,7 @@ const AgentActions = createSimpleContext({
 
     return {
       createAgent,
+      createChat,
       createAgentInPlace,
       editAgent,
       duplicateAgent,

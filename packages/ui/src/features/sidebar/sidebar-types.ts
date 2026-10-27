@@ -96,6 +96,8 @@ export interface SidebarProps {
   /** Whether this server currently accepts new agents. Desktop keeps the default enabled. */
   createSupported?: boolean | undefined;
   onCreateAgent: () => void;
+  /** Opens the new chat form: a model pick and a first message, with no agent setup. */
+  onCreateChat?: (() => void) | undefined;
   onEditAgent: (agentId: string) => void;
   duplicateSupported?: boolean | undefined;
   duplicatingAgentIds?: ReadonlySet<string> | undefined;

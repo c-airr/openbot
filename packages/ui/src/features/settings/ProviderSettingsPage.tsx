@@ -210,7 +210,7 @@ function ProviderList(props: ProviderSettingsPageProps & { onOpen: (id: PageId) 
       const waiting = waitingAccounts(option);
       return waiting > 0 ? t("provider.settings.accountsWaiting", { count: waiting, accounts: count }) : count;
     }
-    return option.email ?? option.description ?? t("provider.status.connected");
+    return option.description ?? t("provider.status.connected");
   };
   /** A query matches the name, the line under it, and the names and emails of the accounts. */
   const matches = (...texts: (string | null | undefined)[]) =>
@@ -809,10 +809,7 @@ function AccountRow(
   const ownSigningIn = () => own() && props.row.signingIn();
   const agents = () => props.account.usedBy ?? [];
   const detail = () =>
-    [
-      props.account.email && props.account.email !== name() ? props.account.email : null,
-      agents().length > 0 ? t("provider.account.usedBy", { agents: format.list(agents()) }) : null,
-    ]
+    [agents().length > 0 ? t("provider.account.usedBy", { agents: format.list(agents()) }) : null]
       .filter(Boolean)
       .join(" · ");
   const usage = () =>
@@ -1014,8 +1011,7 @@ function SignInSection(props: SectionProps & { keyShown: boolean }) {
   const browserAction = () => providerAction(row().state(), row().connecting());
   /** The key providers open the key dialog from their API key card. */
   const signInButton = () => row().signInOffered() && !props.keyShown;
-  const title = () =>
-    props.option.email ?? providerStatusLabel(t, format, row().state(), row().connecting(), undefined);
+  const title = () => providerStatusLabel(t, format, row().state(), row().connecting(), undefined);
   const messages = () =>
     [
       props.option.checkError ? sourceText(props.option.checkError) : null,

@@ -20,6 +20,7 @@ export function WorkspaceAgentSetup() {
   const {
     agentList,
     agentSetupDraft,
+    agentSetupKind,
     setAgentSetupDraft,
     agentSetupError,
     creatingAgent,
@@ -29,7 +30,7 @@ export function WorkspaceAgentSetup() {
     serverSetupChoice,
     developmentCreation,
   } = useAgents();
-  const { createAgent } = useAgentActions();
+  const { createAgent, createChat } = useAgentActions();
   const { setupState } = useSetup();
   // Not gated on the server: the picker needs these IDs to label a model it is already showing,
   // and a remote server's OpenCode has its own catalogue. Only the write paths are local-only.
@@ -102,7 +103,7 @@ export function WorkspaceAgentSetup() {
     <FirstAgentSetup
       value={agentSetupDraft()}
       suggestions={FIRST_AGENT_SUGGESTIONS}
-      mode={agentList().length === 0 ? "first" : "additional"}
+      mode={agentSetupKind() === "chat" ? "chat" : agentList().length === 0 ? "first" : "additional"}
       submitting={creatingAgent()}
       error={agentSetupError()}
       modelOptions={createModelSupported() ? modelOptions() : undefined}
@@ -126,8 +127,8 @@ export function WorkspaceAgentSetup() {
           setModelTouched(true);
         setAgentSetupDraft(next);
       }}
-      onSubmit={createAgent}
-      onCancel={agentList().length > 0 ? cancelAgentSetup : undefined}
+      onSubmit={agentSetupKind() === "chat" ? createChat : createAgent}
+      onCancel={agentList().length > 0 || agentSetupKind() === "chat" ? cancelAgentSetup : undefined}
     />
   );
 }

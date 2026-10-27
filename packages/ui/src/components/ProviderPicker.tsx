@@ -522,7 +522,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                         when={
                           listedAccounts()
                             ? t("provider.account.count", { count: listedAccounts()?.length ?? 0 })
-                            : (option().email ?? option().description ?? (props.versionInDetail ? version() : null))
+                            : (option().description ?? (props.versionInDetail ? version() : null))
                         }
                       >
                         {(detail) => <small class="provider-picker-email">{detail()}</small>}

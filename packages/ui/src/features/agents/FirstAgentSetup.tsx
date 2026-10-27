@@ -52,7 +52,8 @@ export interface FirstAgentSuggestion {
 export interface FirstAgentSetupProps {
   value: FirstAgentDraft;
   suggestions: FirstAgentSuggestion[];
-  mode?: "first" | "additional";
+  /** Fork: `chat` asks only for a model and a first message. */
+  mode?: "first" | "additional" | "chat";
   submitting?: boolean;
   error?: string | null;
   /** The live catalog behind the model picker. Absent, the form keeps no model choice. */
@@ -185,9 +186,12 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
   const [canScrollSuggestionsBack, setCanScrollSuggestionsBack] = createSignal(false);
   const [canScrollSuggestionsForward, setCanScrollSuggestionsForward] = createSignal(false);
   const [draggingSuggestions, setDraggingSuggestions] = createSignal(false);
+  const chat = () => props.mode === "chat";
   const canSubmit = () =>
-    Boolean(props.value.name.trim()) && !instructionsTooLong(props.value.purpose) && !props.submitting;
-  const displayName = () => props.value.name.trim() || t("agent.setup.nameFallback");
+    Boolean((chat() ? props.value.purpose : props.value.name).trim()) &&
+    !instructionsTooLong(props.value.purpose) &&
+    !props.submitting;
+  const displayName = () => (chat() ? t("agent.chat.title") : props.value.name.trim() || t("agent.setup.nameFallback"));
 
   function updateSuggestionFades(): void {
     if (!suggestionList) return;
@@ -233,7 +237,7 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
     const observer = new ResizeObserver(updateSuggestionFades);
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (props.mode !== "additional" || props.submitting || !props.onCancel) return;
+      if (props.mode === "first" || props.submitting || !props.onCancel) return;
       event.preventDefault();
       props.onCancel();
     };
@@ -346,7 +350,7 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
           <AgentAvatar seed={props.value.avatarSeed} hue={props.value.avatarHue} motion="idle" />
           <h1 aria-live="polite">{displayName()}</h1>
         </div>
-        <Show when={props.mode === "additional" && props.onCancel}>
+        <Show when={props.mode !== "first" && props.onCancel}>
           <Button
             type="button"
             variant="ghost"
@@ -369,102 +373,110 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
           }}
         >
           <h2 id="first-agent-setup-title" class="sr-only">
-            {props.mode === "additional" ? t("agent.setup.titleAdditional") : t("agent.setup.titleFirst")}
+            {chat()
+              ? t("agent.chat.title")
+              : props.mode === "additional"
+                ? t("agent.setup.titleAdditional")
+                : t("agent.setup.titleFirst")}
           </h2>
 
-          <div
-            class="first-agent-live-avatar"
-            data-avatar-seed={props.value.avatarSeed}
-            data-avatar-hue={props.value.avatarHue ?? "automatic"}
-          >
-            <AgentAvatar
-              seed={props.value.avatarSeed}
-              hue={props.value.avatarHue}
-              motion="idle"
-              animationOffset={0.4}
-            />
-          </div>
-
-          <fieldset class="first-agent-avatar-fieldset first-agent-color-fieldset" disabled={props.submitting}>
-            <legend class="sr-only">{t("agent.setup.color")}</legend>
-            <div class="first-agent-color-options">
-              <Button
-                variant="ghost"
-                type="button"
-                size="sm"
-                class="first-agent-color-choice"
-                aria-label={t("agent.setup.colorAutomatic")}
-                aria-pressed={props.value.avatarHue === null ? "true" : "false"}
-                data-cuelume-tap="select"
-                onClick={() => updateDraft({ avatarHue: null })}
-              >
-                <span
-                  class="first-agent-color-swatch"
-                  style={{ background: avatarHeadColor(props.value.avatarSeed, null) }}
-                />
-              </Button>
-              <For each={AVATAR_HUE_CHOICES}>
-                {(option) => (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    size="sm"
-                    class="first-agent-color-choice"
-                    aria-label={t("agent.setup.colorOption", { color: t(AVATAR_HUE_LABEL[option.hue]) })}
-                    aria-pressed={props.value.avatarHue === option.hue ? "true" : "false"}
-                    data-cuelume-tap="select"
-                    onClick={() => updateDraft({ avatarHue: option.hue })}
-                  >
-                    <span class="first-agent-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
-                  </Button>
-                )}
-              </For>
+          <Show when={!chat()}>
+            <div
+              class="first-agent-live-avatar"
+              data-avatar-seed={props.value.avatarSeed}
+              data-avatar-hue={props.value.avatarHue ?? "automatic"}
+            >
+              <AgentAvatar
+                seed={props.value.avatarSeed}
+                hue={props.value.avatarHue}
+                motion="idle"
+                animationOffset={0.4}
+              />
             </div>
-          </fieldset>
 
-          <fieldset class="first-agent-avatar-fieldset first-agent-face-fieldset" disabled={props.submitting}>
-            <legend class="sr-only">{t("agent.setup.face")}</legend>
-            <div class="first-agent-face-options">
-              <For each={FIRST_AGENT_AVATAR_SEEDS}>
-                {(seed, index) => (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    size="sm"
-                    class="first-agent-face-choice"
-                    aria-label={t("agent.setup.faceOption", { number: index() + 1 })}
-                    aria-pressed={props.value.avatarSeed === seed ? "true" : "false"}
-                    data-cuelume-tap="select"
-                    onClick={() => updateDraft({ avatarSeed: seed })}
-                  >
-                    <AgentAvatar
-                      seed={seed}
-                      hue={props.value.avatarHue}
-                      motion="idle"
-                      animationOffset={index() * 0.16}
-                    />
-                  </Button>
-                )}
-              </For>
-            </div>
-          </fieldset>
+            <fieldset class="first-agent-avatar-fieldset first-agent-color-fieldset" disabled={props.submitting}>
+              <legend class="sr-only">{t("agent.setup.color")}</legend>
+              <div class="first-agent-color-options">
+                <Button
+                  variant="ghost"
+                  type="button"
+                  size="sm"
+                  class="first-agent-color-choice"
+                  aria-label={t("agent.setup.colorAutomatic")}
+                  aria-pressed={props.value.avatarHue === null ? "true" : "false"}
+                  data-cuelume-tap="select"
+                  onClick={() => updateDraft({ avatarHue: null })}
+                >
+                  <span
+                    class="first-agent-color-swatch"
+                    style={{ background: avatarHeadColor(props.value.avatarSeed, null) }}
+                  />
+                </Button>
+                <For each={AVATAR_HUE_CHOICES}>
+                  {(option) => (
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      size="sm"
+                      class="first-agent-color-choice"
+                      aria-label={t("agent.setup.colorOption", { color: t(AVATAR_HUE_LABEL[option.hue]) })}
+                      aria-pressed={props.value.avatarHue === option.hue ? "true" : "false"}
+                      data-cuelume-tap="select"
+                      onClick={() => updateDraft({ avatarHue: option.hue })}
+                    >
+                      <span class="first-agent-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
+                    </Button>
+                  )}
+                </For>
+              </div>
+            </fieldset>
+
+            <fieldset class="first-agent-avatar-fieldset first-agent-face-fieldset" disabled={props.submitting}>
+              <legend class="sr-only">{t("agent.setup.face")}</legend>
+              <div class="first-agent-face-options">
+                <For each={FIRST_AGENT_AVATAR_SEEDS}>
+                  {(seed, index) => (
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      size="sm"
+                      class="first-agent-face-choice"
+                      aria-label={t("agent.setup.faceOption", { number: index() + 1 })}
+                      aria-pressed={props.value.avatarSeed === seed ? "true" : "false"}
+                      data-cuelume-tap="select"
+                      onClick={() => updateDraft({ avatarSeed: seed })}
+                    >
+                      <AgentAvatar
+                        seed={seed}
+                        hue={props.value.avatarHue}
+                        motion="idle"
+                        animationOffset={index() * 0.16}
+                      />
+                    </Button>
+                  )}
+                </For>
+              </div>
+            </fieldset>
+          </Show>
 
           <div class="first-agent-fields">
-            <Field label={t("agent.setup.name")} required>
-              <Input
-                value={props.value.name}
-                maxlength={INPUT_LIMITS.agentName}
-                autocomplete="off"
-                disabled={props.submitting}
-                onValueChange={(name) => updateDraft({ name })}
-              />
-            </Field>
-            <Field label={t("agent.setup.purpose")}>
+            <Show when={!chat()}>
+              <Field label={t("agent.setup.name")} required>
+                <Input
+                  value={props.value.name}
+                  maxlength={INPUT_LIMITS.agentName}
+                  autocomplete="off"
+                  disabled={props.submitting}
+                  onValueChange={(name) => updateDraft({ name })}
+                />
+              </Field>
+            </Show>
+            <Field label={chat() ? t("agent.chat.message") : t("agent.setup.purpose")} required={chat()}>
               <Textarea
                 value={props.value.purpose}
-                rows={2}
+                rows={chat() ? 4 : 2}
                 invalid={instructionsTooLong(props.value.purpose)}
-                placeholder={t("agent.setup.purposePlaceholder")}
+                placeholder={chat() ? t("agent.chat.messagePlaceholder") : t("agent.setup.purposePlaceholder")}
                 disabled={props.submitting}
                 onValueChange={(purpose) => updateDraft({ purpose })}
               />
@@ -518,63 +530,65 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
               loading={props.submitting}
               loadingLabel={t("agent.setup.creating")}
             >
-              {t("agent.setup.create")}
+              {chat() ? t("agent.chat.start") : t("agent.setup.create")}
             </Button>
           </div>
         </form>
 
-        <section class="first-agent-suggestions" aria-labelledby="first-agent-suggestions-title">
-          <h2 id="first-agent-suggestions-title">{t("agent.setup.suggestions")}</h2>
-          <div
-            class={`first-agent-suggestion-viewport${canScrollSuggestionsBack() ? " can-scroll-back" : ""}${canScrollSuggestionsForward() ? " can-scroll-forward" : ""}${draggingSuggestions() ? " is-dragging" : ""}`}
-          >
-            <ul
-              ref={suggestionList}
-              class="first-agent-suggestion-list"
-              onScroll={updateSuggestionFades}
-              onPointerDown={startSuggestionDrag}
-              onPointerMove={moveSuggestionDrag}
-              onPointerUp={finishSuggestionDrag}
-              onPointerCancel={finishSuggestionDrag}
+        <Show when={!chat()}>
+          <section class="first-agent-suggestions" aria-labelledby="first-agent-suggestions-title">
+            <h2 id="first-agent-suggestions-title">{t("agent.setup.suggestions")}</h2>
+            <div
+              class={`first-agent-suggestion-viewport${canScrollSuggestionsBack() ? " can-scroll-back" : ""}${canScrollSuggestionsForward() ? " can-scroll-forward" : ""}${draggingSuggestions() ? " is-dragging" : ""}`}
             >
-              <For each={props.suggestions}>
-                {(suggestion) => (
-                  <li class="first-agent-suggestion-item">
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      class="first-agent-suggestion-card"
-                      data-animation-cycle-offset={suggestion.animationCycleOffset}
-                      data-animation-offset={suggestion.animationOffset}
-                      aria-label={t("agent.setup.suggestion.label", {
-                        name: t(suggestion.nameKey),
-                        description: t(suggestion.descriptionKey),
-                      })}
-                      aria-pressed={props.value.suggestionId === suggestion.id ? "true" : "false"}
-                      data-cuelume-tap="select"
-                      disabled={props.submitting}
-                      onClick={() => {
-                        if (!suppressSuggestionClick) selectSuggestion(suggestion);
-                      }}
-                    >
-                      <AgentAvatar
-                        seed={suggestion.avatarSeed}
-                        hue={suggestion.avatarHue}
-                        motion="always"
-                        cycleOffset={suggestion.animationCycleOffset}
-                        animationOffset={suggestion.animationOffset}
-                      />
-                      <span>
-                        <strong>{t(suggestion.nameKey)}</strong>
-                        <small>{t(suggestion.descriptionKey)}</small>
-                      </span>
-                    </Button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </div>
-        </section>
+              <ul
+                ref={suggestionList}
+                class="first-agent-suggestion-list"
+                onScroll={updateSuggestionFades}
+                onPointerDown={startSuggestionDrag}
+                onPointerMove={moveSuggestionDrag}
+                onPointerUp={finishSuggestionDrag}
+                onPointerCancel={finishSuggestionDrag}
+              >
+                <For each={props.suggestions}>
+                  {(suggestion) => (
+                    <li class="first-agent-suggestion-item">
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        class="first-agent-suggestion-card"
+                        data-animation-cycle-offset={suggestion.animationCycleOffset}
+                        data-animation-offset={suggestion.animationOffset}
+                        aria-label={t("agent.setup.suggestion.label", {
+                          name: t(suggestion.nameKey),
+                          description: t(suggestion.descriptionKey),
+                        })}
+                        aria-pressed={props.value.suggestionId === suggestion.id ? "true" : "false"}
+                        data-cuelume-tap="select"
+                        disabled={props.submitting}
+                        onClick={() => {
+                          if (!suppressSuggestionClick) selectSuggestion(suggestion);
+                        }}
+                      >
+                        <AgentAvatar
+                          seed={suggestion.avatarSeed}
+                          hue={suggestion.avatarHue}
+                          motion="always"
+                          cycleOffset={suggestion.animationCycleOffset}
+                          animationOffset={suggestion.animationOffset}
+                        />
+                        <span>
+                          <strong>{t(suggestion.nameKey)}</strong>
+                          <small>{t(suggestion.descriptionKey)}</small>
+                        </span>
+                      </Button>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </div>
+          </section>
+        </Show>
       </div>
     </main>
   );

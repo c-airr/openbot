@@ -62,7 +62,6 @@ export function ProviderAccountList(props: ProviderAccountListProps) {
             const own = () => account().id === DEFAULT_PROVIDER_ACCOUNT_ID;
             const detail = () =>
               [
-                account().email && account().email !== name() ? account().email : null,
                 account().usedBy?.length
                   ? t("provider.account.usedBy", { agents: format.list(account().usedBy ?? []) })
                   : null,

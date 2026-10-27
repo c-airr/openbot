@@ -11,6 +11,7 @@ export const messages = defineMessages("sidebar", {
   "sidebar.new.agent": "New agent",
   "sidebar.new.channel": "New channel",
   "sidebar.new.section": "New section",
+  "sidebar.new.chat": "New chat",
   "sidebar.new.menu": "New agent or section",
   "sidebar.new.menuWithChannel": "New agent, channel or section",
   "sidebar.markAllRead": "Mark all as read",

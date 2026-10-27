@@ -92,6 +92,8 @@ const Agents = createSimpleContext({
     const [activeAgentId, updateActiveAgentId] = createSignal("");
     const [agentChatOpenRevision, setAgentChatOpenRevision] = createSignal(0);
     const [agentSetupOpen, setAgentSetupOpen] = createSignal(false);
+    /** Fork: a chat is an agent made from a model pick and a first message, without the agent form. */
+    const [agentSetupKind, setAgentSetupKind] = createSignal<"agent" | "chat">("agent");
     const [agentSetupDraft, setAgentSetupDraft] = createSignal<FirstAgentDraft>(createFirstAgentDraft());
     const [agentSetupError, setAgentSetupError] = createSignal<string | null>(null);
     const [creatingAgent, setCreatingAgent] = createSignal(false);
@@ -238,6 +240,7 @@ const Agents = createSimpleContext({
       if (profiles.length === 0 && !agentSetupOpen()) {
         setAgentSetupDraft(createFirstAgentDraft());
         setAgentSetupError(null);
+        setAgentSetupKind("agent");
         setAgentSetupOpen(true);
       }
       // An agent event can be a provider or an account change made elsewhere.
@@ -269,7 +272,7 @@ const Agents = createSimpleContext({
       hiddenAgentIds.delete(agentId);
     }
 
-    function openAgentSetup(): void {
+    function openAgentSetup(kind: "agent" | "chat" = "agent"): void {
       // The form renders in the workspace content that a rail page covers, and the
       // sidebar button that asks for it is outside that markup. Above the guard
       // below, so a second press reveals a form that is already open rather than
@@ -277,7 +280,8 @@ const Agents = createSimpleContext({
       // The automatic open above is deliberately not this: a server with no agents
       // must not take the report away from a user who asked for it.
       windowPage.showAgents();
-      if (agentSetupOpen()) return;
+      if (agentSetupOpen() && agentSetupKind() === kind) return;
+      setAgentSetupKind(kind);
       setDirectTyping(false);
       setAgentSetupDraft(createFirstAgentDraft());
       setAgentSetupError(null);
@@ -286,8 +290,9 @@ const Agents = createSimpleContext({
     }
 
     function cancelAgentSetup(): void {
-      if (creatingAgent() || agentList().length === 0) return;
+      if (creatingAgent() || (agentList().length === 0 && agentSetupKind() !== "chat")) return;
       setAgentSetupOpen(false);
+      setAgentSetupKind("agent");
       setAgentSetupError(null);
       setAgentSetupDraft(createFirstAgentDraft());
     }
@@ -381,6 +386,7 @@ const Agents = createSimpleContext({
       setUiErrors,
       appendUiError,
       agentSetupOpen,
+      agentSetupKind,
       serverOnboardingOpen,
       serverSetupChoice,
       setServerSetupChoice,

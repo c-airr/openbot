@@ -42,7 +42,7 @@ export interface ProviderAccountActions {
   local?: boolean | undefined;
 }
 
-/** The name an account shows: the user's name for it, its email, "API key", or its place in the list. */
+/** The name an account shows: the user's name for it, "API key", or its place in the list. The fork hides emails. */
 export function providerAccountName(
   t: AppTranslate,
   accounts: readonly Pick<ProviderAccountStatus, "id" | "label" | "email">[],
@@ -55,7 +55,6 @@ export function providerAccountName(
   const account = accounts[index];
   return (
     account?.label ||
-    account?.email ||
     (account && isApiKeyAccount(account.id) ? t("provider.account.apiKey") : null) ||
     t("provider.account.numbered", { number: index + 1 })
   );

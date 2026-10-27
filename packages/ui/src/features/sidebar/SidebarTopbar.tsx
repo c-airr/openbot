@@ -13,6 +13,7 @@ import {
   FolderPlus,
   Hash,
   IconButton,
+  MessageSquare,
   Puzzle,
 } from "@openbot/ui";
 import { Show } from "solid-js";
@@ -146,6 +147,12 @@ export function SidebarTopbar() {
                   <DropdownMenu.Item onSelectAfterClose={props.onCreateAgent}>
                     <Bot aria-hidden="true" />
                     {t("sidebar.new.agent")}
+                  </DropdownMenu.Item>
+                </Show>
+                <Show when={props.createSupported !== false && props.onCreateChat}>
+                  <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChat?.()}>
+                    <MessageSquare aria-hidden="true" />
+                    {t("sidebar.new.chat")}
                   </DropdownMenu.Item>
                 </Show>
                 <Show when={props.onCreateChannel}>

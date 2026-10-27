@@ -762,7 +762,7 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
                         <strong>{entryName(key)}</strong>
                         <span>
                           {account() && status().state === "available"
-                            ? (account()?.account.email ?? railHeadingSummary(provider, status()))
+                            ? railHeadingSummary(provider, status())
                             : railHeadingSummary(provider, status())}
                         </span>
                       </div>
