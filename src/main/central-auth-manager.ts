@@ -48,6 +48,7 @@ import {
   decodeEmailChallenge,
   decodeMobileConnectedDevices,
   decodeMobileConnectLinkResponse,
+  decodeRecordHealth,
   decodeRegisteredRemoteHost,
   decodeRemoteHosts,
   decodeRemoteInvitePreview,
@@ -153,9 +154,6 @@ export type VerifiedRemoteSessionTicket = Pick<
   role: RemoteMemberRole;
   clientPublicKey: string;
 };
-
-/** The account of a computer with no OpenBot sign-in. It has no session token, so cloud calls stay off. */
-const LOCAL_ACCOUNT: CentralAuthUser = { id: "local", email: "", name: "Local", avatarUrl: null };
 
 export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
   readonly #options: Required<CentralAuthManagerOptions>;
@@ -1372,8 +1370,10 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     } else {
       logger.warn("The stored account session was not read: secure storage is unavailable.");
     }
-    // Fork: no account needed, so a start with no session goes straight to the local account.
-    if (!this.#sessionToken) return this.#setState({ status: "signed_out" });
+    if (!this.#sessionToken) {
+      yield* this.#startupRequestEffect("/health/live", { method: "GET" }, decodeRecordHealth);
+      return this.#setState({ status: "signed_out" });
+    }
     const sessionToken = this.#sessionToken;
     return yield* Effect.gen({ self: this }, function* () {
       const user = yield* this.#startupRequestEffect("/v1/me", { method: "GET" }, decodeCentralAuthUser, sessionToken);
@@ -1896,9 +1896,7 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     this.#mobileConnectLink = restoreMobileConnectLink(stored.mobileConnectLink);
   }
 
-  #setState(next: CentralAuthState): CentralAuthState {
-    // Fork: signed out means the local account, so the app never asks for an email sign-in.
-    const state: CentralAuthState = next.status === "signed_out" ? { status: "signed_in", user: LOCAL_ACCOUNT } : next;
+  #setState(state: CentralAuthState): CentralAuthState {
     // Held apart from the state, which passes through `code_sent` on the way to another
     // account: this is whose credentials the store is holding, until they are cleared.
     if (state.status === "signed_in") this.#sessionAccountId = state.user.id;
