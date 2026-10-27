@@ -2301,6 +2301,8 @@ export async function createApplicationServices({
     providerAccounts: providerAccountsHost,
     // Present, so the host advertises `provider-usage-reset-v1`. The routes are admin-only.
     providerUsageResets: service,
+    // Present, so the host advertises `provider-sign-out-v1`. The route is admin-only.
+    providerSignOut: service,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `machine-resources-v1`. The routes are admin-only.

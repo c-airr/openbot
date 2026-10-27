@@ -815,6 +815,19 @@ Settings > Providers shows **Reset usage** in the ⋯ menu of a connected accoun
 The confirmation names the credits left, and the answer shows under the accounts. A joined server
 uses the optional `provider-usage-reset-v1` routes (see [Admin capabilities](servers.md#admin-capabilities)).
 
+### Disconnect the own sign-in
+
+Settings > Providers shows **Disconnect** in the ⋯ menu of the connected own sign-in of Claude and
+Codex (issue #3487). These drivers have an `accounts.signOut` command (`claude auth logout`,
+`codex logout`). `ProviderRuntime.signOutProvider` refuses while the provider runs a turn, cancels a
+sign-in, and runs that command with no home variable, so it signs out the user's own home folder.
+On this computer a terminal CLI shares that folder and the macOS keychain item, so it signs out too;
+the confirmation says so. Then OpenBot stops the client and reports the provider signed out, as a
+Gemini Reconnect does. A failed sign-out keeps the client and shows its reason. Agents keep the own
+sign-in and wait for a Reconnect. The accounts after the first and their folders stay, but they
+need the connected CLI, so they wait too. A joined server uses the optional `provider-sign-out-v1`
+route.
+
 ## Provider settings and the ACP registry
 
 `AgentClient` remains the provider boundary. ACP session ownership, history replay, and turn

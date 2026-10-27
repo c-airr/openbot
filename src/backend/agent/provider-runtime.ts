@@ -1552,6 +1552,28 @@ export class ProviderRuntime implements ProviderPort {
     return this.status();
   }, Effect.uninterruptible).bind(this);
 
+  /**
+   * Signs the provider's own sign-in out and reports it signed out. Its agents wait for a sign-in;
+   * the provider's other accounts wait until it connects again.
+   */
+  readonly signOutProvider = Effect.fn("ProviderRuntime.signOutProvider")(function* (
+    this: ProviderRuntime,
+    provider: AgentProvider,
+  ) {
+    const accounts = yield* this.#requireAccounts(provider);
+    // The sign-out removes the credential that a running turn uses.
+    if (this.#hooks.isProviderBusy(provider)) {
+      return yield* new ProviderOperationFailed({
+        cause: new Error(sourceText("error.provider.cliBusySignOut", { provider: providerLabel(provider) })),
+      });
+    }
+    yield* this.#cancelCliLogin(provider);
+    const disposals = this.#disposals;
+    yield* accounts.signOutDefault(provider).pipe(toProviderOperationFailed);
+    yield* this.#endSignedOutClient(provider, disposals);
+    return this.status();
+  }, Effect.uninterruptible).bind(this);
+
   /** Whether the provider has a saved API key. */
   hasProviderKey(provider: AgentProvider): boolean {
     return this.#credentials.apiKey(provider) !== null;

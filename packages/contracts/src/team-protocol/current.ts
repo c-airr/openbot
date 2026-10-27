@@ -61,6 +61,7 @@ import { PROVIDER_ACCOUNT_RELAY_CAPABILITY } from "./provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "./provider-accounts-v1";
 import { PROVIDER_DEFAULT_CAPABILITY } from "./provider-default-v1";
 import { PROVIDER_HOST_SIGN_IN_CAPABILITY } from "./provider-host-sign-in-v1";
+import { PROVIDER_SIGN_OUT_CAPABILITY } from "./provider-sign-out-v1";
 import { PROVIDER_USAGE_RESET_CAPABILITY } from "./provider-usage-reset-v1";
 import { PROVIDERS_ADMIN_CAPABILITY } from "./providers-v1";
 import { PROVIDERS_RUNTIMES_V2_CAPABILITY } from "./providers-v2";
@@ -173,6 +174,7 @@ export {
   PROVIDER_ACCOUNTS_CAPABILITY,
   PROVIDER_DEFAULT_CAPABILITY,
   PROVIDER_HOST_SIGN_IN_CAPABILITY,
+  PROVIDER_SIGN_OUT_CAPABILITY,
   PROVIDER_USAGE_RESET_CAPABILITY,
   PROVIDERS_ADMIN_CAPABILITY,
   PROVIDERS_RUNTIMES_V2_CAPABILITY,
@@ -320,6 +322,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   BROWSER_SECRET_VAULT_CAPABILITY,
   VAULT_IMPORT_CAPABILITY,
   VAULT_V2_CAPABILITY,
+  PROVIDER_SIGN_OUT_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -444,7 +447,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== VAULT_CAPABILITY &&
     capability !== BROWSER_SECRET_VAULT_CAPABILITY &&
     capability !== VAULT_IMPORT_CAPABILITY &&
-    capability !== VAULT_V2_CAPABILITY,
+    capability !== VAULT_V2_CAPABILITY &&
+    capability !== PROVIDER_SIGN_OUT_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
@@ -512,6 +516,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== VAULT_CAPABILITY &&
       capability !== BROWSER_SECRET_VAULT_CAPABILITY &&
       capability !== VAULT_IMPORT_CAPABILITY &&
-      capability !== VAULT_V2_CAPABILITY,
+      capability !== VAULT_V2_CAPABILITY &&
+      capability !== PROVIDER_SIGN_OUT_CAPABILITY,
   );
 }

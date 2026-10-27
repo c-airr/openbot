@@ -3544,6 +3544,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
+  /** Signs the provider's own sign-in out. Its agents keep it and wait until it connects again. */
+  signOutProvider(provider: AgentProvider): Effect.Effect<AgentStatus, AgentLifecycleFailed> {
+    return this.#providers
+      .signOutProvider(provider)
+      .pipe(
+        Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "signOutProvider", cause: failure.cause })),
+      );
+  }
+
   /** See `ProviderRuntime.signInProviderOnHost`. */
   signInProviderOnHost(
     provider: AgentProvider,

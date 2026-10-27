@@ -1202,6 +1202,17 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         changeProviderAccounts(provider, (accounts) => accounts.filter((account) => account.id !== accountId)),
       );
     },
+    signOutProvider: async (provider) => {
+      agentStatus = {
+        ...agentStatus,
+        providers: agentStatus.providers?.map((row) => {
+          if (row.id !== provider) return row;
+          const { accounts: _signedOut, ...rest } = row;
+          return { ...rest, state: "sign-in-required", email: null, message: null };
+        }),
+      };
+      return clone(agentStatus);
+    },
     // Codex gives the preview's own sign-in two usage resets; each other connected Codex account has none.
     providerUsageResets: async (provider) =>
       provider === "codex"
@@ -1472,6 +1483,9 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
       usageResets: (provider) => api.providerUsageResets(provider),
       resetUsage: (input) => api.resetProviderUsage(input),
+      signOut: async (provider) => {
+        await api.signOutProvider(provider);
+      },
       startRelaySignIn: async () => undefined,
       startAccountRelaySignIn: async () => undefined,
       relaySignInStatus: async () => ({ page: null, result: null }),

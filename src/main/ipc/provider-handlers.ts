@@ -125,6 +125,7 @@ export function providerIpcHandlers({
       removeProviderAccount: payloadHandler(parseRemoveProviderAccountInput, ({ provider, accountId }) =>
         runCauseEffect(service.removeProviderAccount(provider, accountId)),
       ),
+      signOutProvider: payloadHandler(parseProviderId, (provider) => runCauseEffect(service.signOutProvider(provider))),
       providerUsageResets: payloadHandler(parseProviderId, (provider) =>
         runCauseEffect(service.providerUsageResets(provider)),
       ),

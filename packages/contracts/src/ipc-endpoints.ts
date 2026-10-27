@@ -752,6 +752,8 @@ export const IPC_ENDPOINTS = {
     ),
     renameProviderAccount: request<RenameProviderAccountInput, AgentStatus>()("app:rename-provider-account"),
     removeProviderAccount: request<RemoveProviderAccountInput, AgentStatus>()("app:remove-provider-account"),
+    /** Signs the provider's own sign-in out, in the home folder that a terminal CLI shares. */
+    signOutProvider: request<AgentProviderId, AgentStatus>()("app:sign-out-provider"),
     /** The usage reset credits of each connected account of a provider. It reads the usage of each. */
     providerUsageResets: request<AgentProviderId, ProviderUsageResets[]>()("app:provider-usage-resets"),
     /** Spends one usage reset credit of an account. A reset ends the usage limit that holds its agents. */
@@ -964,6 +966,8 @@ export const IPC_ENDPOINTS = {
     resetUsage: scopedRequest<ResetProviderUsageInput, ProviderUsageResetOutcome, "required">()(
       "provider-admin:reset-usage",
     ),
+    // Signs a joined server's host's own sign-in of a provider out (`provider-sign-out-v1`).
+    signOut: scopedRequest<AgentProviderId, void, "required">()("provider-admin:sign-out"),
     // A sign-in that a joined server's host starts and that opens in this computer's browser
     // (`sign-in-relay-v1`). This computer takes the callback and sends its query to the host.
     // `openRelaySignIn` opens the page when the user asks, and `pasteRelaySignIn` takes the address

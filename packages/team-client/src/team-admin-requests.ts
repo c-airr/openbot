@@ -206,6 +206,7 @@ import {
 } from "@openbot/contracts/team-protocol/provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_ROUTES } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { PROVIDER_HOST_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/provider-host-sign-in-v1";
+import { PROVIDER_SIGN_OUT_ROUTES } from "@openbot/contracts/team-protocol/provider-sign-out-v1";
 import { PROVIDER_USAGE_RESET_ROUTES } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
 import { PROVIDERS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/providers-v1";
 import type { PROVIDERS_RUNTIMES_V2_ROUTES } from "@openbot/contracts/team-protocol/providers-v2";
@@ -1002,6 +1003,14 @@ export function resetProviderUsage(
       { ...input },
     ),
   );
+}
+
+/** `provider-sign-out-v1`: signs the host's own sign-in of a provider out. */
+export function signOutProvider(
+  request: TeamApiRequest,
+  provider: AgentProviderId,
+): Effect.Effect<void, TeamAdminRequestError> {
+  return adminCall(() => request("POST", PROVIDER_SIGN_OUT_ROUTES.signOut, ignoreResponse, { provider }));
 }
 
 /** Moves the agent to an account of its provider; null is the provider's own sign-in. */

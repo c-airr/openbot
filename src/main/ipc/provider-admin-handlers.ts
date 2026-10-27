@@ -43,6 +43,10 @@ import {
   PROVIDER_HOST_SIGN_IN_ROUTES,
 } from "@openbot/contracts/team-protocol/provider-host-sign-in-v1";
 import {
+  PROVIDER_SIGN_OUT_CAPABILITY,
+  PROVIDER_SIGN_OUT_ROUTES,
+} from "@openbot/contracts/team-protocol/provider-sign-out-v1";
+import {
   PROVIDER_USAGE_RESET_CAPABILITY,
   PROVIDER_USAGE_RESET_ROUTES,
 } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
@@ -355,6 +359,20 @@ export function providerAdminIpcHandlers({
         PROVIDER_USAGE_RESET_ROUTES.consume,
         decodeProviderUsageResetOutcomeFromHost,
       ),
+      // This computer's own sign-in goes through `providers`.
+      signOut: scopedHandler(parseProviderId, {
+        local: () => Promise.reject(new Error(sourceText("error.team.providersUnsupported"))),
+        remote: (provider, serverId) => {
+          if (!remoteServers.supportsCapability(serverId, PROVIDER_SIGN_OUT_CAPABILITY))
+            throw new Error(sourceText("error.team.providersUnsupported"));
+          return runCauseEffect(
+            remoteServers.request(serverId, PROVIDER_SIGN_OUT_ROUTES.signOut, acceptEmpty, {
+              method: "POST",
+              body: { provider },
+            }),
+          );
+        },
+      }),
       startRelaySignIn: relaySignIn(parseProviderId, (provider, serverId) => {
         requireRelay(serverId, provider);
         return startRelay(serverId, provider, SIGN_IN_RELAY_ROUTES.providerStart, { provider });

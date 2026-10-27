@@ -13,6 +13,7 @@ import {
   PROVIDER_ACCOUNT_RELAY_PROVIDERS,
 } from "@openbot/contracts/team-protocol/provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
+import { PROVIDER_SIGN_OUT_CAPABILITY } from "@openbot/contracts/team-protocol/provider-sign-out-v1";
 import { PROVIDER_USAGE_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
 import { PROVIDERS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/providers-v1";
 import {
@@ -51,6 +52,7 @@ import {
   resetProviderUsage,
   saveCustomProvider,
   setProviderApiKey,
+  signOutProvider,
   startProviderAccountSignIn,
   startProviderCodeLogin,
   startProviderHostSignIn,
@@ -203,6 +205,8 @@ function webProviderAdmin(
       runTeamEffect(providerUsageResets(request(serverId), provider).pipe(Effect.mapError((error) => error.cause))),
     resetUsage: async (input, serverId) =>
       runTeamEffect(resetProviderUsage(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
+    signOut: async (provider, serverId) =>
+      runTeamEffect(signOutProvider(request(serverId), provider).pipe(Effect.mapError((error) => error.cause))),
     ...webProviderRelay(request),
   };
 }
@@ -403,6 +407,9 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
               return outcome;
             },
           }
+        : {}),
+      ...(remoteAdminServer(options.server(), PROVIDER_SIGN_OUT_CAPABILITY)?.id === id
+        ? { signOut: (provider: AgentProviderId) => changed(admin.signOut(provider, id)) }
         : {}),
     };
   });

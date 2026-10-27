@@ -75,6 +75,7 @@ import {
   PROVIDER_ACCOUNTS_CAPABILITY,
   PROVIDER_DEFAULT_CAPABILITY,
   PROVIDER_HOST_SIGN_IN_CAPABILITY,
+  PROVIDER_SIGN_OUT_CAPABILITY,
   PROVIDER_USAGE_RESET_CAPABILITY,
   PROVIDERS_ADMIN_CAPABILITY,
   PROVIDERS_RUNTIMES_V2_CAPABILITY,
@@ -223,6 +224,7 @@ import { routePromptCacheTtl } from "./team-api/route-prompt-cache-ttl";
 import { routeProviderAccounts } from "./team-api/route-provider-accounts";
 import { routeProviderDefault } from "./team-api/route-provider-default";
 import { routeProviderHostSignIn } from "./team-api/route-provider-host-sign-in";
+import { routeProviderSignOut } from "./team-api/route-provider-sign-out";
 import { routeProviderUsageReset } from "./team-api/route-provider-usage-reset";
 import { routeProviders } from "./team-api/route-providers";
 import { routePushNotifications } from "./team-api/route-push-notifications";
@@ -897,6 +899,7 @@ export class TeamApiServer {
       if ((await routeProviderHostSignIn(context, this.#options.providerHostSignIns)) === "handled") return;
       if ((await routeProviderAccounts(context, this.#options.providerAccounts)) === "handled") return;
       if ((await routeProviderUsageReset(context, this.#options.providerUsageResets)) === "handled") return;
+      if ((await routeProviderSignOut(context, this.#options.providerSignOut)) === "handled") return;
       if ((await routeStorage(context, this.#options.storage)) === "handled") return;
       if ((await routeMachineResources(context, this.#options.machine)) === "handled") return;
       if ((await routeHostedSites(context, this.#options.hostedSites)) === "handled") return;
@@ -1958,6 +1961,7 @@ export class TeamApiServer {
         if (capability === PROVIDER_HOST_SIGN_IN_CAPABILITY) return this.#options.providerHostSignIns !== undefined;
         if (capability === PROVIDER_ACCOUNTS_CAPABILITY) return this.#options.providerAccounts !== undefined;
         if (capability === PROVIDER_USAGE_RESET_CAPABILITY) return this.#options.providerUsageResets !== undefined;
+        if (capability === PROVIDER_SIGN_OUT_CAPABILITY) return this.#options.providerSignOut !== undefined;
         if (capability === STORAGE_CAPABILITY) return this.#options.storage !== undefined;
         if (capability === STORAGE_DISK_CAPABILITY) return this.#options.storage !== undefined;
         if (capability === MACHINE_RESOURCES_CAPABILITY) return this.#options.machine !== undefined;

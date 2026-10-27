@@ -12,6 +12,7 @@ import {
   PROVIDER_ACCOUNT_RELAY_PROVIDERS,
 } from "@openbot/contracts/team-protocol/provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
+import { PROVIDER_SIGN_OUT_CAPABILITY } from "@openbot/contracts/team-protocol/provider-sign-out-v1";
 import { PROVIDER_USAGE_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
@@ -275,6 +276,8 @@ const Providers = createSimpleContext({
     const accountsAdminServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_ACCOUNTS_CAPABILITY)?.id);
     /** The joined server whose host spends the usage reset credits of its accounts (`provider-usage-reset-v1`). */
     const usageResetServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_USAGE_RESET_CAPABILITY)?.id);
+    /** The joined server whose host signs its own provider sign-ins out (`provider-sign-out-v1`). */
+    const signOutServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_SIGN_OUT_CAPABILITY)?.id);
 
     /**
      * The accounts of the providers of this computer, or of a joined server's host that serves
@@ -308,6 +311,9 @@ const Providers = createSimpleContext({
                 },
               }
             : {}),
+          ...(signOutServerId() === hostServerId
+            ? { signOut: (provider: AgentProviderId) => changed(providerAdmin().signOut(provider, hostServerId)) }
+            : {}),
         };
       }
       if (activeServer()?.kind !== "local") return undefined;
@@ -330,6 +336,8 @@ const Providers = createSimpleContext({
         remove: (provider, accountId) => apply(providersPort().removeProviderAccount({ provider, accountId })),
         usageResets: (provider) => providersPort().providerUsageResets(provider),
         resetUsage: (provider, accountId) => providersPort().resetProviderUsage({ provider, accountId }),
+        signOut: (provider) => apply(providersPort().signOutProvider(provider)),
+        local: true,
       };
     });
 
