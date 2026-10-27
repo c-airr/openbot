@@ -32,6 +32,7 @@ import {
   type AcpModel,
   currentModelFromSessionSetup,
   sessionSettingsSnapshot,
+  withoutFastModels,
 } from "./acp-configuration";
 import { AcpConnection, type AcpConnectionOptions } from "./acp-connection";
 import type { AcpFlavor } from "./acp-flavor";
@@ -1135,12 +1136,13 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     this: AcpAgentClient,
     timeoutMs?: number,
   ): Effect.fn.Return<AcpModel[], ProviderClientOperationError> {
-    const [listed, additional] = yield* Effect.all(
+    const [discovered, additional] = yield* Effect.all(
       [this.#configuration.discoverModels(timeoutMs), this.options.additionalModels?.() ?? Effect.succeed([])],
       { concurrency: "unbounded" },
     );
     // An agent that lists no model still reports that: the additional models must not hide it.
-    if (listed.length === 0) return listed;
+    if (discovered.length === 0) return discovered;
+    const listed = this.#flavor.hideFastModels ? withoutFastModels(discovered) : discovered;
     const modelName = this.options.modelName;
     const named = modelName ? listed.map((model) => ({ ...model, name: modelName(model.id, model.name) })) : listed;
     const ids = new Set(named.map((model) => model.id));

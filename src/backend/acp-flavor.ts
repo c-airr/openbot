@@ -57,6 +57,8 @@ export interface AcpFlavor {
    * the answer text. A tool call or the end of the turn still does.
    */
   thoughtsInsideAnswer?: true;
+  /** Fork: the model list leaves out fast-tier models (`withoutFastModels`). */
+  hideFastModels?: true;
   /**
    * `session/prompt` stays open with no update while background tasks run, so a silent turn is not
    * stalled and OpenBot does not end it (`ACP_TURN_STALL_MS`).
@@ -89,6 +91,7 @@ export const DEFAULT_ACP_FLAVOR: AcpFlavor = {};
  * Other invalid parameters must not cause a provider session to be replaced.
  */
 export const CURSOR_ACP_FLAVOR: AcpFlavor = {
+  hideFastModels: true,
   sessionNotFound: (error, sessionId) =>
     error.code === -32602 ? isRecord(error.data) && error.data.message === `Session "${sessionId}" not found` : null,
   // Cursor 2026.10.22-27dcf5f sends "\n\nError: RetriableError: WritableIterable is closed" as one
