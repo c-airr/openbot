@@ -120,7 +120,7 @@ export function SessionImportDialog(props: SessionImportDialogProps) {
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay class="custom-provider-backdrop provider-more-backdrop">
+        <Dialog.Overlay class="custom-provider-backdrop session-import-backdrop">
           <Dialog.Content as="section" class="custom-provider-dialog session-import-dialog">
             <header class="session-import-header">
               <div>

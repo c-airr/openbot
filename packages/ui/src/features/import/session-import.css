@@ -1,8 +1,15 @@
 /* Fork: Import sessions. It reuses the custom provider dialog frame and the "More providers" empty line. */
 
+/* Centered with its own margin, so the footer with the Import button stays inside the window. */
+.custom-provider-backdrop.session-import-backdrop {
+  align-items: center;
+  padding: var(--openbot-space-4);
+}
+
 .custom-provider-dialog.session-import-dialog {
   width: min(680px, 100%);
-  max-height: min(760px, calc(100dvh - var(--openbot-space-6)));
+  max-height: calc(100dvh - 2 * var(--openbot-space-4));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--openbot-space-2);
@@ -72,7 +79,7 @@
 }
 
 .session-import-list {
-  min-height: 160px;
+  min-height: 96px;
   flex: 1 1 auto;
   overflow-y: auto;
   border: 1px solid var(--openbot-border);
@@ -203,4 +210,11 @@
 
 .session-import-result {
   color: var(--openbot-text-secondary);
+}
+
+.session-import-header,
+.session-import-filters,
+.session-import-listhead,
+.session-import-footer {
+  flex-shrink: 0;
 }
