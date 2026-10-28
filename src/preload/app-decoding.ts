@@ -372,6 +372,12 @@ export function decodeExternalLinkBrowserOrNull(value: unknown): ExternalLinkBro
   return value === null ? null : decodeExternalLinkBrowser(value);
 }
 
+export function decodeFolderPathOrNull(value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string") throw new Error("Invalid folder path.");
+  return value;
+}
+
 export function decodeExternalLinkBrowsers(value: unknown): ExternalLinkBrowsers {
   const list = decodeRecord(value, "browser list");
   if (!Array.isArray(list.browsers)) throw new Error("Invalid browser list.");

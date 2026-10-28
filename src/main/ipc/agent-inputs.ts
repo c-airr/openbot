@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AcknowledgeFailedTurnInput,
@@ -202,8 +203,17 @@ export function parseCreateAgent(value: unknown): CreateAgentInput {
     description: requireString(value.description, "description", INPUT_LIMITS.agentDescription),
     avatarSeed: value.avatarSeed,
     avatarHue,
-    initialMessage: requireString(value.initialMessage, "initialMessage", INPUT_LIMITS.messageText),
+    initialMessage:
+      value.blank === true && value.initialMessage === ""
+        ? ""
+        : requireString(value.initialMessage, "initialMessage", INPUT_LIMITS.messageText),
   };
+  if (value.blank === true) result.blank = true;
+  if (value.workspaceFolder !== undefined) {
+    const folder = requireString(value.workspaceFolder, "workspaceFolder", INPUT_LIMITS.path);
+    if (!isAbsolute(folder)) throw new Error("The project folder must be an absolute path.");
+    result.workspaceFolder = folder;
+  }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) throw new Error("Invalid agent provider.");
     result.provider = value.provider;

@@ -138,15 +138,25 @@ const AgentActions = createSimpleContext({
      * Fork: a chat is an agent whose first message is the user's own, named after that message and
      * put in the Chats section. A failed move leaves it in the default section.
      */
-    async function createChat(draft: FirstAgentDraft = agentSetupDraft()) {
+    async function createChat(draft: FirstAgentDraft = agentSetupDraft(), folder?: string) {
       const message = draft.purpose.trim();
-      if (creatingAgent() || !message) return;
+      if (creatingAgent()) return;
       setCreatingAgent(true);
       setAgentSetupError(null);
       try {
-        const name = (message.split("\n")[0] ?? "").slice(0, CHAT_NAME_LENGTH).trim();
+        // An empty chat is named after its folder, or "New chat"; the first message is the user's to type.
+        const name = message
+          ? (message.split("\n")[0] ?? "").slice(0, CHAT_NAME_LENGTH).trim()
+          : ((folder ?? "").split(/[\\/]/u).filter(Boolean).pop() ?? currentText().t("sidebar.new.chat"));
         const input = newAgentInput({ ...draft, name, purpose: "Chat" }, createModelSupported());
-        const newAgent = addNewAgent(await agentsPort().agent.createAgent({ ...input, initialMessage: message }));
+        const newAgent = addNewAgent(
+          await agentsPort().agent.createAgent({
+            ...input,
+            initialMessage: message,
+            ...(message ? {} : { blank: true }),
+            ...(folder ? { workspaceFolder: folder } : {}),
+          }),
+        );
         setAgentSetupOpen(false);
         clearDirectSelection();
         setActiveAgentId(newAgent.id);
@@ -165,6 +175,32 @@ const AgentActions = createSimpleContext({
       } finally {
         setCreatingAgent(false);
       }
+    }
+
+    /** Fork: the folder that new chats work in. Per viewer, so it is browser storage, not host state. */
+    const CHAT_FOLDER_KEY = "openbot-fork-chat-folder";
+    function defaultChatFolder(): string | undefined {
+      try {
+        return localStorage.getItem(CHAT_FOLDER_KEY) ?? undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
+    /** Fork: an empty chat at once, in the default folder when one is set. */
+    function startChat() {
+      return createChat({ ...agentSetupDraft(), purpose: "" }, defaultChatFolder());
+    }
+
+    async function startChatInFolder() {
+      const folder = await agentsPort().chooseFolder();
+      if (!folder) return;
+      try {
+        localStorage.setItem(CHAT_FOLDER_KEY, folder);
+      } catch {
+        // The chat still starts in the folder; only the default is not kept.
+      }
+      return createChat({ ...agentSetupDraft(), purpose: "" }, folder);
     }
 
     function editAgent(agentId: string) {
@@ -454,6 +490,8 @@ const AgentActions = createSimpleContext({
     return {
       createAgent,
       createChat,
+      startChat,
+      startChatInFolder,
       createAgentInPlace,
       editAgent,
       duplicateAgent,

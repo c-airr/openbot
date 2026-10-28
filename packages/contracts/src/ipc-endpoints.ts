@@ -683,6 +683,7 @@ export const IPC_ENDPOINTS = {
     listExternalLinkBrowsers: request<undefined, ExternalLinkBrowsers>()("app:list-external-link-browsers"),
     // The file dialog of "Other app…". Null when the user closed the dialog.
     chooseExternalLinkApp: request<undefined, ExternalLinkBrowser | null>()("app:choose-external-link-app"),
+    chooseFolder: request<undefined, string | null>()("app:choose-folder"),
     // A page can open from main with no window action, such as a sign-in page, so main tells the
     // window when the chosen browser did not start.
     externalLinkFallback: event<ExternalLinkFallback>()("app:external-link-fallback"),

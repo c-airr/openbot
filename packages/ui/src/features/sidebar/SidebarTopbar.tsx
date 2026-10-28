@@ -148,6 +148,12 @@ export function SidebarTopbar() {
                     {t("sidebar.new.chat")}
                   </DropdownMenu.Item>
                 </Show>
+                <Show when={props.createSupported !== false && props.onCreateChatInFolder}>
+                  <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChatInFolder?.()}>
+                    <FolderPlus aria-hidden="true" />
+                    {t("sidebar.new.chatInFolder")}
+                  </DropdownMenu.Item>
+                </Show>
                 <Show when={props.onCreateChannel}>
                   <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChannel?.()}>
                     <Hash aria-hidden="true" />

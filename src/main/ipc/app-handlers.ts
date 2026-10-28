@@ -278,6 +278,17 @@ export function appIpcHandlers({
         const path = result.canceled ? undefined : result.filePaths[0];
         return path ? { name: externalLinkAppName(path), path } : null;
       }),
+      chooseFolder: handler(async (): Promise<string | null> => {
+        const mainWindow = getMainWindow();
+        const options: OpenDialogOptions = {
+          title: language.translate("dialog.chooseWorkspaceFolder"),
+          properties: ["openDirectory"],
+        };
+        const result = mainWindow
+          ? await dialog.showOpenDialog(mainWindow, options)
+          : await dialog.showOpenDialog(options);
+        return result.canceled ? null : (result.filePaths[0] ?? null);
+      }),
       openChatWindow: payloadHandler(parseChatWindowTarget, openChatWindow),
       getChatWindows: handler(chatWindowTargets),
     },

@@ -369,6 +369,10 @@ export interface CreateAgentInput {
   provider?: AgentProviderId;
   model?: AgentModelId;
   reasoningEffort?: AgentReasoningEffort;
+  /** Fork, desktop only: the agent starts with no message, so a chat opens empty. */
+  blank?: boolean;
+  /** Fork, desktop only: an existing folder the agent works in, instead of a new workspace. */
+  workspaceFolder?: string;
 }
 
 export interface UpdateAgentInput {

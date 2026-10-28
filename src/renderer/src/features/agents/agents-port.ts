@@ -29,6 +29,8 @@ export interface AgentsPort {
   >;
   /** The accounts of a joined server's providers, which its released agent routes do not carry. */
   providerAdmin: Pick<OpenBotDesktopApi["providerAdmin"], "accounts" | "accountUsage">;
+  /** Fork: asks for a project folder. */
+  chooseFolder: OpenBotDesktopApi["chooseFolder"];
 }
 
 /** Read on each call: tests and stories replace `window.openbot` per case. */

@@ -94,6 +94,12 @@ export function SidebarNav() {
                   <span>{t("sidebar.new.chat")}</span>
                 </ContextMenu.Item>
               </Show>
+              <Show when={props.createSupported !== false && props.onCreateChatInFolder}>
+                <ContextMenu.Item onSelect={() => props.onCreateChatInFolder?.()}>
+                  <FolderPlus class="agent-context-icon size-4" aria-hidden="true" />
+                  <span>{t("sidebar.new.chatInFolder")}</span>
+                </ContextMenu.Item>
+              </Show>
               <Show when={props.onCreateChannel}>
                 <ContextMenu.Item onSelect={() => props.onCreateChannel?.()}>
                   <Hash class="agent-context-icon size-4" aria-hidden="true" />

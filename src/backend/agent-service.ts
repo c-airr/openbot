@@ -2239,7 +2239,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   ) {
     const initialMessage = yield* lifecycleStep("validate initial message", () => {
       const text = input.initialMessage.trim();
-      if (!text) throw new Error(sourceText("error.agent.initialMessageRequired"));
+      if (!text && input.blank !== true) throw new Error(sourceText("error.agent.initialMessageRequired"));
       if (input.initialMessage.length > INPUT_LIMITS.messageText)
         throw new Error(sourceText("error.agent.initialMessageTooLong"));
       return text;
@@ -2251,10 +2251,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
     const result = yield* Effect.result(
       Effect.gen({ self: this }, function* () {
-        yield* this.#prepareAgentWorkspace(agent);
+        // Fork: a project folder is the user's own, so no skill files are written into it.
+        if (input.workspaceFolder === undefined) yield* this.#prepareAgentWorkspace(agent);
         agent = yield* this.#assignNewAgentModel(agent, input, true);
         if (configure) agent = yield* configure(agent);
-        yield* this.sendMessage({ agentId: agent.id, text: initialMessage, attachmentDraftIds: [] }, sender);
+        if (initialMessage)
+          yield* this.sendMessage({ agentId: agent.id, text: initialMessage, attachmentDraftIds: [] }, sender);
         return this.#store.list().find((candidate) => candidate.id === agent.id) ?? agent;
       }).pipe(
         Effect.catchDefect((cause) => Effect.fail(new AgentLifecycleFailed({ operation: "create agent", cause }))),

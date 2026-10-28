@@ -86,8 +86,16 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     userHiddenAgents,
     userHiddenAgentIds,
   } = useAgents();
-  const { editAgent, duplicateAgent, duplicateSection, duplicatingSectionIds, deleteAgent, setAgentHiddenByUser } =
-    useAgentActions();
+  const {
+    editAgent,
+    startChat,
+    startChatInFolder,
+    duplicateAgent,
+    duplicateSection,
+    duplicatingSectionIds,
+    deleteAgent,
+    setAgentHiddenByUser,
+  } = useAgentActions();
   // The host refuses a member: a hidden agent stops for every member, as a deleted one does.
   const hideAllowed = () =>
     activeServerSupportsCapability(AGENT_HIDDEN_CAPABILITY) && serverRoleCanAdminister(activeServer());
@@ -313,7 +321,11 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       }}
       onCreateChat={() => {
         channels.close();
-        openAgentSetup("chat");
+        void startChat();
+      }}
+      onCreateChatInFolder={() => {
+        channels.close();
+        void startChatInFolder();
       }}
       onEditAgent={editAgent}
       duplicateSupported={activeServerSupportsCapability("agent-duplication")}

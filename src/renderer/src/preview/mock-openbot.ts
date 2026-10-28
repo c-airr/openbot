@@ -989,6 +989,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     },
     listExternalLinkBrowsers: async () => clone(PREVIEW_BROWSERS),
     chooseExternalLinkApp: async () => ({ name: "Orion", path: "/Applications/Orion.app" }),
+    chooseFolder: async () => null,
     onExternalLinkFallback: () => () => undefined,
     getRemoteNetworkRoute: async () => clone(remoteNetworkRoute),
     setRemoteNetworkRoute: async ({ route }) => {

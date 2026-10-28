@@ -12,6 +12,7 @@ import {
   rename,
   rm,
   rmdir,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -352,13 +353,24 @@ export class AgentStore {
       record.avatarSeed = input.avatarSeed;
       record.avatarHue = input.avatarHue;
       if (profileOperationId) yield* this.#profileCreationRecovery.begin(record.id, profileOperationId);
-      yield* storedIO(() => mkdir(record.workspacePath, { recursive: true, mode: 0o700 }));
+      if (input.workspaceFolder !== undefined) {
+        // Fork: the workspace is the user's own folder. Deleting an agent removes only paths derived from
+        // its id, so the folder stays; the two rollbacks that remove `workspacePath` skip it.
+        const folder = input.workspaceFolder;
+        record.workspacePath = yield* storedIO(async () => {
+          if (!(await stat(folder)).isDirectory()) throw new Error("The project folder is not a folder.");
+          return realpath(folder);
+        });
+      } else {
+        yield* storedIO(() => mkdir(record.workspacePath, { recursive: true, mode: 0o700 }));
+      }
       this.#state.agents.unshift(record);
       try {
         this.#persist("agent.created");
       } catch (error) {
         this.#state.agents = this.#state.agents.filter((candidate) => candidate.id !== record.id);
-        yield* storedIO(() => rm(record.workspacePath, { recursive: true, force: true }));
+        if (input.workspaceFolder === undefined)
+          yield* storedIO(() => rm(record.workspacePath, { recursive: true, force: true }));
         throw error;
       }
       return { ...record };
@@ -385,6 +397,13 @@ export class AgentStore {
         throw new Error(sourceText("error.agent.hostLimit", { limit: INPUT_LIMITS.agents }));
       }
       const source = this.#requireAgent(sourceId);
+      // Fork: a copy would clone the user's project folder, and its rollback would delete the copy.
+      if (
+        ![this.#agentsRoot, this.#legacyAgentsRoot].some(
+          (root) => resolve(dirname(source.workspacePath)) === resolve(root),
+        )
+      )
+        throw new Error("An agent that works in a project folder cannot be duplicated.");
       const sourceProfileSignature = duplicationProfileSignature(source);
       const sourceWorkspaceManifest = yield* workspaceMetadataFingerprintEffect(source.workspacePath);
       const sourceAvatar = this.resolveAvatar(source.id);

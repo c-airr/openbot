@@ -20,5 +20,6 @@ export const messages = defineMessages("dialog", {
   "dialog.chooseTransfer": "Choose a transfer file",
   "dialog.filter.transfer": "OpenBot transfer files",
   "dialog.chooseExternalLinkApp": "Choose a browser",
+  "dialog.chooseWorkspaceFolder": "Choose a project folder",
   "dialog.filter.applications": "Applications",
 });

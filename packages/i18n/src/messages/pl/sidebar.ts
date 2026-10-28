@@ -13,6 +13,7 @@ export const messages = {
   "sidebar.new.channel": "Nowy kanał",
   "sidebar.new.section": "Nowa sekcja",
   "sidebar.new.chat": "Nowy czat",
+  "sidebar.new.chatInFolder": "Nowy czat w folderze…",
   "sidebar.new.menu": "Nowy agent lub sekcja",
   "sidebar.new.menuWithChannel": "Nowy agent, kanał lub sekcja",
   "sidebar.markAllRead": "Oznacz wszystko jako przeczytane",
