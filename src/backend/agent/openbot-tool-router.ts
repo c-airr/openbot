@@ -225,6 +225,10 @@ export interface OpenBotToolRouterOptions {
  *
  * It never imports the agent service facade.
  */
+/** Fork: the sidebar section for agents that another agent creates. Both names, as the desktop names it in its language. */
+const SUBAGENT_SECTION_NAME = "Subagents";
+const SUBAGENT_SECTION_NAMES: readonly string[] = [SUBAGENT_SECTION_NAME, "Subagenci"];
+
 export class OpenBotToolRouter {
   readonly #history: HistoryTools;
   readonly #store: AgentStore;
@@ -1396,7 +1400,20 @@ export class OpenBotToolRouter {
       const reasoningEffort = args.reasoningEffort ?? (inherited ? caller.reasoningEffort : undefined);
       // An effort alone applies to the model the new agent starts on, known only once it exists.
       const lateEffort = requested === null ? args.reasoningEffort : undefined;
-      const sectionId = this.#sidebarLayout?.getSnapshot().agentAssignments[senderAgentId] ?? null;
+      // Fork: agents that an agent recruits go to their own section, so they stay out of the chat list.
+      const subagentSection = (layout: SidebarLayoutSnapshot) =>
+        layout.sections.find((item) => SUBAGENT_SECTION_NAMES.includes(item.name))?.id ?? null;
+      let sectionId: string | null = null;
+      if (this.#sidebarLayout) {
+        sectionId = subagentSection(this.#sidebarLayout.getSnapshot());
+        if (sectionId === null) {
+          const ids = new Set(this.#hooks.listAgents().map((agent) => agent.id));
+          const layout = yield* this.#sidebarLayout
+            .mutate({ type: "create", name: SUBAGENT_SECTION_NAME }, ids)
+            .pipe(toToolOperationFailed);
+          sectionId = subagentSection(layout);
+        }
+      }
       // A new agent starts with Full access and Computer Use. A caller without them passes its limits
       // on, so it cannot get around them through an agent it creates.
       const limits: Pick<UpdateAgentInput, "access" | "computerUse"> = {

@@ -7,6 +7,7 @@ import type {
   QueueSnapshot,
   RoutineFields,
 } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import { desktopAnalytics } from "./analytics";
@@ -366,6 +367,8 @@ const Turns = createSimpleContext({
           analytics.track("queue_action", { action: "steer", result: "failed", failure_code: "steer_failed" });
           // After the turn ended, the message runs as the next turn. The refusal is old news (#3206).
           if (activeTurns()[agent.id] !== turnId) return;
+          // Fork: a provider without native steering only refuses; the queue row already says the message waits.
+          if (error instanceof Error && error.message.includes(sourceText("error.backend.steerUnsupported"))) return;
           appendUiError(agent.id, error, currentText().t("app.errorStatus.steer"), serverId);
         });
     }
