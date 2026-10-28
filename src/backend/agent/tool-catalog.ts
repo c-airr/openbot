@@ -27,6 +27,8 @@ const DIRECT_NAMES = new Set([
   "routine_report_failure",
   "remember",
   "forget_memory",
+  "remember_for_all_chats",
+  "forget_shared_memory",
   "react_to_user_message",
   "request_api_key",
 ]);

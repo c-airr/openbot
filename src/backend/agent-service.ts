@@ -239,6 +239,7 @@ import type { RoutineFlowTools } from "./routine-flows/routine-flow-tools";
 import { RoutineRecords } from "./routine-records";
 import type { RoutineHoldWindow } from "./routine-store";
 import { type RoutineDueSource, RoutineTimer } from "./routine-timer";
+import type { SharedMemoryStore } from "./shared-memory-store";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
 import type { VaultItems } from "./vault-items";
 import type { WorkflowRunEnd } from "./workflows/workflows";
@@ -2279,6 +2280,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         : result.failure.cause,
     });
   }, Effect.uninterruptible).bind(this);
+
+  /** Fork: the memories every chat gets. */
+  get sharedMemories(): SharedMemoryStore {
+    return this.#memories.shared;
+  }
 
   /**
    * Fork: ties a chat to a session another app started, then reads that session's history into the

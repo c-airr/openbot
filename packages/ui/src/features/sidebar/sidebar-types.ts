@@ -102,6 +102,8 @@ export interface SidebarProps {
   onCreateChatInFolder?: (() => void) | undefined;
   /** Opens the list of sessions that other coding apps keep on this computer. */
   onImportSessions?: (() => void) | undefined;
+  /** Opens the memories that every chat gets. */
+  onOpenSharedMemory?: (() => void) | undefined;
   onEditAgent: (agentId: string) => void;
   duplicateSupported?: boolean | undefined;
   duplicatingAgentIds?: ReadonlySet<string> | undefined;

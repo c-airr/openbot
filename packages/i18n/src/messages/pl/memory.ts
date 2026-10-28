@@ -4,6 +4,7 @@ import type { messages as source } from "../en/memory";
 export const messages = {
   "memory.title": "Wspomnienia",
   "memory.description": "Zapisane wspomnienia: {name}",
+  "memory.shared.owner": "Każdy czat",
   "memory.add": "Dodaj wspomnienie",
   "memory.close": "Zamknij wspomnienia",
   "memory.new": "Nowe wspomnienie",

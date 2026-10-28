@@ -1030,7 +1030,7 @@ export class ThreadLifecycle {
     homeSkills: readonly HomeSkill[] = [],
     sideThread = false,
   ): DynamicRecord {
-    const memories = this.#memories.essentialFor(agent.id);
+    const memories = this.#memories.promptMemoriesFor(agent.id);
     const options = {
       computerUseInOwnChat,
       sideThread,

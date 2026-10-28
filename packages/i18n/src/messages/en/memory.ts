@@ -2,6 +2,7 @@ import { defineMessages } from "../../message";
 
 export const messages = defineMessages("memory", {
   "memory.title": "Memories",
+  "memory.shared.owner": "Every chat",
   "memory.description": "Saved memories for {name}",
   "memory.add": "Add memory",
   "memory.close": "Close memories",

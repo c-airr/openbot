@@ -94,3 +94,26 @@ export function channelMemoriesPort(
       }),
   };
 }
+
+/**
+ * Fork: the memories every chat gets. The modal reads them as an agent's named "Every chat", whose words fit.
+ * shortcut: no live reload while the modal is open; a memory a chat saves meanwhile shows on the next open.
+ */
+export function sharedMemoriesPort(label: string): MemoriesPort {
+  return {
+    ownerId: "shared",
+    ownerLabel: label,
+    ownerNoun: "agent",
+    limit: 100,
+    list: () => window.openbot.listSharedMemories(),
+    create: async (text) => {
+      await window.openbot.saveSharedMemory({ text });
+    },
+    update: async (memoryId, text) => {
+      await window.openbot.saveSharedMemory({ memoryId, text });
+    },
+    remove: (memoryId) => window.openbot.deleteSharedMemory(memoryId),
+    clear: () => window.openbot.clearSharedMemories(),
+    subscribe: () => () => undefined,
+  };
+}

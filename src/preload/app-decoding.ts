@@ -77,6 +77,7 @@ import {
   isDetectedAcpAgent,
   isDetectedModelServer,
   isDiscoverModelsResult,
+  isMemoryEntry,
   isProviderDetectionSettings,
   isRemoteDesktopSetupStatus,
   isRemoteDesktopTestStatus,
@@ -84,6 +85,7 @@ import {
   isSpeechVoice,
   isVoiceLanguage,
   isVoiceModelId,
+  type MemoryEntry,
   type MobileConnectedDevice,
   type MobileConnectLink,
   type MobileConnectTicket,
@@ -373,6 +375,16 @@ export function decodeExternalLinkBrowserOrNull(value: unknown): ExternalLinkBro
 }
 
 export { decodeImportableSessions, decodeSessionImportResult } from "@openbot/contracts/ipc";
+
+export function decodeSharedMemories(value: unknown): MemoryEntry[] {
+  if (!Array.isArray(value) || !value.every(isMemoryEntry)) throw new Error("Invalid shared memories.");
+  return value;
+}
+
+export function decodeSharedMemory(value: unknown): MemoryEntry {
+  if (!isMemoryEntry(value)) throw new Error("Invalid shared memory.");
+  return value;
+}
 
 export function decodeFolderPathOrNull(value: unknown): string | null {
   if (value === null) return null;

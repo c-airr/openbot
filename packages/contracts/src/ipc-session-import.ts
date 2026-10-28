@@ -107,3 +107,17 @@ export function decodeSessionImportResult(value: unknown): SessionImportResult {
   }
   return { agentIds: value.agentIds, failed };
 }
+
+/** Fork: a memory for every chat. Without `memoryId` it is a new one. */
+export interface SaveSharedMemoryInput {
+  text: string;
+  memoryId?: string;
+}
+
+export function parseSaveSharedMemoryInput(value: unknown): SaveSharedMemoryInput {
+  if (!isDynamicRecord(value) || !isBoundedString(value.text, 2_000) || !value.text.trim())
+    throw new Error("Invalid shared memory.");
+  if (value.memoryId === undefined) return { text: value.text };
+  if (!isIdentifier(value.memoryId)) throw new Error("Invalid shared memory id.");
+  return { text: value.text, memoryId: value.memoryId };
+}

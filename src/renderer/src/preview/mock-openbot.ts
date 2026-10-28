@@ -1061,6 +1061,17 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     getChatWindows: async () => [],
     listImportableSessions: async () => [],
     importSessions: async () => ({ agentIds: [], failed: [] }),
+    listSharedMemories: async () => [],
+    saveSharedMemory: async ({ text }) => ({
+      id: "shared:preview",
+      text,
+      origin: "manual",
+      sourceTurnId: null,
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    }),
+    deleteSharedMemory: async () => undefined,
+    clearSharedMemories: async () => undefined,
     onChatWindows: () => () => undefined,
     // The preview has no native page, so the overlay is never on screen and the DOM dock stays.
     browserDock: {

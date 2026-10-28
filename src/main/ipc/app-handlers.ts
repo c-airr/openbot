@@ -14,6 +14,7 @@ import {
   externalLinkAppName,
   GROK_BOT_EXPORT_URL,
   parseApplySessionImportInput,
+  parseSaveSharedMemoryInput,
 } from "@openbot/contracts/ipc";
 import { app, type BrowserWindow, dialog, type OpenDialogOptions } from "electron";
 import { version as developmentVersion } from "../../../package.json";
@@ -294,6 +295,16 @@ export function appIpcHandlers({
       }),
       listImportableSessions: handler(() => listImportableSessions()),
       importSessions: payloadHandler(parseApplySessionImportInput, (input) => importSessions(service, input)),
+      listSharedMemories: handler(() => service.sharedMemories.list()),
+      saveSharedMemory: payloadHandler(parseSaveSharedMemoryInput, (input) =>
+        service.sharedMemories.save(input.text, "manual", input.memoryId),
+      ),
+      deleteSharedMemory: payloadHandler(stringPayload("memoryId", INPUT_LIMITS.identifier), (memoryId) => {
+        service.sharedMemories.remove(memoryId);
+      }),
+      clearSharedMemories: handler(() => {
+        for (const memory of service.sharedMemories.list()) service.sharedMemories.remove(memory.id);
+      }),
       openChatWindow: payloadHandler(parseChatWindowTarget, openChatWindow),
       getChatWindows: handler(chatWindowTargets),
     },

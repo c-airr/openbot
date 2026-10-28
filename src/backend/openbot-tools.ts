@@ -567,6 +567,21 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     },
   },
   {
+    name: "remember_for_all_chats",
+    description:
+      "Save one short, durable fact that every chat with this user should know, whatever its model: a preference or rule of the user, a machine, server, account or project of theirs, a decision that holds beyond this task. Use it without being asked when such a fact comes up; skip task details, guesses and anything secret such as passwords or tokens. Give memoryId (an id starting with shared:) to correct or merge an existing shared memory instead of adding a near-duplicate. Takes effect at once.",
+    shape: {
+      text: z.string().min(1).max(INPUT_LIMITS.agentMemoryText),
+      memoryId: z.string().optional(),
+    },
+  },
+  {
+    name: "forget_shared_memory",
+    description:
+      "Delete one shared memory (an id starting with shared:) when the user asks you to forget it or it is no longer true. Takes effect at once.",
+    shape: { memoryId: z.string().min(1) },
+  },
+  {
     name: "forget_memory",
     description:
       "Stage deletion of one saved memory when the user asks you to forget it, or when it is stale or merged into another memory and you need room under the memory limit. The change commits only if the current turn completes.",

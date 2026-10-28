@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { AGENT_MEMORY_CONTEXT_BUDGET_BYTES, essentialMemoryBytes } from "@openbot/contracts/agent-memory-context";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
@@ -22,6 +23,7 @@ import {
 import type { AgentStore } from "../agent-store";
 import { normalizeMemoryText } from "../memory-store";
 import { type DynamicToolCallParams, isRecord } from "../protocol";
+import { SHARED_MEMORY_PREFIX, SharedMemoryStore } from "../shared-memory-store";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { listMemoriesInput, searchMemoriesInput, setMemoryInclusionInput } from "./memory-tool-inputs";
 import { type OpenBotToolResponse, openBotToolFailure, openBotToolResult } from "./routine-tools";
@@ -82,6 +84,8 @@ export class AgentMemories {
   readonly #emit: (event: AgentEvent) => void;
   readonly #emitError: (code: string, error: unknown, agentId?: string) => void;
   readonly #memories: AgentMemoryStore;
+  /** Fork: the memories every chat gets. */
+  readonly shared: SharedMemoryStore;
   readonly #pending = new Map<string, PendingMemoryMutation[]>();
   readonly #epochs = new Map<string, number>();
 
@@ -90,6 +94,7 @@ export class AgentMemories {
     this.#emit = options.emit;
     this.#emitError = options.emitError;
     this.#memories = new AgentMemoryStore(options.store.database, options.limit);
+    this.shared = new SharedMemoryStore(join(options.store.database.userDataPath, "openbot-shared-memories-v1.json"));
   }
 
   limit(): number {
@@ -114,6 +119,11 @@ export class AgentMemories {
         .map((entry) => entry.memoryId),
     );
     return this.#memories.list(agentId).filter((memory) => ids.has(memory.id));
+  }
+
+  /** Fork: what a chat's prompt carries: the shared memories first, then the chat's own essential ones. */
+  promptMemoriesFor(agentId: string): AgentMemory[] {
+    return [...this.shared.forPrompt(), ...this.essentialFor(agentId)];
   }
 
   selectionState(agentId: string): AgentMemorySelectionState {
@@ -350,6 +360,27 @@ export class AgentMemories {
         expectedSelectionRevision: selection?.revision ?? -1,
       });
       return openBotToolResult({ status: "staged", memoryId: current.id });
+    }
+    // Fork: shared memories take effect at once, not at the end of the turn.
+    // shortcut: an interrupted turn keeps a shared memory it saved; stage them like `remember` if that bites.
+    if (params.tool === "remember_for_all_chats") {
+      const args = params.arguments;
+      if (!isRecord(args) || !isString(args.text))
+        return openBotToolFailure(sourceText("error.backend.memoryTextRequired"));
+      const id = isString(args.memoryId) && args.memoryId.startsWith(SHARED_MEMORY_PREFIX) ? args.memoryId : undefined;
+      try {
+        const saved = this.shared.save(args.text, "automatic", id);
+        return openBotToolResult({ status: "saved", memoryId: saved.id });
+      } catch (error) {
+        return openBotToolFailure(error instanceof Error ? error.message : "The shared memory was not saved.");
+      }
+    }
+    if (params.tool === "forget_shared_memory") {
+      const args = params.arguments;
+      if (!isRecord(args) || !isString(args.memoryId)) return openBotToolFailure("memoryId is required.");
+      return this.shared.remove(args.memoryId)
+        ? openBotToolResult({ status: "forgotten", memoryId: args.memoryId })
+        : openBotToolFailure("There is no shared memory with this id.");
     }
 
     return null;

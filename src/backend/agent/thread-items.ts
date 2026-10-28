@@ -359,7 +359,13 @@ export function toolProgressText(item: ThreadItem, completed: boolean): string |
   if (openBot === "search_memories" || openBot === "list_memories") {
     return completed ? null : sourceText("status.agent.memoriesSearching");
   }
-  if (openBot === "remember" || openBot === "forget_memory" || openBot === "set_memory_inclusion") {
+  if (
+    openBot === "remember" ||
+    openBot === "forget_memory" ||
+    openBot === "set_memory_inclusion" ||
+    openBot === "remember_for_all_chats" ||
+    openBot === "forget_shared_memory"
+  ) {
     return completed ? TOOL_RESULT_PROGRESS : sourceText("status.agent.memoriesUpdating");
   }
   if (openBot === "read_local_skill") return completed ? TOOL_RESULT_PROGRESS : sourceText("status.agent.skillReading");

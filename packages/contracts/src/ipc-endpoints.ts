@@ -10,7 +10,12 @@ import type {
   ResetAgentSessionSettingInput,
   SetAgentSessionSettingInput,
 } from "./ipc-agent-session-settings";
-import type { ApplySessionImportInput, ImportableSession, SessionImportResult } from "./ipc-session-import";
+import type {
+  ApplySessionImportInput,
+  ImportableSession,
+  SaveSharedMemoryInput,
+  SessionImportResult,
+} from "./ipc-session-import";
 // The one channel list. Each endpoint holds its wire value, the group it belongs to, and whether it
 // is a request the renderer invokes or an event the main process sends. That is what lets a
 // registrar bind its handlers as an object keyed by endpoint, so a channel with no handler, and a
@@ -68,6 +73,7 @@ import type {
   CreateAgentMemoryInput,
   DeleteAgentMemoryInput,
   HostAgentMemoryLimit,
+  MemoryEntry,
   SetAgentMemoryInclusionInput,
   UpdateAgentMemoryInput,
 } from "./ipc-agent-memories";
@@ -688,6 +694,11 @@ export const IPC_ENDPOINTS = {
     // Fork: sessions of other coding apps on this computer, and the chats made from them.
     listImportableSessions: request<undefined, ImportableSession[]>()("app:list-importable-sessions"),
     importSessions: request<ApplySessionImportInput, SessionImportResult>()("app:import-sessions"),
+    // Fork: the memories every chat gets.
+    listSharedMemories: request<undefined, MemoryEntry[]>()("app:list-shared-memories"),
+    saveSharedMemory: request<SaveSharedMemoryInput, MemoryEntry>()("app:save-shared-memory"),
+    deleteSharedMemory: request<string, void>()("app:delete-shared-memory"),
+    clearSharedMemories: request<undefined, void>()("app:clear-shared-memories"),
     // A page can open from main with no window action, such as a sign-in page, so main tells the
     // window when the chosen browser did not start.
     externalLinkFallback: event<ExternalLinkFallback>()("app:external-link-fallback"),

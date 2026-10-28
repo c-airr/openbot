@@ -6,6 +6,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  Brain,
   Button,
   CircleFadingArrowUp,
   Download,
@@ -159,6 +160,12 @@ export function SidebarTopbar() {
                   <DropdownMenu.Item onSelectAfterClose={() => props.onImportSessions?.()}>
                     <Download aria-hidden="true" />
                     {t("sidebar.new.importSessions")}
+                  </DropdownMenu.Item>
+                </Show>
+                <Show when={props.onOpenSharedMemory}>
+                  <DropdownMenu.Item onSelectAfterClose={() => props.onOpenSharedMemory?.()}>
+                    <Brain aria-hidden="true" />
+                    {t("sidebar.new.sharedMemory")}
                   </DropdownMenu.Item>
                 </Show>
                 <Show when={props.onCreateChannel}>
