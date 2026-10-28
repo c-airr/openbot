@@ -9,7 +9,7 @@ import type {
   SessionImportSource,
 } from "@openbot/contracts/ipc";
 import { Button, Check, Checkbox, Dialog, IconButton, Input, NativeSelect, Textarea, X } from "@openbot/ui";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { useText } from "../../text";
 
 export interface SessionImportDialogProps {
@@ -52,6 +52,14 @@ export function SessionImportDialog(props: SessionImportDialogProps) {
   const [mode, setMode] = createSignal<SessionImportMode>("paste");
   const [prompt, setPrompt] = createSignal("");
   const [modelKey, setModelKey] = createSignal("");
+
+  // Each opening starts with nothing picked, so a second import does not repeat the first.
+  createEffect(
+    () => props.open,
+    (open) => {
+      if (open) setSelected(new Set<string>());
+    },
+  );
 
   const visible = createMemo(() => {
     const text = query().trim().toLowerCase();

@@ -15,6 +15,9 @@ export function SessionImportOverlay() {
   const [busy, setBusy] = createSignal(false);
   const [result, setResult] = createSignal<SessionImportResult | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  // A plain flag: a signal set on the first click is not read back until the next flush, so a quick
+  // second click would start the same import again.
+  let running = false;
 
   createEffect(sessionImportOpen, (open) => {
     if (!open) return;
@@ -40,16 +43,25 @@ export function SessionImportOverlay() {
       result={result()}
       error={error()}
       onImport={(input) => {
+        if (running) return;
+        running = true;
         setBusy(true);
         setError(null);
         setResult(null);
         importSessions(input)
-          .then(setResult)
+          .then((outcome) => {
+            // All done: the chats are in the list, so the dialog goes. A failure keeps it open to show why.
+            if (outcome.failed.length === 0) setSessionImportOpen(false);
+            else setResult(outcome);
+          })
           .catch((failure: unknown) => {
             const { t, errorMessage } = currentText();
             setError(errorMessage(failure, t("import.sessions.loadFailed")));
           })
-          .finally(() => setBusy(false));
+          .finally(() => {
+            running = false;
+            setBusy(false);
+          });
       }}
     />
   );
