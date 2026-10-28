@@ -151,7 +151,9 @@ const AgentActions = createSimpleContext({
         clearDirectSelection();
         setActiveAgentId(newAgent.id);
         const sectionName = currentText().t("agent.chat.section");
-        const section = sidebarLayout().sections.find((item) => item.name === sectionName);
+        const section = sidebarLayout().sections.find(
+          (item) => item.name === sectionName || item.name === "Chats" || item.name === "Czaty",
+        );
         void applySidebarLayoutAction(
           section
             ? { type: "assign", agentId: newAgent.id, sectionId: section.id }

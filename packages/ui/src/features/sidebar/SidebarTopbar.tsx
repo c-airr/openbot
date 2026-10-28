@@ -6,7 +6,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  Bot,
   Button,
   CircleFadingArrowUp,
   DropdownMenu,
@@ -143,12 +142,6 @@ export function SidebarTopbar() {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content>
-                <Show when={props.createSupported !== false}>
-                  <DropdownMenu.Item onSelectAfterClose={props.onCreateAgent}>
-                    <Bot aria-hidden="true" />
-                    {t("sidebar.new.agent")}
-                  </DropdownMenu.Item>
-                </Show>
                 <Show when={props.createSupported !== false && props.onCreateChat}>
                   <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChat?.()}>
                     <MessageSquare aria-hidden="true" />

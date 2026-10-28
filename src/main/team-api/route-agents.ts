@@ -6,6 +6,8 @@ import {
   parseGenerateAgentProfile,
   parseHostAnalyticsInput,
   parseSaveAgentProfile,
+  type SidebarLayoutAction,
+  type SidebarLayoutSnapshot,
 } from "@openbot/contracts/ipc";
 import { hiddenProviderAgentIds, isPeerHiddenProvider } from "./provider-visibility";
 // Agents: the collection, the sidebar that arranges them, and everything under one agent's id.
@@ -62,6 +64,23 @@ import { routeAgentConversation } from "./route-agent-conversation";
 import { routeAgentMemories } from "./route-agent-memories";
 import { routeAgentQueue } from "./route-agent-queue";
 import { routeAgentRoutines } from "./route-agent-routines";
+
+/** Fork: the sidebar section that holds chats. Both names, because the desktop names it in its own language. */
+const CHAT_SECTION_NAME = "Chats";
+const CHAT_SECTION_NAMES: readonly string[] = [CHAT_SECTION_NAME, "Czaty"];
+
+/** Fork: an agent made on a phone is a chat, so it goes to the Chats section like a desktop chat. */
+async function assignToChats(
+  sidebarLayout: AgentRouteDependencies["sidebarLayout"],
+  agents: TeamApiAgents,
+  agentId: string,
+): Promise<SidebarLayoutSnapshot> {
+  const section = sidebarLayout.getSnapshot().sections.find((item) => CHAT_SECTION_NAMES.includes(item.name));
+  const action: SidebarLayoutAction = section
+    ? { type: "assign", agentId, sectionId: section.id }
+    : { type: "create", name: CHAT_SECTION_NAME, agentId };
+  return runCauseEffect(sidebarLayout.mutate(action, agents.sidebarChatIds()));
+}
 
 export interface AgentRouteDependencies {
   // The whole service, unlike every other module here, because this one forwards it to four
@@ -152,10 +171,10 @@ export async function routeAgents(
         ),
       );
     }
-    return json(
-      200,
-      await runCauseEffect(agents.saveProfile(parseSaveAgentProfile(body), sidebarLayout, memberSender(member))),
-    );
+    const input = parseSaveAgentProfile(body);
+    const saved = await runCauseEffect(agents.saveProfile(input, sidebarLayout, memberSender(member)));
+    if (input.agentId !== undefined) return json(200, saved);
+    return json(200, { ...saved, layout: await assignToChats(sidebarLayout, agents, saved.agent.id) });
   }
   if (method === "GET" && url.pathname === TEAM_API_ROUTES.messages.search) {
     const query = url.searchParams.get("q") ?? "";
@@ -212,7 +231,9 @@ export async function routeAgents(
     requireCompatibleDefault();
     const input = agentCreate(await readJson(request));
     requireVisibleProvider(input);
-    return json(201, await runCauseEffect(agents.createAgent(input, undefined, undefined, memberSender(member))));
+    const created = await runCauseEffect(agents.createAgent(input, undefined, undefined, memberSender(member)));
+    await assignToChats(sidebarLayout, agents, created.id);
+    return json(201, created);
   }
 
   const agentMatch = url.pathname.match(/^\/v1\/agents\/([^/]+)(?:\/(.*))?$/);
