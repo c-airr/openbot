@@ -43,6 +43,7 @@
 @import "@openbot/ui/styles/chart.css";
 @import "@openbot/ui/features/files/files.css";
 @import "@openbot/ui/features/import/agent-import.css";
+@import "@openbot/ui/features/import/session-import.css";
 @import "@openbot/ui/features/transfer/instance-transfer.css";
 @import "@openbot/ui/features/settings/settings-modal.css";
 @import "./features/settings/settings-modal.css";

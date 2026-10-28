@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Button,
   CircleFadingArrowUp,
+  Download,
   DropdownMenu,
   FolderPlus,
   Hash,
@@ -152,6 +153,12 @@ export function SidebarTopbar() {
                   <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChatInFolder?.()}>
                     <FolderPlus aria-hidden="true" />
                     {t("sidebar.new.chatInFolder")}
+                  </DropdownMenu.Item>
+                </Show>
+                <Show when={props.onImportSessions}>
+                  <DropdownMenu.Item onSelectAfterClose={() => props.onImportSessions?.()}>
+                    <Download aria-hidden="true" />
+                    {t("sidebar.new.importSessions")}
                   </DropdownMenu.Item>
                 </Show>
                 <Show when={props.onCreateChannel}>

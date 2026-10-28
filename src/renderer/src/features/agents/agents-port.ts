@@ -31,6 +31,9 @@ export interface AgentsPort {
   providerAdmin: Pick<OpenBotDesktopApi["providerAdmin"], "accounts" | "accountUsage">;
   /** Fork: asks for a project folder. */
   chooseFolder: OpenBotDesktopApi["chooseFolder"];
+  /** Fork: the sessions other coding apps keep on this computer, and the chats made from them. */
+  listImportableSessions: OpenBotDesktopApi["listImportableSessions"];
+  importSessions: OpenBotDesktopApi["importSessions"];
 }
 
 /** Read on each call: tests and stories replace `window.openbot` per case. */

@@ -361,6 +361,8 @@
     "./features/files/files-view": "./src/features/files/files-view.ts",
     "./features/import/AgentImportSources": "./src/features/import/AgentImportSources.tsx",
     "./features/import/AgentImportView": "./src/features/import/AgentImportView.tsx",
+    "./features/import/SessionImportDialog": "./src/features/import/SessionImportDialog.tsx",
+    "./features/import/session-import.css": "./src/features/import/session-import.css",
     "./features/import/HermesImportView": "./src/features/import/HermesImportView.tsx",
     "./features/transfer/InstanceTransferView": "./src/features/transfer/InstanceTransferView.tsx",
     "./components/GlobalSearch": "./src/components/GlobalSearch.tsx",

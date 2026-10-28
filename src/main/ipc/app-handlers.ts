@@ -13,6 +13,7 @@ import {
   type ExternalLinkBrowser,
   externalLinkAppName,
   GROK_BOT_EXPORT_URL,
+  parseApplySessionImportInput,
 } from "@openbot/contracts/ipc";
 import { app, type BrowserWindow, dialog, type OpenDialogOptions } from "electron";
 import { version as developmentVersion } from "../../../package.json";
@@ -36,6 +37,8 @@ import { isTailscaleConnected } from "../private-network-detection";
 import type { RemoteNetworkRoutePreferenceStore } from "../remote-network-route-preference-store";
 import type { RemoteSessionCache } from "../remote-session-cache";
 import type { RemoteSessionReusePreferenceStore } from "../remote-session-reuse-preference-store";
+import { importSessions } from "../session-import-service";
+import { listImportableSessions } from "../session-import-sources";
 import { readSetupState, writeSetupState } from "../setup-store";
 import type { UpdateService } from "../update-service";
 import {
@@ -289,6 +292,8 @@ export function appIpcHandlers({
           : await dialog.showOpenDialog(options);
         return result.canceled ? null : (result.filePaths[0] ?? null);
       }),
+      listImportableSessions: handler(() => listImportableSessions()),
+      importSessions: payloadHandler(parseApplySessionImportInput, (input) => importSessions(service, input)),
       openChatWindow: payloadHandler(parseChatWindowTarget, openChatWindow),
       getChatWindows: handler(chatWindowTargets),
     },

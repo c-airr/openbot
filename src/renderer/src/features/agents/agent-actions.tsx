@@ -1,4 +1,4 @@
-import type { ClientAgentSummary } from "@openbot/contracts/ipc";
+import type { ApplySessionImportInput, ClientAgentSummary } from "@openbot/contracts/ipc";
 import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
@@ -201,6 +201,26 @@ const AgentActions = createSimpleContext({
         // The chat still starts in the folder; only the default is not kept.
       }
       return createChat({ ...agentSetupDraft(), purpose: "" }, folder);
+    }
+
+    /**
+     * Fork: chats made from the sessions of other apps. Each goes to the Chats section, and a single
+     * one opens at once; several stay in the list for the user to open.
+     */
+    async function importSessions(input: ApplySessionImportInput) {
+      const result = await agentsPort().importSessions(input);
+      const sectionName = currentText().t("agent.chat.section");
+      for (const agentId of result.agentIds) {
+        const section = sidebarLayout().sections.find(
+          (item) => item.name === sectionName || item.name === "Chats" || item.name === "Czaty",
+        );
+        await applySidebarLayoutAction(
+          section ? { type: "assign", agentId, sectionId: section.id } : { type: "create", name: sectionName, agentId },
+        ).catch(() => undefined);
+      }
+      const [only] = result.agentIds;
+      if (only && result.agentIds.length === 1) selectAgent(only);
+      return result;
     }
 
     function editAgent(agentId: string) {
@@ -492,6 +512,7 @@ const AgentActions = createSimpleContext({
       createChat,
       startChat,
       startChatInFolder,
+      importSessions,
       createAgentInPlace,
       editAgent,
       duplicateAgent,

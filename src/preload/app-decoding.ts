@@ -372,6 +372,8 @@ export function decodeExternalLinkBrowserOrNull(value: unknown): ExternalLinkBro
   return value === null ? null : decodeExternalLinkBrowser(value);
 }
 
+export { decodeImportableSessions, decodeSessionImportResult } from "@openbot/contracts/ipc";
+
 export function decodeFolderPathOrNull(value: unknown): string | null {
   if (value === null) return null;
   if (typeof value !== "string") throw new Error("Invalid folder path.");

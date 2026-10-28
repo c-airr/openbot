@@ -23,6 +23,7 @@ import { useAgentActions } from "../agents/agent-actions";
 import { attentionByAgent } from "../agents/agent-runtime-snapshot";
 import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
+import { setSessionImportOpen } from "../agents/session-import-state";
 import { useChannels } from "../channels/channels-context";
 import { useConversation } from "../conversation/conversation-context";
 import { useDirectMessages } from "../conversation/direct-messages-context";
@@ -327,6 +328,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
         channels.close();
         void startChatInFolder();
       }}
+      onImportSessions={() => setSessionImportOpen(true)}
       onEditAgent={editAgent}
       duplicateSupported={activeServerSupportsCapability("agent-duplication")}
       duplicatingAgentIds={duplicatingAgentIds()}

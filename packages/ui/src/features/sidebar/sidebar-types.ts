@@ -100,6 +100,8 @@ export interface SidebarProps {
   onCreateChat?: (() => void) | undefined;
   /** Asks for a project folder, remembers it as the default, and starts an empty chat in it. */
   onCreateChatInFolder?: (() => void) | undefined;
+  /** Opens the list of sessions that other coding apps keep on this computer. */
+  onImportSessions?: (() => void) | undefined;
   onEditAgent: (agentId: string) => void;
   duplicateSupported?: boolean | undefined;
   duplicatingAgentIds?: ReadonlySet<string> | undefined;

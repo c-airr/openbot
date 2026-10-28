@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { agentProviderDescriptor, customAgentIdOfModel } from "@openbot/contracts/agent-providers";
+import {
+  type AgentProviderId,
+  agentProviderDescriptor,
+  customAgentIdOfModel,
+} from "@openbot/contracts/agent-providers";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import { developmentStartingModel } from "@openbot/contracts/development-defaults";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -2275,6 +2279,22 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         : result.failure.cause,
     });
   }, Effect.uninterruptible).bind(this);
+
+  /**
+   * Fork: ties a chat to a session another app started, then reads that session's history into the
+   * chat. The history read is the one that runs at launch; a turn it already imported is not read again.
+   */
+  readonly attachProviderSession = Effect.fn("AgentService.attachProviderSession")(function* (
+    this: AgentService,
+    agentId: string,
+    provider: AgentProviderId,
+    externalSessionId: string,
+  ) {
+    yield* lifecycleStep("bind provider session", () =>
+      this.#store.bindProviderSession(agentId, provider, externalSessionId),
+    );
+    yield* this.#boot.backfillProviderHistory().pipe(Effect.forkIn(this.#scope));
+  }).bind(this);
 
   #assignNewAgentModel(agent: AgentSummary, input: Omit<CreateAgentInput, "initialMessage">, needsModel: boolean) {
     return this.#endpoints

@@ -4,7 +4,7 @@
  * the scroll fades in that order.
  */
 
-import { CheckCheck, ContextMenu, FolderPlus, Hash, MessageSquare } from "@openbot/ui";
+import { CheckCheck, ContextMenu, Download, FolderPlus, Hash, MessageSquare } from "@openbot/ui";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
 import { SidebarChannelRow } from "./SidebarChannelRow";
@@ -98,6 +98,12 @@ export function SidebarNav() {
                 <ContextMenu.Item onSelect={() => props.onCreateChatInFolder?.()}>
                   <FolderPlus class="agent-context-icon size-4" aria-hidden="true" />
                   <span>{t("sidebar.new.chatInFolder")}</span>
+                </ContextMenu.Item>
+              </Show>
+              <Show when={props.onImportSessions}>
+                <ContextMenu.Item onSelect={() => props.onImportSessions?.()}>
+                  <Download class="agent-context-icon size-4" aria-hidden="true" />
+                  <span>{t("sidebar.new.importSessions")}</span>
                 </ContextMenu.Item>
               </Show>
               <Show when={props.onCreateChannel}>

@@ -17,6 +17,7 @@ import { desktopAnalytics } from "./analytics";
 import { appPort } from "./app-port";
 import { useAuth } from "./features/account/account-context";
 import { useAgents } from "./features/agents/agents-context";
+import { SessionImportOverlay } from "./features/agents/SessionImportOverlay";
 import { desktopBrowserProfileCalls } from "./features/browser/browser-profiles-port";
 import { createBrowserProfilesStore } from "./features/browser/stores/browser-profiles-store";
 import { useConnectors } from "./features/connectors/connectors-context";
@@ -106,6 +107,7 @@ export function WorkspaceOverlays(props: AccountProps) {
       <GlobalMessageSearch />
       <RemoteDesktop />
       <ChannelCreateOverlay />
+      <SessionImportOverlay />
     </>
   );
 }

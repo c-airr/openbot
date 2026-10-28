@@ -10,6 +10,7 @@ import type {
   ResetAgentSessionSettingInput,
   SetAgentSessionSettingInput,
 } from "./ipc-agent-session-settings";
+import type { ApplySessionImportInput, ImportableSession, SessionImportResult } from "./ipc-session-import";
 // The one channel list. Each endpoint holds its wire value, the group it belongs to, and whether it
 // is a request the renderer invokes or an event the main process sends. That is what lets a
 // registrar bind its handlers as an object keyed by endpoint, so a channel with no handler, and a
@@ -684,6 +685,9 @@ export const IPC_ENDPOINTS = {
     // The file dialog of "Other app…". Null when the user closed the dialog.
     chooseExternalLinkApp: request<undefined, ExternalLinkBrowser | null>()("app:choose-external-link-app"),
     chooseFolder: request<undefined, string | null>()("app:choose-folder"),
+    // Fork: sessions of other coding apps on this computer, and the chats made from them.
+    listImportableSessions: request<undefined, ImportableSession[]>()("app:list-importable-sessions"),
+    importSessions: request<ApplySessionImportInput, SessionImportResult>()("app:import-sessions"),
     // A page can open from main with no window action, such as a sign-in page, so main tells the
     // window when the chosen browser did not start.
     externalLinkFallback: event<ExternalLinkFallback>()("app:external-link-fallback"),

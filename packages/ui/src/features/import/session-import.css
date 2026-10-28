@@ -1,0 +1,206 @@
+/* Fork: Import sessions. It reuses the custom provider dialog frame and the "More providers" empty line. */
+
+.custom-provider-dialog.session-import-dialog {
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100dvh - var(--openbot-space-6)));
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-3);
+}
+
+.session-import-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+}
+
+.session-import-lede {
+  margin: var(--openbot-space-1) 0 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.session-import-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+}
+
+.ui-button.session-import-chip {
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  padding: var(--openbot-space-1) var(--openbot-space-2-5, 10px);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-pill);
+  font-size: var(--openbot-text-sm);
+}
+
+.ui-button.session-import-chip[aria-pressed="false"] {
+  opacity: 0.45;
+}
+
+.session-import-logo {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ui-input.session-import-search {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
+
+.session-import-listhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--openbot-space-3);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.session-import-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  cursor: pointer;
+}
+
+.session-import-list {
+  min-height: 160px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+}
+
+.ui-button.session-import-row {
+  width: 100%;
+  height: auto;
+  justify-content: stretch;
+  border-radius: 0;
+  white-space: normal;
+  display: grid;
+  grid-template-columns: 18px 18px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-import-row:hover {
+  background: var(--openbot-bg-control-hover);
+}
+
+.session-import-row[aria-pressed="true"] {
+  background: var(--openbot-bg-grouped);
+}
+
+.session-import-row:focus-visible {
+  outline: 2px solid var(--openbot-border-focus);
+  outline-offset: -2px;
+}
+
+.session-import-check {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-xs);
+}
+
+.session-import-row[aria-pressed="true"] .session-import-check {
+  border-color: var(--openbot-border-focus);
+}
+
+.session-import-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.session-import-name {
+  overflow: hidden;
+  color: var(--openbot-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-import-meta {
+  overflow: hidden;
+  color: var(--openbot-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-import-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+}
+
+.session-import-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--openbot-space-1-5);
+}
+
+.ui-button.session-import-mode {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  text-align: left;
+  white-space: normal;
+}
+
+.ui-button.session-import-mode[aria-pressed="true"] {
+  border-color: var(--openbot-border-focus);
+  background: var(--openbot-bg-grouped);
+}
+
+.session-import-mode-title {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.session-import-mode small {
+  color: var(--openbot-text-muted);
+}
+
+.session-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.session-import-error,
+.session-import-result {
+  margin: 0;
+  font-size: var(--openbot-text-sm);
+}
+
+.session-import-error {
+  color: var(--openbot-danger-text);
+}
+
+.session-import-result {
+  color: var(--openbot-text-secondary);
+}
