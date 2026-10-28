@@ -2290,9 +2290,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     provider: AgentProviderId,
     externalSessionId: string,
   ) {
-    yield* lifecycleStep("bind provider session", () =>
-      this.#store.bindProviderSession(agentId, provider, externalSessionId),
-    );
+    // A chat that has sent nothing has no thread yet, and a session can only be bound to a thread.
+    yield* lifecycleStep("bind provider session", () => {
+      this.#store.ensureThreadIdNow(agentId);
+      return this.#store.bindProviderSession(agentId, provider, externalSessionId);
+    });
     yield* this.#boot.backfillProviderHistory().pipe(Effect.forkIn(this.#scope));
   }).bind(this);
 

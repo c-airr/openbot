@@ -77,7 +77,13 @@ export async function importSessions(
         if (!folder)
           throw new Error("The folder of this session is gone, and the app finds the session by its folder.");
         const agent = await runCauseEffect(service.createAgent({ ...base, initialMessage: "", blank: true, provider }));
-        await runCauseEffect(service.attachProviderSession(agent.id, provider, id));
+        // A chat that could not take the session would be an empty one the user did not ask for.
+        try {
+          await runCauseEffect(service.attachProviderSession(agent.id, provider, id));
+        } catch (error) {
+          await runCauseEffect(service.deleteAgent(agent.id)).catch(() => undefined);
+          throw error;
+        }
         result.agentIds.push(agent.id);
         continue;
       }
