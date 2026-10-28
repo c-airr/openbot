@@ -14,5 +14,7 @@ export const messages = defineMessages("attachment", {
   "attachment.error.openFile": "Could not open this file. Try again.",
   "attachment.error.fileFallback": "File",
   "attachment.error.fileNotFound": "“{name}” was not found at this path. It may have been moved or deleted.",
+  "attachment.error.fileUnavailable":
+    "“{name}” is not reachable. Its drive may be locked, disconnected or without access.",
   "attachment.error.previewFile": "Could not preview “{name}”. Try again.",
 });

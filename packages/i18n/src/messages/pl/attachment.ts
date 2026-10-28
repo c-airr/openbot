@@ -16,5 +16,7 @@ export const messages = {
   "attachment.error.fileFallback": "Plik",
   "attachment.error.fileNotFound":
     "Nie znaleziono „{name}” pod tą ścieżką. Plik mógł zostać przeniesiony lub usunięty.",
+  "attachment.error.fileUnavailable":
+    "„{name}” jest niedostępny. Dysk może być zablokowany, odłączony albo bez dostępu.",
   "attachment.error.previewFile": "Nie udało się wyświetlić podglądu „{name}”. Spróbuj ponownie.",
 } as const satisfies PartialTranslation<typeof source>;

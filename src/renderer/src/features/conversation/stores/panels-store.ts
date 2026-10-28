@@ -494,5 +494,9 @@ function filePreviewError(error: unknown, path: string): string {
   if (error instanceof Error && /\bENOENT\b/u.test(error.message)) {
     return t("attachment.error.fileNotFound", { name });
   }
+  // The user-error filter hides raw Node output, so a locked or missing drive would show the generic text.
+  if (error instanceof Error && /\b(?:EPERM|EACCES|EIO|ENXIO|ENODEV|EBUSY|UNKNOWN)\b/u.test(error.message)) {
+    return t("attachment.error.fileUnavailable", { name });
+  }
   return errorMessage(error, t("attachment.error.previewFile", { name }));
 }
