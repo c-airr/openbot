@@ -431,11 +431,14 @@ interface SessionSetupResponse {
 
 /**
  * Fork: Cursor's fast tier costs more and the user never wants it. Cursor's ACP offers Composer and
- * Grok only on that tier and refuses `fast=false` for them, so those models leave the list. Only for
+ * Grok only on that tier and refuses `fast=false` for them, so those keep their fast entry. Only for
  * a flavor with `hideFastModels`: Grok CLI's `grok-code-fast-1` is a model, not a tier.
  */
 export function withoutFastModels(models: AcpModel[]): AcpModel[] {
-  return models.filter((model) => !model.id.includes("fast=true") && !model.id.endsWith("-fast"));
+  const slow = (id: string) => id.replace("fast=true", "fast=false").replace(/-fast$/u, "");
+  const ids = new Set(models.map((model) => model.id));
+  // A model that Cursor offers only on the fast tier (Composer, Grok) stays.
+  return models.filter((model) => slow(model.id) === model.id || !ids.has(slow(model.id)));
 }
 
 export function modelsFromSessionSetup(response: SessionSetupResponse): AcpModel[] {
