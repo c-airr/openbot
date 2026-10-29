@@ -274,7 +274,13 @@ const AgentActions = createSimpleContext({
         const helper = addNewAgent(
           await agentsPort().agent.createAgent({
             ...input,
-            ...(cheap && isAgentProvider(cheap.provider) ? { provider: cheap.provider, model: cheap.id } : {}),
+            ...(cheap && isAgentProvider(cheap.model.provider)
+              ? {
+                  provider: cheap.model.provider,
+                  model: cheap.model.id,
+                  ...(cheap.reasoningEffort ? { reasoningEffort: cheap.reasoningEffort } : {}),
+                }
+              : {}),
             description: `parent:${agentId}`,
             initialMessage:
               "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. Do not write the briefing in this chat: pass it to openbot.apply_compact as summary, once. Then answer with one short line.",
@@ -290,7 +296,7 @@ const AgentActions = createSimpleContext({
           // The watcher still deletes the helper when it is done; it only stays visible until then.
         }
         markCompacting(agentId, { helperId: helper.id, serverId, startedAt: Date.now() });
-        actionToast.success(t("composer.compact.started", { model: cheap?.name ?? parent.model }));
+        actionToast.success(t("composer.compact.started", { model: cheap?.model.name ?? parent.model }));
       } catch (error) {
         const { t, errorMessage } = currentText();
         actionToast.error(t("composer.compact.failed"), {
