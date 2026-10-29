@@ -3,7 +3,7 @@ import { attachmentReferenceIds } from "@openbot/contracts/attachment-references
 import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { Badge, Blocks, Listbox, Puzzle } from "@openbot/ui";
+import { Badge, Blocks, Command, Listbox, Puzzle } from "@openbot/ui";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
 import {
@@ -43,6 +43,7 @@ import {
 } from "./composer-dom";
 import { shouldRestoreComposerFocus } from "./composer-focus";
 import {
+  COMPOSER_COMMANDS,
   measurePickerFrame,
   type PickerFrame,
   type PickerOption,
@@ -137,7 +138,7 @@ interface MentionContext {
   query: string;
   start: number;
   end: number;
-  trigger: "@" | "$";
+  trigger: "@" | "$" | "/";
 }
 
 const DICTATION_INTERIM_WORDS = 2;
@@ -216,6 +217,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
         ...matchingSkills().map((match) => ({ type: "skill" as const, ...match })),
         ...matchingMcpServers().map((server) => ({ type: "mcp" as const, server })),
       ];
+    if (trigger === "/")
+      return COMPOSER_COMMANDS.filter((command) =>
+        command.name.startsWith(mention()?.query.trim().toLocaleLowerCase() ?? ""),
+      ).map((command) => ({ type: "command" as const, command }));
     if (trigger !== "@") return [];
     return [
       ...matchingAgents().map((agent) => ({ type: "agent" as const, agent })),
@@ -531,6 +536,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const selection = readEditorSelection(editor);
     if (!selection || selection.anchor !== selection.focus) return null;
     const beforeCaret = editorText(editor).slice(0, selection.focus);
+    // Fork: a command only opens at the start of the message.
+    const slash = beforeCaret.match(/^\/([a-z]{0,20})$/u);
+    if (slash) return { query: slash[1] ?? "", start: 0, end: beforeCaret.length, trigger: "/" };
     const match = beforeCaret.match(/(?:^|\s)([@$])([^@$\n\uFFFC]{0,60})$/u);
     if (!match) return null;
     const trigger = match[1] === "$" ? "$" : "@";
@@ -579,6 +587,20 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const range = rangeFromTextOffsets(editor, context.start, context.end);
     if (!range) return;
     range.deleteContents();
+    if (option.type === "command") {
+      // Plain text: the command is the message itself, with a space for what follows.
+      const text = document.createTextNode(`/${option.command.name} `);
+      range.insertNode(text);
+      range.setStartAfter(text);
+      range.collapse(true);
+      const caret = window.getSelection();
+      caret?.removeAllRanges();
+      caret?.addRange(range);
+      setMention(null);
+      emitValue();
+      editor.focus();
+      return;
+    }
     const token =
       option.type === "agent"
         ? createMentionToken(option.agent)
@@ -980,7 +1002,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 class={["mention-picker-list", pickerFades.classes()]}
                 onScroll={pickerFades.measure}
                 aria-label={t(
-                  mention()?.trigger === "$" ? "composer.picker.skillLabel" : "composer.picker.mentionLabel",
+                  mention()?.trigger === "$"
+                    ? "composer.picker.skillLabel"
+                    : mention()?.trigger === "/"
+                      ? "composer.picker.commandLabel"
+                      : "composer.picker.mentionLabel",
                 )}
                 options={matchingOptions()}
                 optionValue={pickerOptionKey}
@@ -1027,6 +1053,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
                         <span class="mention-picker-skill-icon" aria-hidden="true">
                           <Puzzle />
                         </span>
+                      ) : option.type === "command" ? (
+                        <span class="mention-picker-skill-icon" aria-hidden="true">
+                          <Command />
+                        </span>
                       ) : option.type === "mcp" ? (
                         <span class="mention-picker-skill-icon" aria-hidden="true">
                           <Blocks />
@@ -1038,7 +1068,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                       <Show when={option.type === "skill" && option.showSlug ? option.skill.slug : undefined}>
                         {(slug) => <span class="mention-picker-slug">{slug()}</span>}
                       </Show>
-                      <Show when={pickerOptionDescription(option, format)}>
+                      <Show when={pickerOptionDescription(option, format, t)}>
                         {(description) => <span class="mention-picker-description">{description()}</span>}
                       </Show>
                       <Badge class="mention-picker-badge" variant="ghost">
