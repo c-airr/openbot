@@ -49,7 +49,10 @@ export interface AccountUsageProviderRow {
    * provider that names quota groups, the windows of each group in the provider's order.
    */
   windows: AccountUsageWindowRow[];
-  /** The reading's own windows, the shortest first. The rail ring shows them, not the quota groups. */
+  /**
+   * The windows that the rail ring draws, the shortest first: the reading's own, or for a provider
+   * that names quota groups the 5-hour window of each group, so the ring shows near limits only.
+   */
   ringWindows: AccountUsageWindowRow[];
   /** `false` for a provider that has no usage reading, so a missing amount is not a failure. */
   reportsUsage: boolean;
@@ -140,7 +143,7 @@ function usageRow(
     ),
   );
   // Antigravity limits each group of models apart, such as Gemini 4 Argon: one line per group, by
-  // Google's name. The ring stays on the reading's own windows, the "Gemini Models" group.
+  // Google's name.
   const groups = limit?.groups ?? [];
   const windows =
     groups.length > 1
@@ -157,6 +160,29 @@ function usageRow(
           );
         })
       : ownWindows;
+  // The rail ring shows the near limits of every quota group, not one group's weekly window: the
+  // 5-hour window of each group, such as Gemini and Claude/GPT for Antigravity. The card below
+  // keeps every window of every group.
+  const groupFiveHourWindows =
+    groups.length > 1
+      ? groups.flatMap((group) => {
+          const fiveHour = reportedUsageWindows(group).find(
+            (window) => planLimitWindowKind(window.windowDurationMins).kind === "fiveHour",
+          );
+          return fiveHour
+            ? [
+                windowRow(
+                  fiveHour,
+                  text.t("account.usage.window.group", {
+                    group: group.name,
+                    window: usageWindowLabel(fiveHour.windowDurationMins, text),
+                  }),
+                ),
+              ]
+            : [];
+        })
+      : [];
+  const ringWindows = groupFiveHourWindows.length > 1 ? groupFiveHourWindows : ownWindows;
   // The shortest window comes first, so on a tie the shorter window stops work first.
   const binding = ownWindows.reduce<AccountUsageWindowRow | null>(
     (lowest, window) => (lowest === null || window.remainingPercent < lowest.remainingPercent ? window : lowest),
@@ -172,7 +198,7 @@ function usageRow(
     remainingPercent,
     tone: usageTone(remainingPercent),
     windows,
-    ringWindows: ownWindows,
+    ringWindows,
     reportsUsage: agentProviderDescriptor(provider).reportsUsage,
     sharedQuotaWith: limit?.sharedQuotaWith ?? null,
   };
