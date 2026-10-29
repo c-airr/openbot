@@ -84,7 +84,7 @@ const AgentActions = createSimpleContext({
     } = useAgents();
     const { initializeConversation, removeConversation } = useConversation();
     const threads = useAgentThreads();
-    const { setActiveTurns, setFailedTurns, setQueues, setPendingPrompts } = useTurns();
+    const { activeTurns, failedTurns, setActiveTurns, setFailedTurns, setQueues, setPendingPrompts } = useTurns();
     const { sidebarLayout, setSidebarLayout, applySidebarLayoutAction, removePinnedSidebarItemEverywhere } =
       useSidebar();
     const { clearDirectSelection } = useDirectMessages();
@@ -311,13 +311,16 @@ const AgentActions = createSimpleContext({
 
     /**
      * Fork: the /compact background watcher. Every few seconds it reads the latest page of each
-     * compacting chat: a fresh context-reset marker means the helper applied its briefing, and a
-     * finished helper answer without a marker means it failed (usually the chat was busy, so the
-     * reset was refused). Either way the helper is deleted and the notice goes away. A run that
-     * hears nothing for a while is dropped the same way.
+     * compacting chat. A fresh context-reset marker means the helper applied its briefing, so the
+     * run ends as done at once: the helper's closing line is not needed. A finished or failed
+     * helper answer without a marker means it failed (usually the chat was busy, so the reset was
+     * refused). A helper with no turn and no output after a while never started (bad model, spent
+     * quota), so the run fails fast instead of hanging until the timeout. Either way the helper is
+     * deleted and the notice goes away. A run that hears nothing for a while is dropped the same way.
      */
     const COMPACT_POLL_MS = 5000;
     const COMPACT_TIMEOUT_MS = 15 * 60 * 1000;
+    const COMPACT_IDLE_MS = 3 * 60 * 1000;
     const compactTimer = window.setInterval(() => void pollCompactRuns(), COMPACT_POLL_MS);
     onCleanup(() => window.clearInterval(compactTimer));
 
@@ -344,15 +347,20 @@ const AgentActions = createSimpleContext({
           const helperPage = await conversationPort()
             .agent.readConversationPage({ agentId: run.helperId, anchor: { type: "latest" }, limit: 5 }, run.serverId)
             .catch(() => null);
-          const helperDone = helperPage?.messages.some(
-            (message) =>
-              message.author === "assistant" &&
-              message.status !== "streaming" &&
-              Date.parse(message.createdAt) > run.startedAt,
+          const helperMessages = (helperPage?.messages ?? []).filter(
+            (message) => message.author === "assistant" && Date.parse(message.createdAt) > run.startedAt,
           );
-          if (marked && helperDone) await finishCompactRun(parentId, true);
+          const helperDone = helperMessages.some((message) => message.status !== "streaming");
+          if (marked) await finishCompactRun(parentId, true);
           // The marker is written before the helper answers, so a finished helper without one failed.
-          else if (!marked && helperDone) await finishCompactRun(parentId, false);
+          else if (helperDone) await finishCompactRun(parentId, false);
+          else if (failedTurns()[run.helperId]) await finishCompactRun(parentId, false);
+          else {
+            const helperWorking = helperMessages.length > 0 || (activeTurns()[run.helperId] ?? null) !== null;
+            if (!helperWorking && Date.now() - run.startedAt > COMPACT_IDLE_MS) {
+              await finishCompactRun(parentId, false);
+            }
+          }
         } catch {
           // The next tick tries again; the timeout bounds the wait.
         }
