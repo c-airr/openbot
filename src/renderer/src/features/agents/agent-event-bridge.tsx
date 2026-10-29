@@ -180,7 +180,11 @@ export function AgentEventBridge() {
       case "turn-progress":
         setTurnProgress((current) => ({
           ...current,
-          [event.agentId]: { turnId: event.turnId, detail: cleanAgentMessageText(event.detail) },
+          [event.agentId]: {
+            turnId: event.turnId,
+            detail: cleanAgentMessageText(event.detail),
+            ...(event.runningShells?.length ? { runningShells: event.runningShells } : {}),
+          },
         }));
         setTurnStepLines((current) => appendTurnStepLine(current, event.turnId, cleanAgentMessageText(event.detail)));
         return;

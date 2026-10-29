@@ -1,4 +1,5 @@
 import {
+  AGENT_REASONING_MESSAGE_ID,
   type AgentSummary,
   type ChannelMessage,
   type ChannelTask,
@@ -7,7 +8,6 @@ import {
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer } from "effect";
-import { REASONING_ID } from "./agent/handoff-tool-steps";
 import { type ChannelOperationError, channelFailure, channelSync } from "./channel-effects";
 import type { ChannelMemoryStore } from "./channel-memory-store";
 import type { ChannelStore } from "./channel-store";
@@ -63,7 +63,9 @@ function conversation(messages: ChannelMessage[]): ChannelMessage[] {
 }
 
 export function isMemberThinking({ message }: ChannelMessage): boolean {
-  return message.author === "assistant" && message.itemType === "commentary" && REASONING_ID.test(message.id);
+  return (
+    message.author === "assistant" && message.itemType === "commentary" && AGENT_REASONING_MESSAGE_ID.test(message.id)
+  );
 }
 
 /** Cuts one rendered message into inputs the summary model accepts. The source ID stays the same. */

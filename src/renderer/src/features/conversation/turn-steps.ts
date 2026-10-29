@@ -158,7 +158,12 @@ function guessedSpans(timed: readonly TimedStep[], lastEnd: number, labels: Trac
 
 /** A message that the chat draws as the agent's answer, which the steps of its turn stand above. */
 export function isTurnAnswer(message: AgentMessage): boolean {
-  return message.author === "agent" && message.kind === "text" && !silentAgentAnswer(message);
+  return (
+    message.author === "agent" &&
+    message.kind === "text" &&
+    message.itemType !== "commentary" &&
+    !silentAgentAnswer(message)
+  );
 }
 
 /**

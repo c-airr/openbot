@@ -39,6 +39,11 @@ export const messages = defineMessages("status.agent", {
   "status.agent.memoriesUpdating": "Updating its memories…",
   "status.agent.skillUsing": "Using the skill {name}…",
   "status.agent.skillReading": "Reading a skill…",
+  "status.agent.shellRunning": "Running shell: {command}",
+  "status.agent.shellsRunning": {
+    one: "Running {count} shell: {commands}",
+    other: "Running {count} shells: {commands}",
+  },
   "status.agent.memoryChanges": "Memory: {saved} saved, {updated} updated, {forgotten} forgotten.",
   "status.agent.memoryChangesWithConflicts":
     "Memory: {saved} saved, {updated} updated, {forgotten} forgotten, {notChanged} not changed because another thread changed it first.",

@@ -1383,6 +1383,7 @@ export function ConversationTimeline() {
                     <AgentActivityIndicator
                       agent={activity().agent}
                       detail={activity().detail}
+                      runningShells={props.runningShells}
                       label={activity().label}
                       phase={activity().phase}
                       since={activity().since}

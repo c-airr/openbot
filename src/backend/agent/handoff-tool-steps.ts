@@ -1,3 +1,4 @@
+import { AGENT_REASONING_MESSAGE_ID } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { redactText } from "@openbot/logging";
 import { Effect } from "effect";
@@ -9,7 +10,8 @@ import { providerFailure, providerSync } from "../provider-client-effects";
  * The ids Claude (`:reasoning`) and the ACP client (`:thought`, then `:thought:<n>` for each later
  * block) give a turn's thinking.
  */
-export const REASONING_ID = /:(?:reasoning|thought(?::\d+)?)$/u;
+/** @deprecated Use `AGENT_REASONING_MESSAGE_ID` from `@openbot/contracts/agent-commentary`. */
+export const REASONING_ID = AGENT_REASONING_MESSAGE_ID;
 
 /** The most text one step adds, and the end of a command's output that is kept. */
 const STEP_LIMIT = 1_000;

@@ -1,9 +1,11 @@
-import type { ClientAgentSummary, ConversationMessage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
 import {
+  type ClientAgentSummary,
   CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
   CONVERSATION_PLAN_ITEM_TYPE,
   CONVERSATION_SUBAGENTS_ITEM_TYPE,
+  type ConversationMessage,
   hostedSiteConversationEvent,
+  isAgentReasoningCommentary,
   isChannelChangeMarker,
   isContextResetMarker,
   isSessionImportMarker,
@@ -12,6 +14,7 @@ import {
   mcpSignInEvent,
   modelSwitchReason,
   parseConversationPlanText,
+  type QueueDeliveryStatus,
   routineConversationEvent,
   routineRunConversationEvent,
   skillConversationEvent,
@@ -179,7 +182,7 @@ export function toAgentMessages(
     if ((message.delivery?.status === "queued" || message.delivery?.status === "cancelled") && !message.routine) {
       continue;
     }
-    if (message.author !== "assistant" || message.itemType !== "commentary") {
+    if (message.author !== "assistant" || !isAgentReasoningCommentary(message)) {
       result.push(convert(message, index));
       continue;
     }

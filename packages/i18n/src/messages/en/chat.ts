@@ -16,6 +16,7 @@ export const messages = defineMessages("chat", {
   "chat.activity.waitingStatus": "{name} is waiting for {provider}",
   "chat.activity.agentFallback": "Agent",
   "chat.activity.current": "Current activity",
+  "chat.activity.backgroundShells": "Background",
   "chat.steps.show": "Show steps",
   "chat.steps.hide": "Hide steps",
   "chat.steps.list": "Agent steps",

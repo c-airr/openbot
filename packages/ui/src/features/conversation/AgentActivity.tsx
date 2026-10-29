@@ -1,6 +1,6 @@
 import type { AppTextKey } from "@openbot/i18n";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, createUniqueId, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, createUniqueId, For, Show } from "solid-js";
 import { Button } from "../../button";
 import type { AgentProfile } from "../../data";
 import { ChevronDown } from "../../icons";
@@ -69,9 +69,29 @@ export function nextAgentActivityLabel(
  */
 const ELAPSED_VISIBLE_AFTER_MS = 5_000;
 
+export function AgentBackgroundShells(props: { shells: readonly string[] | undefined }) {
+  const { t } = useText();
+  const shells = () => props.shells?.filter((command) => command.trim().length > 0) ?? [];
+  return (
+    <Show when={shells().length > 0}>
+      <div class="agent-background-shells" role="status" aria-label={t("chat.activity.backgroundShells")}>
+        <For each={shells()}>
+          {(command) => (
+            <div class="agent-background-shell">
+              <span class="agent-background-shell-label">{t("chat.activity.backgroundShells")}</span>
+              <code class="agent-background-shell-command">{command}</code>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
 export function AgentActivityIndicator(props: {
   agent: AgentProfile | undefined;
   detail?: string | null;
+  runningShells?: readonly string[] | undefined;
   label: AgentActivityLabel;
   phase?: "active" | "exiting";
   /**
@@ -128,6 +148,7 @@ export function AgentActivityIndicator(props: {
         <span class="agent-activity-label">{label()}</span>
         <Show when={elapsed()}>{(time) => <span class="agent-activity-elapsed">{time()}</span>}</Show>
       </AgentActivityBody>
+      <AgentBackgroundShells shells={props.runningShells} />
     </div>
   );
 }

@@ -39,6 +39,13 @@ export const messages = {
   "status.agent.memoriesUpdating": "Aktualizowanie wspomnień…",
   "status.agent.skillUsing": "Używanie umiejętności {name}…",
   "status.agent.skillReading": "Czytanie umiejętności…",
+  "status.agent.shellRunning": "Shell w tle: {command}",
+  "status.agent.shellsRunning": {
+    one: "Działa {count} shell: {commands}",
+    few: "Działają {count} shelle: {commands}",
+    many: "Działa {count} shelli: {commands}",
+    other: "Działa {count} shelli: {commands}",
+  },
   "status.agent.memoryChanges": "Wspomnienia: zapisane {saved}, zaktualizowane {updated}, zapomniane {forgotten}.",
   "status.agent.memoryChangesWithConflicts":
     "Wspomnienia: zapisane {saved}, zaktualizowane {updated}, zapomniane {forgotten}, niezmienione {notChanged}, bo inny wątek zmienił je wcześniej.",

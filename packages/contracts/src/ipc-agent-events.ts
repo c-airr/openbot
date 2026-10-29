@@ -89,7 +89,15 @@ export type AgentEvent =
       createdAt: string;
       revision: number;
     }
-  | { type: "turn-progress"; agentId: string; threadId: string; turnId: string; detail: string }
+  | {
+      type: "turn-progress";
+      agentId: string;
+      threadId: string;
+      turnId: string;
+      detail: string;
+      /** Shell commands still running in this turn, newest last. */
+      runningShells?: readonly string[];
+    }
   | { type: "turn-started"; agentId: string; threadId: string; turnId: string; origin?: AgentTurnOrigin }
   | {
       type: "turn-completed";
@@ -247,15 +255,23 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
         isString(value.createdAt) &&
         isNumber(value.revision)
       );
-    case "turn-progress":
+    case "turn-progress": {
+      const shells = value.runningShells;
       return (
         isIdentifier(value.agentId) &&
         isIdentifier(value.threadId) &&
         isIdentifier(value.turnId) &&
         isString(value.detail) &&
         value.detail.length > 0 &&
-        value.detail.length <= INPUT_LIMITS.promptQuestion
+        value.detail.length <= INPUT_LIMITS.promptQuestion &&
+        (shells === undefined ||
+          (Array.isArray(shells) &&
+            shells.length <= 32 &&
+            shells.every(
+              (command) => isString(command) && command.length > 0 && command.length <= INPUT_LIMITS.promptQuestion,
+            )))
       );
+    }
     case "turn-started":
     case "turn-completed":
       return (

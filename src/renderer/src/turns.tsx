@@ -83,7 +83,7 @@ const Turns = createSimpleContext({
     const seed = dynamicIslandCoordinator.serverState(scopeServerId);
     const [activeTurns, setActiveTurns] = createSignal<Record<string, string | null>>(seed?.activeTurns ?? {});
     const [turnProgress, setTurnProgress] = createSignal<
-      Record<string, { turnId: string; detail: string } | undefined>
+      Record<string, { turnId: string; detail: string; runningShells?: readonly string[] } | undefined>
     >(seed?.turnProgress ?? {});
     // Every progress line of the newest turns, by turn, for the steps under the activity line.
     const [turnStepLines, setTurnStepLines] = createSignal<TurnStepLines>({});

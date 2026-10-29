@@ -1,6 +1,11 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { agentProviderName, COMPUTER_USE_MCP_SERVER_NAME, DEFAULT_PROVIDER_ACCOUNT_ID } from "@openbot/contracts/ipc";
+import {
+  agentProviderName,
+  COMPUTER_USE_MCP_SERVER_NAME,
+  DEFAULT_PROVIDER_ACCOUNT_ID,
+  GENERIC_AGENT_TOOL_PROGRESS_TEXTS,
+} from "@openbot/contracts/ipc";
 import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import {
@@ -331,8 +336,21 @@ export function isToolItem(item: ThreadItem): boolean {
   return /(tool.*call|commandexecution|filechange|websearch|computeraction)/u.test(item.type.toLowerCase());
 }
 
+/** @deprecated Use `GENERIC_AGENT_TOOL_PROGRESS_TEXTS` from `@openbot/contracts/agent-tool-progress`. */
+export const GENERIC_TOOL_PROGRESS_TEXTS = GENERIC_AGENT_TOOL_PROGRESS_TEXTS;
+
+function shellCommandLine(item: ThreadItem): string | null {
+  if (getString(item, "type")?.toLowerCase() !== "commandexecution") return null;
+  const command = getString(item, "command")?.trim().split(/\r?\n/u, 1)[0]?.trim();
+  return command && command.length > 0 ? command.slice(0, INPUT_LIMITS.promptQuestion) : null;
+}
+
 export function toolProgressText(item: ThreadItem, completed: boolean): string | null {
   if (!isToolItem(item)) return null;
+  const command = shellCommandLine(item);
+  if (command) {
+    return completed ? null : sourceText("status.agent.shellRunning", { command });
+  }
   if (completed && getString(item, "status") === "failed") {
     return "A tool step failed; reviewing the result and deciding what to try next…";
   }

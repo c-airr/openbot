@@ -282,6 +282,8 @@ export class TurnLifecycle {
    * update. It is the only clock that moves while a turn works, and it is lost on restart.
    */
   readonly #lastEventAt = new Map<string, number>();
+  /** Running shell commands of a turn, by tool item id. */
+  readonly #turnShells = new Map<string, Map<string, string>>();
 
   constructor(options: TurnLifecycleOptions) {
     this.#store = options.store;
@@ -1234,6 +1236,7 @@ export class TurnLifecycle {
   }, Effect.uninterruptible);
 
   #markEnded(turnId: string): void {
+    this.#turnShells.delete(turnId);
     this.#endedTurns.add(turnId);
     if (this.#endedTurns.size > ENDED_TURN_LIMIT) {
       const [oldest] = this.#endedTurns;
@@ -1398,10 +1401,15 @@ export class TurnLifecycle {
     const usage = completed ? toolUsage(item) : null;
     if (usage) this.#hooks.emitToolUsage({ ...usage, agentId, turnId });
     if (yield* this.#images.handleItem(agentId, threadId, turnId, item, completed)) return;
+    const shellChanged = this.#syncTurnShell(turnId, item, completed);
     const toolProgress = toolProgressText(item, completed);
     this.#observeTraceStep(turnId, item, completed, toolProgress);
     if (toolProgress) {
       this.#emitTurnProgress(agentId, this.#conversation.publicThreadId(agentId, threadId), turnId, toolProgress);
+      return;
+    }
+    if (shellChanged) {
+      this.#emitTurnProgress(agentId, this.#conversation.publicThreadId(agentId, threadId), turnId, null);
       return;
     }
     if (item.type !== "agentMessage" || !isString(item.id)) return;
@@ -1527,13 +1535,47 @@ export class TurnLifecycle {
     return message;
   }
 
-  #emitTurnProgress(agentId: string, threadId: string, turnId: string, text: string): void {
+  #runningShellCommands(turnId: string): string[] {
+    return [...(this.#turnShells.get(turnId)?.values() ?? [])];
+  }
+
+  #syncTurnShell(turnId: string, item: ThreadItem, completed: boolean): boolean {
+    if (getString(item, "type")?.toLowerCase() !== "commandexecution") return false;
+    const id = getString(item, "id");
+    const command = getString(item, "command")?.trim().split(/\r?\n/u, 1)[0]?.trim();
+    if (!id || !command) return false;
+    let shells = this.#turnShells.get(turnId);
+    if (!shells) {
+      shells = new Map();
+      this.#turnShells.set(turnId, shells);
+    }
+    const before = shells.size;
+    if (completed) shells.delete(id);
+    else shells.set(id, command.slice(0, INPUT_LIMITS.promptQuestion));
+    if (shells.size === 0) this.#turnShells.delete(turnId);
+    return before !== shells.size || (!completed && shells.has(id));
+  }
+
+  #emitTurnProgress(agentId: string, threadId: string, turnId: string, text: string | null): void {
+    const runningShells = this.#runningShellCommands(turnId);
+    let detail = text?.trim() ?? "";
+    if (!detail && runningShells.length > 0) {
+      detail =
+        runningShells.length === 1
+          ? sourceText("status.agent.shellRunning", { command: runningShells.at(-1) ?? "" })
+          : sourceText("status.agent.shellsRunning", {
+              count: runningShells.length,
+              commands: runningShells.join("; "),
+            });
+    }
+    if (!detail) return;
     this.#hooks.emit({
       type: "turn-progress",
       agentId,
       threadId,
       turnId,
-      detail: text,
+      detail,
+      ...(runningShells.length > 0 ? { runningShells } : {}),
     });
   }
 }

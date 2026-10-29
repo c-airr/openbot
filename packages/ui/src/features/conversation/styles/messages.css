@@ -502,6 +502,43 @@
   line-height: 20px;
 }
 
+.agent-background-shells {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  width: min(var(--openbot-chat-marker-width), calc(100% - var(--openbot-space-6)));
+  margin: var(--openbot-space-2) auto 0;
+  padding: 0 var(--openbot-space-2);
+}
+
+.agent-background-shell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.agent-background-shell-label {
+  flex: 0 0 auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-xs);
+  letter-spacing: var(--openbot-tracking-wide);
+  text-transform: uppercase;
+}
+
+.agent-background-shell-command {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--openbot-font-mono, ui-monospace, monospace);
+  font-size: var(--openbot-text-xs);
+}
+
 .chat-action-marker {
   width: min(var(--openbot-chat-marker-width), calc(100% - var(--openbot-space-6)));
   min-height: var(--openbot-chat-marker-height);

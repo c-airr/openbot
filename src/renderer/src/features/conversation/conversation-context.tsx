@@ -6,6 +6,7 @@ import {
   type ConversationPageInfo,
   type ConversationReadState,
   type ConversationSnapshot,
+  isAgentReasoningCommentary,
 } from "@openbot/contracts/ipc";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import type { AgentMessage } from "@openbot/ui/data";
@@ -480,9 +481,10 @@ const Conversation = createSimpleContext({
         conversation.revision = event.revision;
         const messages = conversation.messages;
         const existing = messages.find((message) => message.id === event.messageId);
-        const thinking = existing
-          ? undefined
-          : messages.find((message) => message.kind === "thinking" && message.itemIds?.includes(event.messageId));
+        const thinking =
+          existing || !isAgentReasoningCommentary({ id: event.messageId, itemType: "commentary" })
+            ? undefined
+            : messages.find((message) => message.kind === "thinking" && message.itemIds?.includes(event.messageId));
         const thinkingItemIndex = thinking?.itemIds?.indexOf(event.messageId) ?? -1;
         const rawBody =
           (rawAgentMessageBodies.get(messageKey) ??

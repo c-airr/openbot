@@ -17,6 +17,7 @@ export const messages = {
   "chat.activity.waitingStatus": "{name} czeka na {provider}",
   "chat.activity.agentFallback": "Agent",
   "chat.activity.current": "Bieżąca aktywność",
+  "chat.activity.backgroundShells": "W tle",
   "chat.steps.show": "Pokaż kroki",
   "chat.steps.hide": "Ukryj kroki",
   "chat.steps.list": "Kroki agenta",
