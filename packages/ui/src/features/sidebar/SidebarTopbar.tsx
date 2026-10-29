@@ -150,6 +150,12 @@ export function SidebarTopbar() {
                     {t("sidebar.new.chat")}
                   </DropdownMenu.Item>
                 </Show>
+                <Show when={props.createSupported !== false && props.onCreateSubagent}>
+                  <DropdownMenu.Item onSelectAfterClose={() => props.onCreateSubagent?.()}>
+                    <FolderPlus aria-hidden="true" />
+                    {t("sidebar.new.subagent")}
+                  </DropdownMenu.Item>
+                </Show>
                 <Show when={props.createSupported !== false && props.onCreateChatInFolder}>
                   <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChatInFolder?.()}>
                     <FolderPlus aria-hidden="true" />

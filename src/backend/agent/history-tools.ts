@@ -54,6 +54,19 @@ export const HISTORY_TOOL_DEFINITIONS = [
       "Read current-conversation history after its latest reset. Read a messageId with offset for large text, or use before from an earlier response for older messages. Optional captured work steps contain no raw reasoning; continue them with workStepsOffset from nextWorkStepsOffset. Channels use channel_history.",
     shape: readShape,
   },
+  // Fork: a subagent reads the chat that it belongs to ("parent:<agentId>" in its description).
+  {
+    name: "parent_history_search",
+    description:
+      "Subagents only: search the conversation of the main chat that this subagent belongs to. Same as history_search, but on the parent chat.",
+    shape: searchShape,
+  },
+  {
+    name: "parent_history_read",
+    description:
+      "Subagents only: read the conversation of the main chat that this subagent belongs to, newest messages first. Same as history_read, but on the parent chat. Use it before you answer, to see what the user and the parent said.",
+    shape: readShape,
+  },
 ];
 
 interface HistoryToolOptions {

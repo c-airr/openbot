@@ -10,6 +10,7 @@ export const messages = defineMessages("agent", {
   "agent.chat.messagePlaceholder": "Ask anything",
   "agent.chat.start": "Start chat",
   "agent.chat.section": "Chats",
+  "agent.subagent.section": "Subagents",
   "agent.setup.color": "Agent color",
   "agent.setup.colorAutomatic": "Automatic agent color",
   "agent.setup.colorOption": "{color} agent color",

@@ -192,6 +192,47 @@ const AgentActions = createSimpleContext({
       return createChat({ ...agentSetupDraft(), purpose: "" }, defaultChatFolder());
     }
 
+    /**
+     * Fork: an empty subagent of the open chat. It goes to the Subagents section, and its description
+     * carries "parent:<id>", which lets it read the parent chat (see developerInstructions).
+     */
+    async function startSubagent() {
+      if (creatingAgent()) return;
+      const parentId = activeAgentId();
+      setCreatingAgent(true);
+      try {
+        const { t } = currentText();
+        const input = newAgentInput(
+          { ...agentSetupDraft(), name: t("sidebar.new.subagent"), purpose: "Chat" },
+          createModelSupported(),
+        );
+        const newAgent = addNewAgent(
+          await agentsPort().agent.createAgent({
+            ...input,
+            initialMessage: "",
+            blank: true,
+            ...(parentId ? { description: `parent:${parentId}` } : {}),
+          }),
+        );
+        clearDirectSelection();
+        setActiveAgentId(newAgent.id);
+        const sectionName = t("agent.subagent.section");
+        const section = sidebarLayout().sections.find(
+          (item) => item.name === sectionName || item.name === "Subagents" || item.name === "Subagenci",
+        );
+        void applySidebarLayoutAction(
+          section
+            ? { type: "assign", agentId: newAgent.id, sectionId: section.id }
+            : { type: "create", name: sectionName, agentId: newAgent.id },
+        ).catch(() => undefined);
+      } catch (error) {
+        const { t, errorMessage } = currentText();
+        setAgentSetupError(errorMessage(error, t("agent.error.createFailed")));
+      } finally {
+        setCreatingAgent(false);
+      }
+    }
+
     async function startChatInFolder() {
       const folder = await agentsPort().chooseFolder();
       if (!folder) return;
@@ -512,6 +553,7 @@ const AgentActions = createSimpleContext({
       createChat,
       startChat,
       startChatInFolder,
+      startSubagent,
       importSessions,
       createAgentInPlace,
       editAgent,

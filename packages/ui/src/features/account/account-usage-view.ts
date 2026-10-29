@@ -146,12 +146,10 @@ function usageRow(
           return groupWindows.map((window) =>
             windowRow(
               window,
-              groupWindows.length > 1
-                ? text.t("account.usage.window.group", {
-                    group: group.name,
-                    window: usageWindowLabel(window.windowDurationMins, text),
-                  })
-                : group.name,
+              text.t("account.usage.window.group", {
+                group: group.name,
+                window: usageWindowLabel(window.windowDurationMins, text),
+              }),
             ),
           );
         })

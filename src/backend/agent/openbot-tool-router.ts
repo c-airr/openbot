@@ -365,8 +365,20 @@ export class OpenBotToolRouter {
               params = resolved;
             }
           }
-          if (params.namespace === "openbot" && (params.tool === "history_search" || params.tool === "history_read")) {
-            const scope = this.#conversation.historyScope(params.threadId, client);
+          const parentHistory = params.tool === "parent_history_search" || params.tool === "parent_history_read";
+          if (
+            params.namespace === "openbot" &&
+            (params.tool === "history_search" || params.tool === "history_read" || parentHistory)
+          ) {
+            let scope = this.#conversation.historyScope(params.threadId, client);
+            if (parentHistory && scope) {
+              // Fork: the parent id is in the subagent's description, written when the subagent was made.
+              const own = this.#store.list().find((candidate) => candidate.id === scope?.agentId);
+              const parentId = /parent:([\w-]+)/u.exec(own?.description ?? "")?.[1];
+              const parent = this.#store.list().find((candidate) => candidate.id === parentId);
+              scope = parent?.threadId ? { ...scope, agentId: parent.id, threadId: parent.threadId } : null;
+              params = { ...params, tool: params.tool.replace("parent_", "") };
+            }
             if (!scope || this.#channels.store.channelForThread(scope.threadId)) {
               client.respond(request.id, openBotToolFailure(sourceText("error.agent.historyUnavailable")));
               return;
@@ -381,7 +393,7 @@ export class OpenBotToolRouter {
             if (!request.signal?.aborted && client.running)
               client.respond(
                 request.id,
-                currentScope?.threadId === scope.threadId
+                (parentHistory ? Boolean(currentScope) : currentScope?.threadId === scope.threadId)
                   ? result
                   : openBotToolFailure(sourceText("error.agent.historyUnavailable")),
               );
@@ -925,6 +937,16 @@ export class OpenBotToolRouter {
     if (params.tool === "create_agent") return yield* this.#createAgent(params, senderAgentId);
 
     if (params.tool === "update_profile") return yield* this.#updateProfile(params, senderAgentId);
+
+    // Fork: the model names its own chat.
+    if (params.tool === "name_chat") {
+      const name = isRecord(params.arguments) && isString(params.arguments.name) ? params.arguments.name.trim() : "";
+      if (!name) return openBotToolFailure("name is required.");
+      const updated = yield* this.#hooks
+        .updateAgent({ agentId: senderAgentId, name: name.slice(0, 60) }, senderAgentId)
+        .pipe(toToolOperationFailed);
+      return openBotToolResult({ status: "renamed", name: updated.name });
+    }
 
     if (params.tool === "update_agents") return yield* handleUpdateAgentsTool(params, senderAgentId, this.#hooks);
 

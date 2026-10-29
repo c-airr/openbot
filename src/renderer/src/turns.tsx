@@ -416,8 +416,8 @@ const Turns = createSimpleContext({
         });
     }
 
-    function stopActiveTurn() {
-      const agent = activeAgent();
+    function stopActiveTurn(agentId?: string) {
+      const agent = agentId ? agentList().find((candidate) => candidate.id === agentId) : activeAgent();
       const turnId = agent ? activeTurns()[agent.id] : null;
       if (!agent || !turnId) return;
       const serverId = activeServerId();

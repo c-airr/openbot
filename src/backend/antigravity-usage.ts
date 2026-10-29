@@ -36,6 +36,8 @@ const SECTION = /^#+\s*Quota Limits\s*$/iu;
 const GROUP = /^-\s+\*\*(.+?)\*\*\s*$/u;
 const GROUP_MODELS = /^\s+\*\(Models within this group:\s*(.+?)\)\*\s*$/iu;
 const BUCKET = /^\s+-\s+\*\*(.+?):\*\*\s+(\d+(?:\.\d+)?)% remaining(?:\s+\(resets ([^)]+)\))?\s*$/u;
+// "Disabled: ..." has no percent: a hit weekly limit turns the 5-hour window off, so it reads as empty.
+const DISABLED = /^\s+-\s+\*\*(.+?):\*\*\s+Disabled\b/u;
 const RESET = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4}), (\d{1,2}):(\d{2}) UTC$/u;
 
 type UsageWindow = AccountRateLimitWindowResult & { usedPercent: number };
@@ -85,14 +87,15 @@ function quotaGroups(answer: string): QuotaGroup[] {
         .filter(Boolean);
       continue;
     }
-    const bucket = BUCKET.exec(line);
+    const disabled = DISABLED.exec(line);
+    const bucket = disabled ?? BUCKET.exec(line);
     if (!bucket) continue;
     const bucketName = bucket[1] ?? "";
     const window: UsageWindow = {
-      usedPercent: Math.max(0, Math.min(100, 100 - Number(bucket[2]))),
+      usedPercent: disabled ? 100 : Math.max(0, Math.min(100, 100 - Number(bucket[2]))),
       windowDurationMins: /week/iu.test(bucketName)
         ? WEEKLY_WINDOW_MINS
-        : /\b5\s*-?\s*h/iu.test(bucketName)
+        : /\b(?:5|five)\s*-?\s*h/iu.test(bucketName)
           ? FIVE_HOUR_WINDOW_MINS
           : null,
       resetsAt: resetSeconds(bucket[3]),

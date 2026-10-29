@@ -567,6 +567,12 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     },
   },
   {
+    name: "name_chat",
+    description:
+      "Rename this chat after its topic, in two to five words in the user's language. Call it after you answer in the user's own chat when the current name is generic or no longer fits; skip it when the name still fits. Takes effect at once.",
+    shape: { name: z.string().trim().min(1).max(60) },
+  },
+  {
     name: "remember_for_all_chats",
     description:
       "Save one short, durable fact that every chat with this user should know, whatever its model: a preference or rule of the user, a machine, server, account or project of theirs, a decision that holds beyond this task. Use it without being asked when such a fact comes up; skip task details, guesses and anything secret such as passwords or tokens. Give memoryId (an id starting with shared:) to correct or merge an existing shared memory instead of adding a near-duplicate. Takes effect at once.",

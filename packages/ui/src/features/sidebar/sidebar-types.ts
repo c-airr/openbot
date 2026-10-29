@@ -99,6 +99,8 @@ export interface SidebarProps {
   /** Starts an empty chat at once, in the default project folder when one is set. */
   onCreateChat?: (() => void) | undefined;
   /** Asks for a project folder, remembers it as the default, and starts an empty chat in it. */
+  /** Starts an empty subagent of the open chat, in the Subagents section. */
+  onCreateSubagent?: (() => void) | undefined;
   onCreateChatInFolder?: (() => void) | undefined;
   /** Opens the list of sessions that other coding apps keep on this computer. */
   onImportSessions?: (() => void) | undefined;
@@ -116,6 +118,8 @@ export interface SidebarProps {
    */
   userHiddenAgents?: HiddenAgent[] | undefined;
   /** Hides an agent. Without it, the agent menu shows no hide item. */
+  /** Fork: interrupts the turn that an agent runs, whichever agent is open. */
+  onStopAgent?: ((agentId: string) => void) | undefined;
   onHideAgent?: ((agentId: string) => void) | undefined;
   /** Puts a hidden agent back in its section. Without it, a hidden agent's menu shows no restore item. */
   onRestoreAgent?: ((agentId: string) => void) | undefined;

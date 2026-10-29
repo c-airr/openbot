@@ -92,6 +92,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     editAgent,
     startChat,
     startChatInFolder,
+    startSubagent,
     duplicateAgent,
     duplicateSection,
     duplicatingSectionIds,
@@ -101,7 +102,8 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
   // The host refuses a member: a hidden agent stops for every member, as a deleted one does.
   const hideAllowed = () =>
     activeServerSupportsCapability(AGENT_HIDDEN_CAPABILITY) && serverRoleCanAdminister(activeServer());
-  const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals, approvals } = useTurns();
+  const { stopActiveTurn, activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals, approvals } =
+    useTurns();
   const { unreadReplies, recentReplies, markAllAgentMessagesRead } = useConversation();
   const { directPeople, teamPresence } = usePresence();
   const { activeDirectMember, activeDirectMemberId, directThreads } = useDirectMessages();
@@ -325,6 +327,10 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
         channels.close();
         void startChat();
       }}
+      onCreateSubagent={() => {
+        channels.close();
+        void startSubagent();
+      }}
       onCreateChatInFolder={() => {
         channels.close();
         void startChatInFolder();
@@ -337,6 +343,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       onDuplicateAgent={duplicateAgent}
       onDeleteAgent={deleteAgent}
       userHiddenAgents={userHiddenAgents()}
+      onStopAgent={(agentId) => stopActiveTurn(agentId)}
       onHideAgent={hideAllowed() ? (agentId) => void setAgentHiddenByUser(agentId, true) : undefined}
       onRestoreAgent={hideAllowed() ? (agentId) => void setAgentHiddenByUser(agentId, false) : undefined}
       onNewAgentThread={newAgentThread()}

@@ -610,7 +610,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         onActivateBrowserTab={activateBrowserTab}
         onCloseBrowserTab={closeBrowserTab}
         onOpenRemoteDesktop={openRemoteDesktopWorkspace}
-        onStop={stopActiveTurn}
+        onStop={() => stopActiveTurn()}
       />
       <ProviderSignInDialogs api={connection} opener="composer" />
     </>
