@@ -199,9 +199,8 @@ const AgentActions = createSimpleContext({
      * Fork: an empty subagent of the open chat. It goes to the Subagents section, and its description
      * carries "parent:<id>", which lets it read the parent chat (see developerInstructions).
      */
-    async function startSubagent() {
+    async function startSubagent(parentId: string) {
       if (creatingAgent()) return;
-      const parentId = activeAgentId();
       setCreatingAgent(true);
       try {
         const { t } = currentText();
@@ -288,6 +287,7 @@ const AgentActions = createSimpleContext({
       }
     }
     compactHook.run = compactChat;
+    compactHook.subagent = startSubagent;
 
     async function startChatInFolder() {
       const folder = await agentsPort().chooseFolder();

@@ -94,12 +94,6 @@ export function SidebarNav() {
                   <span>{t("sidebar.new.chat")}</span>
                 </ContextMenu.Item>
               </Show>
-              <Show when={props.createSupported !== false && props.onCreateSubagent}>
-                <ContextMenu.Item onSelect={() => props.onCreateSubagent?.()}>
-                  <FolderPlus class="agent-context-icon size-4" aria-hidden="true" />
-                  <span>{t("sidebar.new.subagent")}</span>
-                </ContextMenu.Item>
-              </Show>
               <Show when={props.createSupported !== false && props.onCreateChatInFolder}>
                 <ContextMenu.Item onSelect={() => props.onCreateChatInFolder?.()}>
                   <FolderPlus class="agent-context-icon size-4" aria-hidden="true" />

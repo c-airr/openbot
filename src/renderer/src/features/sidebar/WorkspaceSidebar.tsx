@@ -92,7 +92,6 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     editAgent,
     startChat,
     startChatInFolder,
-    startSubagent,
     duplicateAgent,
     duplicateSection,
     duplicatingSectionIds,
@@ -326,10 +325,6 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       onCreateChat={() => {
         channels.close();
         void startChat();
-      }}
-      onCreateSubagent={() => {
-        channels.close();
-        void startSubagent();
       }}
       onCreateChatInFolder={() => {
         channels.close();

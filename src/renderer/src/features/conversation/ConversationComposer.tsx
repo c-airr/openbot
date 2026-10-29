@@ -26,6 +26,7 @@ import {
   ImageRemoveButton,
   Input,
   LoaderCircle,
+  MessageCirclePlus,
   MessageCircleQuestionMark,
   Mic,
   Plus,
@@ -52,6 +53,7 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, createStore, For, Loading, lazy, Show } from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
+import { compactHook } from "../agents/compact-hook";
 import { speechReading } from "../speech/speech-playback";
 import { stopSpokenReply } from "../speech/speech-replies";
 import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
@@ -756,6 +758,18 @@ export function ConversationComposer() {
                     <Image aria-hidden="true" />
                     <span>{t("composer.add.image")}</span>
                   </DropdownMenu.Item>
+                  {/* Fork: a subagent belongs to the chat whose plus menu made it. */}
+                  <Show when={!channel && props.agent && compactHook.subagent}>
+                    <DropdownMenu.Item
+                      onSelectAfterClose={() => {
+                        const parentId = props.agent?.id;
+                        if (parentId) void compactHook.subagent?.(parentId);
+                      }}
+                    >
+                      <MessageCirclePlus aria-hidden="true" />
+                      <span>{t("sidebar.new.subagent")}</span>
+                    </DropdownMenu.Item>
+                  </Show>
                   {/* A skill belongs to one agent, and a channel message goes to the agents it routes to. */}
                   <Show when={!channel}>
                     <DropdownMenu.Item
