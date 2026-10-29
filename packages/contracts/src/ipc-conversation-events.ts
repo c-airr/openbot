@@ -347,6 +347,18 @@ export function isChannelChangeMarker(message: ConversationMessage): boolean {
  */
 export const VAULT_CHANGE_ITEM_TYPE = "vault-change";
 
+/** The note on a chat made from another app's session. The text names the app and the import method. */
+export const SESSION_IMPORT_ITEM_TYPE = "session-import";
+
+export function isSessionImportMarker(message: ConversationMessage): boolean {
+  return (
+    message.author === "system" &&
+    message.source === "system" &&
+    message.status === "completed" &&
+    message.itemType === SESSION_IMPORT_ITEM_TYPE
+  );
+}
+
 export function isVaultChangeMarker(message: ConversationMessage): boolean {
   return (
     message.author === "system" &&

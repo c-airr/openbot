@@ -121,6 +121,7 @@ import {
   MODEL_SWITCH_ITEM_TYPES,
   type ModelSwitchReason,
   type QueueSteerFallback,
+  SESSION_IMPORT_ITEM_TYPE,
   sameAgentBrowserProfile,
   sameAgentModelChoice,
   WORKFLOWS_USAGE_ID,
@@ -3117,6 +3118,52 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   refreshAgentRuntime(agentId: string): Effect.Effect<void, AgentLifecycleFailed> {
     return this.#threads.refreshAgentRuntime(agentId);
   }
+
+  /**
+   * Fork: a line in a new chat that names the other app and the import method. `marker` is false when
+   * a later message replaced the sidebar line and only that line should come back.
+   */
+  readonly appendSessionImportNote = Effect.fn("AgentService.appendSessionImportNote")(function* (
+    this: AgentService,
+    agentId: string,
+    text: string,
+    marker = true,
+  ) {
+    if (marker) {
+      yield* lifecycleStep("note imported session", () => {
+        const database = this.#store.database;
+        this.#conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
+          const message: ConversationMessage = {
+            id: `session-import-${randomUUID()}`,
+            author: "system",
+            source: "system",
+            text,
+            createdAt: new Date().toISOString(),
+            status: "completed",
+            itemType: SESSION_IMPORT_ITEM_TYPE,
+          };
+          snapshot.messages.push(message);
+          sortConversationMessages(snapshot.messages);
+          snapshot.revision = database.appendConversationMessage({
+            agentId,
+            threadId,
+            activeTurnId: snapshot.activeTurnId,
+            message,
+            eventType: "thread.session-imported",
+          });
+          return { result: undefined, snapshot };
+        });
+      });
+    }
+    yield* this.#store
+      .updatePreview(agentId, text)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "note imported session", cause: failure.cause }),
+        ),
+      );
+    this.#emit({ type: "agents-changed", agents: this.listAgents() });
+  }).bind(this);
 
   /**
    * Starts a new chat with the agent and keeps the agent. A marker goes into the agent's own thread,

@@ -154,6 +154,8 @@ export type ChatActionMarkerModel =
   /** A member agent changed the channel at a person's request. `text` is the host's note. */
   | { kind: "channel-change"; text: string; timestamp: string }
   | { kind: "vault-change"; text: string; timestamp: string }
+  /** A chat made from another app's session. `text` names the app and the import method. */
+  | { kind: "session-import"; text: string; timestamp: string }
   | {
       kind: "unavailable";
       label: string;

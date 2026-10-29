@@ -14,9 +14,10 @@ export const SESSION_IMPORT_SOURCES = ["cursor-cli", "cursor-ide", "codex", "cla
 export type SessionImportSource = (typeof SESSION_IMPORT_SOURCES)[number];
 
 /**
- * `resume`: a chat that carries on from the session itself, with its history.
- * `paste`: a chat whose first message holds the conversation, followed by the user's own text.
- * `compact`: a chat on the chosen model that is asked to boil the conversation down.
+ * Every mode makes a new chat and a note that names the app and the method.
+ * `resume`: that chat carries on from the session itself, with its history.
+ * `paste`: the chat's first message holds the conversation, followed by the user's own text.
+ * `compact`: the chat asks the chosen model to boil the conversation down.
  */
 export const SESSION_IMPORT_MODES = ["resume", "paste", "compact"] as const;
 export type SessionImportMode = (typeof SESSION_IMPORT_MODES)[number];

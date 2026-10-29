@@ -6,6 +6,7 @@ import {
   hostedSiteConversationEvent,
   isChannelChangeMarker,
   isContextResetMarker,
+  isSessionImportMarker,
   isVaultChangeMarker,
   marketplaceSuggestionEvent,
   mcpSignInEvent,
@@ -335,6 +336,8 @@ function chatActionMarker(
   if (isChannelChangeMarker(message))
     return { kind: "channel-change", text: message.text, timestamp: message.createdAt };
   if (isVaultChangeMarker(message)) return { kind: "vault-change", text: message.text, timestamp: message.createdAt };
+  if (isSessionImportMarker(message))
+    return { kind: "session-import", text: message.text, timestamp: message.createdAt };
   const skillEvent = skillConversationEvent(message);
   if (skillEvent) return { ...skillEvent, kind: "skill-lifecycle", timestamp: message.createdAt };
   const suggestion = marketplaceSuggestionEvent(message);
@@ -440,7 +443,9 @@ export function withoutAgent<T>(values: Record<string, T>, agentId: string): Rec
 
 function cleanPreview(preview: string): string {
   // The stored preview is the start of the message as written, Markdown and all.
-  const cleaned = markdownPreviewText(cleanAgentMessageText(preview))
+  // An import note is an English source sentence. The sidebar shows it in the reader's language.
+  const text = preview.startsWith("Session taken from ") ? currentText().sourceText(preview) : preview;
+  const cleaned = markdownPreviewText(cleanAgentMessageText(text))
     .replace(/\binbox\s+at\s+zero\b[:,]?\s*/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
