@@ -27,6 +27,8 @@ export const messages = defineMessages("composer", {
   "composer.picker.badge.agent": "Agent",
   "composer.picker.badge.command": "Command",
   "composer.picker.commandLabel": "Commands",
+  "composer.compact.started": "Compacting this chat on {model}. A marker appears here when it is done.",
+  "composer.compact.failed": "Could not compact this chat",
   "composer.command.compact": "Summarise this chat on a cheap model in a new chat",
   "composer.command.claude": "Read the Claude Code memory first, then answer",
   "composer.picker.badge.file": "File",

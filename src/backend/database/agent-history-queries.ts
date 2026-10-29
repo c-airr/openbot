@@ -13,6 +13,8 @@ export interface AgentHistorySelection {
   before?: string;
   messageId?: string;
   author?: string;
+  /** Fork: read the whole thread, also what came before the latest context reset or compaction. */
+  ignoreReset?: boolean;
   limit: number;
 }
 
@@ -32,14 +34,14 @@ export class AgentHistoryQueries {
       SELECT ordered.*, message.message_json FROM ordered
       JOIN projection_thread_messages message ON message.thread_id = ? AND message.message_id = ordered.message_id
     ), boundary AS (
-      SELECT * FROM visible WHERE item_type = ? AND author = 'system'
+      SELECT * FROM visible WHERE item_type = ? AND author = 'system' AND ? = 0
       AND json_extract(message_json, '$.source') = 'system' AND json_extract(message_json, '$.status') = 'completed'
       ORDER BY ${ORDER_KEY_DESC} LIMIT 1
     ), allowed AS (
       SELECT * FROM visible WHERE NOT EXISTS (SELECT 1 FROM boundary)
       OR (${ORDER_KEY_COLUMNS}) > (SELECT ${ORDER_KEY_COLUMNS} FROM boundary)
     )`;
-    const bindings = [threadId, threadId, CONTEXT_RESET_ITEM_TYPE];
+    const bindings = [threadId, threadId, CONTEXT_RESET_ITEM_TYPE, selection.ignoreReset ? 1 : 0];
     const reset = databaseRow(this.#core.connection.prepare(`${cte} SELECT message_id FROM boundary`).get(...bindings));
     const resetMessageId = reset ? requiredStringColumn(reset, "message_id") : null;
     const anchorId = selection.messageId ?? selection.before;

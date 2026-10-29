@@ -567,6 +567,12 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     },
   },
   {
+    name: "apply_compact",
+    description:
+      "Only in a /compact helper chat (its description is parent:<id>): hand over the finished briefing. The parent chat then continues from it, in the same chat, and the user does not see the briefing. Call it once, after you read the parent chat.",
+    shape: { summary: z.string().min(1).max(24_000) },
+  },
+  {
     name: "name_chat",
     description:
       "Rename this chat after its topic, in two to five words in the user's language. Call it after you answer in the user's own chat when the current name is generic or no longer fits; skip it when the name still fits. Takes effect at once.",

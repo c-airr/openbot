@@ -1429,6 +1429,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         requestNewChat: (agentId) => {
           this.#requestedNewChats.add(agentId);
         },
+        // Fork: /compact. The briefing is saved first; a reset that fails (a turn runs) takes it back.
+        applyCompact: (agentId, summary) =>
+          Effect.try({ try: () => this.#memories.compact.set(agentId, summary), catch: (cause) => ({ cause }) }).pipe(
+            Effect.flatMap(() => this.clearAgentContext(agentId, "compacted")),
+            Effect.onError(() => Effect.sync(() => this.#memories.compact.remove(agentId))),
+            toToolOperationFailed,
+          ),
         steerAgentMessage: (recipientAgentId, deliveryId) => this.#steerAgentMessage(recipientAgentId, deliveryId),
       },
     });
@@ -3120,6 +3127,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly clearAgentContext = Effect.fn("AgentService.clearAgentContext")(function* (
     this: AgentService,
     agentId: string,
+    reason: "cleared" | "compacted" = "cleared",
   ) {
     const threadId = yield* lifecycleStep("clear agent context", () => {
       const agent = this.#conversation.requireKnownAgent(agentId);
@@ -3141,7 +3149,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           id: `context-reset-${randomUUID()}`,
           author: "system",
           source: "system",
-          text: sourceText("status.agent.contextCleared"),
+          text: sourceText(reason === "compacted" ? "status.agent.sessionCompacted" : "status.agent.contextCleared"),
           createdAt: new Date().toISOString(),
           status: "completed",
           itemType: CONTEXT_RESET_ITEM_TYPE,
@@ -3159,6 +3167,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       });
       return threadId;
     });
+    // Fork: a plain reset forgets an older briefing; a compaction has just written the new one.
+    if (reason === "cleared") this.#memories.compact.remove(agentId);
     yield* this.#threads.endThreadContext(threadId);
   }, Effect.uninterruptible).bind(this);
 

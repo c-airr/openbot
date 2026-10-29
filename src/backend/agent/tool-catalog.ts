@@ -28,6 +28,7 @@ const DIRECT_NAMES = new Set([
   "remember",
   "forget_memory",
   "name_chat",
+  "apply_compact",
   "remember_for_all_chats",
   "forget_shared_memory",
   "react_to_user_message",

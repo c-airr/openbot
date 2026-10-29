@@ -54,6 +54,18 @@ export const HISTORY_TOOL_DEFINITIONS = [
       "Read current-conversation history after its latest reset. Read a messageId with offset for large text, or use before from an earlier response for older messages. Optional captured work steps contain no raw reasoning; continue them with workStepsOffset from nextWorkStepsOffset. Channels use channel_history.",
     shape: readShape,
   },
+  {
+    name: "earlier_history_search",
+    description:
+      "Search the whole chat, also the part before the latest compaction or new-chat marker. Same as history_search otherwise.",
+    shape: searchShape,
+  },
+  {
+    name: "earlier_history_read",
+    description:
+      "Read the whole chat, also the part before the latest compaction or new-chat marker. Same as history_read otherwise.",
+    shape: readShape,
+  },
   // Fork: a subagent reads the chat that it belongs to ("parent:<agentId>" in its description).
   {
     name: "parent_history_search",
@@ -103,7 +115,10 @@ export class HistoryTools {
     tool: string,
     args: unknown,
   ) {
-    const search = tool === "history_search" ? yield* toolStep(() => searchSchema.parse(args)) : null;
+    // Fork: the earlier_ tools read past the latest reset or compaction.
+    const ignoreReset = tool.startsWith("earlier_");
+    const baseTool = ignoreReset ? tool.slice("earlier_".length) : tool;
+    const search = baseTool === "history_search" ? yield* toolStep(() => searchSchema.parse(args)) : null;
     const read = search ? null : yield* toolStep(() => readSchema.parse(args));
     const store = this.#options.store;
     const redact = (text: string) => this.#options.redact(redactText(text));
@@ -120,6 +135,7 @@ export class HistoryTools {
     const scanLimit = search ? SEARCH_SCAN_ROWS : limit;
     const selection = {
       limit: read?.messageId ? 1 : scanLimit + 1,
+      ...(ignoreReset ? { ignoreReset } : {}),
       ...(cursor ? { before: cursor.anchorMessageId } : {}),
       ...(read?.messageId ? { messageId: read.messageId } : {}),
     };
@@ -224,7 +240,11 @@ export class HistoryTools {
     // File reads yield. Recheck reset and message existence before any content leaves the process.
     for (const entry of result.messages) {
       const checked = yield* toolStep(() =>
-        store.database.readAgentHistory(agentId, threadId, { messageId: entry.messageId, limit: 1 }),
+        store.database.readAgentHistory(agentId, threadId, {
+          messageId: entry.messageId,
+          limit: 1,
+          ...(ignoreReset ? { ignoreReset } : {}),
+        }),
       );
       if (
         checked.resetMessageId !== page.resetMessageId ||

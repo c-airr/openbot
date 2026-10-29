@@ -236,9 +236,9 @@ const AgentActions = createSimpleContext({
     }
 
     /**
-     * Fork: /compact. A new chat on the cheapest model that has room reads this chat through the
-     * parent tools, writes a briefing, and the user carries on there. The old chat stays untouched and
-     * readable from the new one.
+     * Fork: /compact. A helper chat on the cheapest model that has room reads this chat through the
+     * parent tools and hands over a briefing (apply_compact). This chat then starts again from the
+     * briefing, in the same chat, with a "Session compacted" marker. The helper waits in Subagents.
      */
     async function compactChat(agentId: string) {
       if (creatingAgent()) return;
@@ -259,29 +259,30 @@ const AgentActions = createSimpleContext({
           },
           createModelSupported(),
         );
-        const newAgent = addNewAgent(
+        const helper = addNewAgent(
           await agentsPort().agent.createAgent({
             ...input,
             ...(cheap && isAgentProvider(cheap.provider) ? { provider: cheap.provider, model: cheap.id } : {}),
             description: `parent:${agentId}`,
             initialMessage:
-              "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. End with: the full parent chat stays readable with openbot.parent_history_search and openbot.parent_history_read.",
+              "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. Do not write the briefing in this chat: pass it to openbot.apply_compact as summary, once. Then answer with one short line.",
           }),
         );
-        clearDirectSelection();
-        setActiveAgentId(newAgent.id);
-        const sectionName = t("agent.chat.section");
+        const sectionName = t("agent.subagent.section");
         const section = sidebarLayout().sections.find(
-          (item) => item.name === sectionName || item.name === "Chats" || item.name === "Czaty",
+          (item) => item.name === sectionName || item.name === "Subagents" || item.name === "Subagenci",
         );
         void applySidebarLayoutAction(
           section
-            ? { type: "assign", agentId: newAgent.id, sectionId: section.id }
-            : { type: "create", name: sectionName, agentId: newAgent.id },
+            ? { type: "assign", agentId: helper.id, sectionId: section.id }
+            : { type: "create", name: sectionName, agentId: helper.id },
         ).catch(() => undefined);
+        actionToast.success(t("composer.compact.started", { model: cheap?.name ?? parent.model }));
       } catch (error) {
         const { t, errorMessage } = currentText();
-        setAgentSetupError(errorMessage(error, t("agent.error.createFailed")));
+        actionToast.error(t("composer.compact.failed"), {
+          description: errorMessage(error, t("agent.error.createFailed")),
+        });
       } finally {
         setCreatingAgent(false);
       }

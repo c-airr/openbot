@@ -177,6 +177,8 @@ export interface OpenBotToolRouterHooks {
   reportRoutineFailure(agentId: string, turnId: string, reason: string): boolean;
   /** Starts a new chat with the agent when its turn ends and its queue is empty. */
   requestNewChat(agentId: string): void;
+  /** Fork: saves the briefing for the chat and starts its context again from it. */
+  applyCompact(agentId: string, summary: string): Effect.Effect<void, ToolOperationFailed>;
   /**
    * Takes a message from another agent into the recipient's running chat turn when the recipient's
    * busy-message mode is "steer". Otherwise the message waits in the queue.
@@ -368,7 +370,11 @@ export class OpenBotToolRouter {
           const parentHistory = params.tool === "parent_history_search" || params.tool === "parent_history_read";
           if (
             params.namespace === "openbot" &&
-            (params.tool === "history_search" || params.tool === "history_read" || parentHistory)
+            (params.tool === "history_search" ||
+              params.tool === "history_read" ||
+              params.tool === "earlier_history_search" ||
+              params.tool === "earlier_history_read" ||
+              parentHistory)
           ) {
             let scope = this.#conversation.historyScope(params.threadId, client);
             if (parentHistory && scope) {
@@ -377,7 +383,7 @@ export class OpenBotToolRouter {
               const parentId = /parent:([\w-]+)/u.exec(own?.description ?? "")?.[1];
               const parent = this.#store.list().find((candidate) => candidate.id === parentId);
               scope = parent?.threadId ? { ...scope, agentId: parent.id, threadId: parent.threadId } : null;
-              params = { ...params, tool: params.tool.replace("parent_", "") };
+              params = { ...params, tool: params.tool.replace("parent_", "earlier_") };
             }
             if (!scope || this.#channels.store.channelForThread(scope.threadId)) {
               client.respond(request.id, openBotToolFailure(sourceText("error.agent.historyUnavailable")));
@@ -937,6 +943,21 @@ export class OpenBotToolRouter {
     if (params.tool === "create_agent") return yield* this.#createAgent(params, senderAgentId);
 
     if (params.tool === "update_profile") return yield* this.#updateProfile(params, senderAgentId);
+
+    // Fork: the helper of /compact hands over its briefing.
+    if (params.tool === "apply_compact") {
+      const own = this.#store.list().find((candidate) => candidate.id === senderAgentId);
+      const parentId = /parent:([\w-]+)/u.exec(own?.description ?? "")?.[1];
+      const summary = isRecord(params.arguments) && isString(params.arguments.summary) ? params.arguments.summary : "";
+      if (!parentId || !this.#store.list().some((candidate) => candidate.id === parentId))
+        return openBotToolFailure("Only the helper of a /compact has a chat to compact.");
+      if (!summary.trim()) return openBotToolFailure("summary is required.");
+      yield* this.#hooks.applyCompact(parentId, summary);
+      return openBotToolResult({
+        status: "applied",
+        note: "The parent chat now starts from your briefing. Tell the user in one line that it is done.",
+      });
+    }
 
     // Fork: the model names its own chat.
     if (params.tool === "name_chat") {

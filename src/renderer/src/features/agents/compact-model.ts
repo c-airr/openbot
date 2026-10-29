@@ -24,7 +24,8 @@ export function cheapestCompactModel(
   );
   let best: { model: ClientAgentModelOption; rank: number } | null = null;
   for (const model of models) {
-    if (!isAgentProvider(model.provider) || exhausted.has(model.provider)) continue;
+    // OpenRouter bills an API key whose balance OpenBot cannot read, so a Flash model there can fail at once.
+    if (!isAgentProvider(model.provider) || model.provider === "openrouter" || exhausted.has(model.provider)) continue;
     const rank = CHEAP_RANK.findIndex((pattern) => pattern.test(`${model.id} ${model.name}`));
     if (rank < 0 || (best && best.rank <= rank)) continue;
     best = { model, rank };

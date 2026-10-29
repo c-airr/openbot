@@ -1043,6 +1043,7 @@ export class ThreadLifecycle {
       teammatesInTurns: client.provider === "claude",
       sectionTeammates: section,
       homeSkills,
+      compactSummary: this.#memories.compact.get(agent.id),
     };
     const instructions = developerInstructions(
       agent,

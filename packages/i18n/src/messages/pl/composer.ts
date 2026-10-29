@@ -28,6 +28,8 @@ export const messages = {
   "composer.picker.badge.agent": "Agent",
   "composer.picker.badge.command": "Komenda",
   "composer.picker.commandLabel": "Komendy",
+  "composer.compact.started": "Kompaktuję ten czat na {model}. Gdy skończę, pojawi się tu znacznik.",
+  "composer.compact.failed": "Nie udało się skompaktować czatu",
   "composer.command.compact": "Streść ten czat na tanim modelu w nowym czacie",
   "composer.command.claude": "Najpierw przeczytaj pamięć Claude Code, potem odpowiedz",
   "composer.picker.badge.file": "Plik",

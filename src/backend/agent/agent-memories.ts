@@ -21,6 +21,7 @@ import {
   AgentMemoryStore,
 } from "../agent-memory-store";
 import type { AgentStore } from "../agent-store";
+import { CompactSummaryStore } from "../compact-summary-store";
 import { normalizeMemoryText } from "../memory-store";
 import { type DynamicToolCallParams, isRecord } from "../protocol";
 import { SHARED_MEMORY_PREFIX, SharedMemoryStore } from "../shared-memory-store";
@@ -86,6 +87,8 @@ export class AgentMemories {
   readonly #memories: AgentMemoryStore;
   /** Fork: the memories every chat gets. */
   readonly shared: SharedMemoryStore;
+  /** Fork: what /compact left for a chat. */
+  readonly compact: CompactSummaryStore;
   readonly #pending = new Map<string, PendingMemoryMutation[]>();
   readonly #epochs = new Map<string, number>();
 
@@ -95,6 +98,9 @@ export class AgentMemories {
     this.#emitError = options.emitError;
     this.#memories = new AgentMemoryStore(options.store.database, options.limit);
     this.shared = new SharedMemoryStore(join(options.store.database.userDataPath, "openbot-shared-memories-v1.json"));
+    this.compact = new CompactSummaryStore(
+      join(options.store.database.userDataPath, "openbot-compact-summaries-v1.json"),
+    );
   }
 
   limit(): number {
