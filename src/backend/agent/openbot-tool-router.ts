@@ -1468,7 +1468,9 @@ export class OpenBotToolRouter {
           {
             name: args.name,
             description: args.description,
-            initialMessage: args.initialMessage,
+            // Fork: the first task goes below from this agent, so its chat shows the wait and gets the answer.
+            initialMessage: "",
+            blank: true,
             avatarSeed: args.avatarSeed ?? randomUUID(),
             avatarHue: hue,
             ...(requested
@@ -1516,6 +1518,22 @@ export class OpenBotToolRouter {
         sidebar && sectionId !== null
           ? yield* sidebar.withProfileAssignment(sectionId, create).pipe(toToolOperationFailed)
           : yield* create().pipe(toToolOperationFailed);
+      const receipt = yield* this.#mailbox
+        .enqueue({
+          sender: { kind: "agent", agentId: senderAgentId },
+          recipientAgentIds: [created.id],
+          text: args.initialMessage,
+          replyToMessageId: null,
+          idempotencyKey: toolCallIdempotencyKey(params),
+        })
+        .pipe(toToolOperationFailed);
+      for (const delivery of receipt.deliveries) {
+        this.#mailboxSync.emitQueue(delivery.recipientAgentId);
+        this.#drain.scheduleDrain(delivery.recipientAgentId);
+      }
+      const snapshot = this.#conversation.ensureSnapshot(senderAgentId, params.threadId);
+      this.#mailboxSync.syncMailboxMessages(snapshot);
+      this.#conversation.emitConversation(snapshot);
       return { success: true, contentItems: [{ type: "inputText", text: JSON.stringify(created) }] };
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),

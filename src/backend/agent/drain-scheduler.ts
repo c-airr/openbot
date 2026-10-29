@@ -956,7 +956,21 @@ export class DrainScheduler {
           this.#hooks.emitError("delivery_start_failed", error, delivery.recipientAgentId);
           this.scheduleDrain(delivery.recipientAgentId);
           // The requester may hold the other answers until this request ends.
-          if (delivery.sender.kind === "agent") this.scheduleDrain(delivery.sender.agentId);
+          if (delivery.sender.kind === "agent") {
+            // Fork: tell the requester why its teammate did not start, so it can pick another model.
+            yield* this.#mailbox
+              .enqueue({
+                sender: { kind: "agent", agentId: delivery.recipientAgentId },
+                recipientAgentIds: [delivery.sender.agentId],
+                text: `I did not start your request (model ${requestedModel ?? "unknown"}): ${reason}`,
+                replyToMessageId: delivery.messageId,
+                expectsReply: false,
+                idempotencyKey: `start-failed:${delivery.id}`,
+              })
+              .pipe(toDeliveryStartFailed);
+            this.#mailboxSync.emitQueue(delivery.sender.agentId);
+            this.scheduleDrain(delivery.sender.agentId);
+          }
         }),
       ),
       Effect.ensuring(

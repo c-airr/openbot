@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { connect } from "node:net";
 import { homedir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
@@ -186,6 +187,28 @@ export const usableMcpServers = Effect.fnUntraced(function* (
   });
 });
 
+/** True for a remote URL; for a loopback one, whether something listens on its port. */
+function localServerUp(url: string): Promise<boolean> {
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return Promise.resolve(true);
+  }
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(target.hostname)) return Promise.resolve(true);
+  const port = Number(target.port || (target.protocol === "https:" ? 443 : 80));
+  return new Promise((resolve) => {
+    const socket = connect({ host: target.hostname.replace(/^\[|\]$/g, ""), port });
+    const done = (up: boolean) => {
+      socket.destroy();
+      resolve(up);
+    };
+    socket.setTimeout(500, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
 export const usableMcpServer = Effect.fnUntraced(function* (
   config: McpServerConfig,
   tools: McpToolRuntimes = NO_MCP_TOOL_RUNTIMES,
@@ -194,6 +217,13 @@ export const usableMcpServer = Effect.fnUntraced(function* (
   // An http server starts no process, so it needs neither a command nor a `PATH`. It is the only
   // kind that can carry a sign-in, because a token travels in a header.
   if (config.transport !== "stdio") {
+    // Fork: a local server that is not running (Unreal closed) would fail the whole session start.
+    if (!(yield* Effect.promise(() => localServerUp(config.url))))
+      return {
+        config,
+        error: sourceText("error.backend.mcpServerNotRunning", { url: config.url }),
+        reason: "unusable",
+      };
     const resolved = endpoint
       ? yield* endpoint(config).pipe(Effect.mapError(({ cause }) => new McpShapeFailed({ cause })))
       : { url: config.url, authorization: null, proxied: false };
