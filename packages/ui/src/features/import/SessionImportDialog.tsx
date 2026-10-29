@@ -30,6 +30,7 @@ const APPS: ReadonlyArray<{ id: ProviderLogoVariant; name: string; sources: read
   { id: "codex", name: "Codex", sources: ["codex"] },
   { id: "claude", name: "Claude Code", sources: ["claude"] },
   { id: "opencode", name: "OpenCode", sources: ["opencode"] },
+  { id: "antigravity", name: "Antigravity", sources: ["antigravity"] },
 ];
 
 const logoOf = (source: SessionImportSource): ProviderLogoVariant =>

@@ -8,6 +8,7 @@ import { open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import type { ImportableSession, SessionImportSource } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
 
@@ -43,6 +44,11 @@ const cursorIdeDatabase = () =>
 const codexSessions = () => join(homedir(), ".codex", "sessions");
 const claudeProjects = () => join(homedir(), ".claude", "projects");
 const openCodeDatabase = () => join(homedir(), ".local", "share", "opencode", "opencode.db");
+/** The Antigravity IDE and its CLI keep the same layout under different roots. */
+const antigravityRoots = () => [
+  join(homedir(), ".gemini", "antigravity"),
+  join(homedir(), ".gemini", "antigravity-cli"),
+];
 
 const isOpenBotWorkspace = (cwd: string | null) => cwd !== null && /[\\/]OpenBot[\\/]Agents[\\/]/iu.test(cwd);
 
@@ -359,6 +365,128 @@ function readOpenCode(path: string, id: string): SessionTurn[] {
   }
 }
 
+// Antigravity: one row per conversation in `conversation_summaries.db`, the words beside it.
+
+/** `2026-10-06 17:39:58.4487795+00:00`: the seventh fraction digit and the space would not parse. */
+function antigravityTime(value: unknown): number {
+  const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d+))?\s*(Z|[+-]\d{2}:?\d{2})?$/u.exec(
+    String(value ?? "").trim(),
+  );
+  if (!match) return 0;
+  const [, date, time, fraction = "0", zone = "Z"] = match;
+  const millis = `${fraction}000`.slice(0, 3);
+  const offset = zone === "Z" ? "Z" : zone.replace(":", "");
+  const parsed = Date.parse(`${date}T${time}.${millis}${offset}`);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/** `["file:///i%3A/code/PROJECTS/beacle"]` holds the folder, escaped as a URI. */
+function antigravityFolder(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim().startsWith("[")) return null;
+  try {
+    const uris = JSON.parse(value);
+    if (!Array.isArray(uris)) return null;
+    for (const uri of uris) {
+      if (typeof uri !== "string" || !uri.startsWith("file:")) continue;
+      try {
+        return fileURLToPath(uri);
+      } catch {
+        // A URI the host cannot turn into a path is skipped.
+      }
+    }
+  } catch {
+    // Not a JSON list: no folder to show.
+  }
+  return null;
+}
+
+/** The full transcript when the app wrote one, else the short one. */
+async function antigravityTranscript(root: string, id: string): Promise<string | null> {
+  const logs = join(root, "brain", id, ".system_generated", "logs");
+  for (const name of ["transcript_full.jsonl", "transcript.jsonl"]) {
+    const path = join(logs, name);
+    try {
+      await stat(path);
+      return path;
+    } catch {
+      // Try the next name.
+    }
+  }
+  return null;
+}
+
+async function listAntigravityRoot(root: string): Promise<Locator[]> {
+  const found: Locator[] = [];
+  let database: DatabaseSync;
+  try {
+    database = new DatabaseSync(join(root, "conversation_summaries.db"), { readOnly: true });
+  } catch {
+    return found;
+  }
+  try {
+    // Subagent conversations sit under their parent and are left out, as in the other apps.
+    const rows = database
+      .prepare(
+        `SELECT conversation_id, title, preview, workspace_uris, last_modified_time
+         FROM conversation_summaries
+         WHERE parent_conversation_id = '' AND nesting_depth = 0`,
+      )
+      .all();
+    for (const entry of rows) {
+      const id = String(entry.conversation_id ?? "");
+      if (!id) continue;
+      const cwd = antigravityFolder(entry.workspace_uris);
+      if (isOpenBotWorkspace(cwd)) continue;
+      const path = await antigravityTranscript(root, id);
+      if (!path) continue;
+      const title = titleOf(String(entry.title || entry.preview || "Antigravity"));
+      const updatedAt = antigravityTime(entry.last_modified_time) || (await stat(path)).mtimeMs;
+      found.push({ session: row("antigravity", id, { title, cwd, updatedAt, resumable: false }), path, id });
+    }
+  } catch {
+    // A moved schema leaves the other app listed.
+  } finally {
+    database.close();
+  }
+  return found;
+}
+
+async function listAntigravity(): Promise<Locator[]> {
+  return (await Promise.all(antigravityRoots().map((root) => listAntigravityRoot(root)))).flat();
+}
+
+/** The words of one user turn sit in `<USER_REQUEST>`; the rest of the record is machine context. */
+function antigravityUserText(content: string): string {
+  const request = /<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/u.exec(content);
+  if (request?.[1] !== undefined) return request[1].trim();
+  return (content.split(/<(?:ADDITIONAL_METADATA|USER_SETTINGS_CHANGE|SYSTEM_MESSAGE)>/u)[0] ?? "").trim();
+}
+
+function antigravityTurn(record: DynamicRecord): SessionTurn | null {
+  if (typeof record.content !== "string") return null;
+  if (record.type === "USER_INPUT") {
+    const text = antigravityUserText(record.content);
+    return text && !isScaffolding(text) ? { role: "user", text } : null;
+  }
+  if (record.type === "PLANNER_RESPONSE") {
+    const text = record.content.trim();
+    return text ? { role: "assistant", text } : null;
+  }
+  return null;
+}
+
+async function readAntigravity(path: string): Promise<SessionTurn[]> {
+  const turns: SessionTurn[] = [];
+  // A turn arrives in pieces: one answer is often several PLANNER_RESPONSE records in a row.
+  for (const turn of parseLines(await readFile(path, "utf8")).map(antigravityTurn)) {
+    if (!turn) continue;
+    const last = turns[turns.length - 1];
+    if (last && last.role === turn.role) last.text = `${last.text}\n\n${turn.text}`;
+    else turns.push({ ...turn });
+  }
+  return turns;
+}
+
 /** One app that cannot be read leaves the others listed. */
 async function safely(reader: () => Promise<Locator[]> | Locator[]): Promise<Locator[]> {
   try {
@@ -375,6 +503,7 @@ export async function listImportableSessions(): Promise<ImportableSession[]> {
     listCodex,
     listClaude,
     listOpenCode,
+    listAntigravity,
   ];
   const found = (await Promise.all(readers.map(safely))).flat();
   known = new Map(found.map((locator) => [locator.session.key, locator]));
@@ -402,6 +531,9 @@ export async function readSessionTranscript(key: string): Promise<SessionTranscr
       break;
     case "opencode":
       turns = readOpenCode(path, id);
+      break;
+    case "antigravity":
+      turns = await readAntigravity(path);
       break;
   }
   return { session, turns };

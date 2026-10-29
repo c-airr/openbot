@@ -10,7 +10,14 @@ import { type AgentModelId, isAgentModel } from "./ipc-agent-identity";
 import { isBoundedString, isIdentifier } from "./ipc-bounded-values";
 import { isBoolean, isDynamicRecord, isNumber, isOneOf, isString } from "./runtime-values";
 
-export const SESSION_IMPORT_SOURCES = ["cursor-cli", "cursor-ide", "codex", "claude", "opencode"] as const;
+export const SESSION_IMPORT_SOURCES = [
+  "cursor-cli",
+  "cursor-ide",
+  "codex",
+  "claude",
+  "opencode",
+  "antigravity",
+] as const;
 export type SessionImportSource = (typeof SESSION_IMPORT_SOURCES)[number];
 
 /**

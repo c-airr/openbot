@@ -25,6 +25,7 @@ const SOURCE_PROVIDER: Record<SessionImportSource, AgentProviderId | null> = {
   codex: "codex",
   claude: "claude",
   opencode: "opencode",
+  antigravity: null,
 };
 
 const SOURCE_LABEL: Record<SessionImportSource, string> = {
@@ -33,6 +34,7 @@ const SOURCE_LABEL: Record<SessionImportSource, string> = {
   codex: "Codex",
   claude: "Claude Code",
   opencode: "OpenCode",
+  antigravity: "Antigravity",
 };
 
 /** Room for the framing text around the conversation. */
