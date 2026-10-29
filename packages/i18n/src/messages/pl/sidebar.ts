@@ -14,6 +14,7 @@ export const messages = {
   "sidebar.new.section": "Nowa sekcja",
   "sidebar.new.chat": "Nowy czat",
   "sidebar.new.subagent": "Nowy subagent",
+  "sidebar.compact.prefix": "Kompakt:",
   "sidebar.new.chatInFolder": "Nowy czat w folderze…",
   "sidebar.new.importSessions": "Importuj sesje…",
   "sidebar.new.sharedMemory": "Wspólna pamięć…",

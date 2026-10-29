@@ -13,6 +13,7 @@ export const messages = defineMessages("sidebar", {
   "sidebar.new.section": "New section",
   "sidebar.new.chat": "New chat",
   "sidebar.new.subagent": "New subagent",
+  "sidebar.compact.prefix": "Compact:",
   "sidebar.new.chatInFolder": "New chat in a folder…",
   "sidebar.new.importSessions": "Import sessions…",
   "sidebar.new.sharedMemory": "Shared memory…",

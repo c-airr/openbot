@@ -16,6 +16,7 @@ import {
 } from "@openbot/ui/features/conversation/ComposerEditor";
 import { currentText } from "@openbot/ui/text";
 import { playActionSound } from "../../../action-sounds";
+import { compactHook } from "../../agents/compact-hook";
 import { claimDictatedSend } from "../../speech/speech-replies";
 import { rememberAttachmentKinds } from "../attachment-analytics";
 import { type PastedComposerCopy, rememberComposerFile } from "../composer-clipboard";
@@ -685,6 +686,12 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       deps.props.agentStatus.providers?.some((status) => status.id === provider && status.state === "outdated")
     )
       return false;
+    // Fork: /compact summarises the chat on a cheap model in a new chat; it is not sent to the model.
+    if (!voice && draft.attachments.length === 0 && text.trim() === "/compact" && compactHook.run) {
+      void compactHook.run(agentId);
+      deps.clearSubmittedDraft(target, submittedSnapshot ?? draft);
+      return true;
+    }
     stopTeamTyping();
     deps.setComposerError(null, target);
     deps.clearConversationError(target);

@@ -1,4 +1,4 @@
-import type { ApplySessionImportInput, ClientAgentSummary } from "@openbot/contracts/ipc";
+import { type ApplySessionImportInput, type ClientAgentSummary, isAgentProvider } from "@openbot/contracts/ipc";
 import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
@@ -26,6 +26,8 @@ import { type NewAgentDraft, newAgentInput } from "./agent-create-input";
 import { attentionAgentId, withoutAttention } from "./agent-runtime-snapshot";
 import { useAgents } from "./agents-context";
 import { agentsPort } from "./agents-port";
+import { compactHook } from "./compact-hook";
+import { cheapestCompactModel } from "./compact-model";
 
 /**
  * Creating, editing, duplicating and deleting an agent.
@@ -53,6 +55,7 @@ const AgentActions = createSimpleContext({
     const scopeIsCurrent = createScopeGuard();
     const {
       agentList,
+      modelOptions,
       setAgentList,
       agentSetupOpen,
       setAgentSetupOpen,
@@ -232,6 +235,59 @@ const AgentActions = createSimpleContext({
         setCreatingAgent(false);
       }
     }
+
+    /**
+     * Fork: /compact. A new chat on the cheapest model that has room reads this chat through the
+     * parent tools, writes a briefing, and the user carries on there. The old chat stays untouched and
+     * readable from the new one.
+     */
+    async function compactChat(agentId: string) {
+      if (creatingAgent()) return;
+      const parent = agentList().find((candidate) => candidate.id === agentId);
+      if (!parent) return;
+      setCreatingAgent(true);
+      try {
+        const usage = await agentsPort()
+          .providerAdmin.accountUsage(activeServerId())
+          .catch(() => null);
+        const cheap = cheapestCompactModel(modelOptions(), usage);
+        const { t } = currentText();
+        const input = newAgentInput(
+          {
+            ...agentSetupDraft(),
+            name: `${t("sidebar.compact.prefix")} ${parent.name}`.slice(0, CHAT_NAME_LENGTH),
+            purpose: "Chat",
+          },
+          createModelSupported(),
+        );
+        const newAgent = addNewAgent(
+          await agentsPort().agent.createAgent({
+            ...input,
+            ...(cheap && isAgentProvider(cheap.provider) ? { provider: cheap.provider, model: cheap.id } : {}),
+            description: `parent:${agentId}`,
+            initialMessage:
+              "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. End with: the full parent chat stays readable with openbot.parent_history_search and openbot.parent_history_read.",
+          }),
+        );
+        clearDirectSelection();
+        setActiveAgentId(newAgent.id);
+        const sectionName = t("agent.chat.section");
+        const section = sidebarLayout().sections.find(
+          (item) => item.name === sectionName || item.name === "Chats" || item.name === "Czaty",
+        );
+        void applySidebarLayoutAction(
+          section
+            ? { type: "assign", agentId: newAgent.id, sectionId: section.id }
+            : { type: "create", name: sectionName, agentId: newAgent.id },
+        ).catch(() => undefined);
+      } catch (error) {
+        const { t, errorMessage } = currentText();
+        setAgentSetupError(errorMessage(error, t("agent.error.createFailed")));
+      } finally {
+        setCreatingAgent(false);
+      }
+    }
+    compactHook.run = compactChat;
 
     async function startChatInFolder() {
       const folder = await agentsPort().chooseFolder();
@@ -554,6 +610,7 @@ const AgentActions = createSimpleContext({
       startChat,
       startChatInFolder,
       startSubagent,
+      compactChat,
       importSessions,
       createAgentInPlace,
       editAgent,
