@@ -23,6 +23,7 @@ export const messages = defineMessages("account", {
   "account.usage.row.notReported": "{name}, usage not reported",
   "account.usage.row.loading": "{name}, loading",
   "account.usage.row.window": "{window} {percent}% left",
+  "account.usage.row.windowUsed": "{window} {percent}% used",
   "account.usage.row.resets": "resets {time}",
   "account.usage.resetsAt": "Resets {time}",
   "account.usage.resetIn.minutes": "{minutes}m",

@@ -27,6 +27,8 @@ export type AccountUsageTone = PlanLimitTone;
 export interface AccountUsageWindowRow {
   label: string;
   remainingPercent: number;
+  /** What the UI shows: the share already used. */
+  usedPercent: number;
   tone: AccountUsageTone;
   /** Unix seconds. */
   resetsAt: number | null;
@@ -121,6 +123,7 @@ function usageRow(
     return {
       label,
       remainingPercent,
+      usedPercent: 100 - remainingPercent,
       tone: usageTone(remainingPercent),
       resetsAt: window.resetsAt,
       resetsAtLabel: formatUsageReset(window.resetsAt, text),
@@ -238,7 +241,7 @@ export function accountUsageRowLabel(
     return t(loading ? "account.usage.row.loading" : "account.usage.row.unavailable", { name: row.name });
   const parts = [row.name];
   for (const window of row.windows) {
-    parts.push(t("account.usage.row.window", { window: window.label, percent: window.remainingPercent }));
+    parts.push(t("account.usage.row.windowUsed", { window: window.label, percent: window.usedPercent }));
     if (window.resetsAtLabel) parts.push(t("account.usage.row.resets", { time: window.resetsAtLabel }));
   }
   return parts.join(", ");
