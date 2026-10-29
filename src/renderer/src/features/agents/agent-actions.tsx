@@ -1,4 +1,9 @@
-import { type ApplySessionImportInput, type ClientAgentSummary, isAgentProvider } from "@openbot/contracts/ipc";
+import {
+  type ApplySessionImportInput,
+  type ClientAgentSummary,
+  CONTEXT_RESET_ITEM_TYPE,
+  isAgentProvider,
+} from "@openbot/contracts/ipc";
 import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
@@ -19,6 +24,7 @@ import { useTurns } from "../../turns";
 import { useAgentThreads } from "../agent-threads/agent-threads-context";
 import { useConversation } from "../conversation/conversation-context";
 import { agentConversationKey } from "../conversation/conversation-keys";
+import { conversationPort } from "../conversation/conversation-port";
 import { useDirectMessages } from "../conversation/direct-messages-context";
 import { useServers } from "../servers/servers-context";
 import { useSidebar } from "../sidebar/sidebar-context";
@@ -26,7 +32,7 @@ import { type NewAgentDraft, newAgentInput } from "./agent-create-input";
 import { attentionAgentId, withoutAttention } from "./agent-runtime-snapshot";
 import { useAgents } from "./agents-context";
 import { agentsPort } from "./agents-port";
-import { compactHook } from "./compact-hook";
+import { clearCompacting, compactHook, compacting, markCompacting } from "./compact-hook";
 import { cheapestCompactModel } from "./compact-model";
 
 /**
@@ -236,12 +242,18 @@ const AgentActions = createSimpleContext({
     }
 
     /**
-     * Fork: /compact. A helper chat on the cheapest model that has room reads this chat through the
-     * parent tools and hands over a briefing (apply_compact). This chat then starts again from the
-     * briefing, in the same chat, with a "Session compacted" marker. The helper waits in Subagents.
+     * Fork: /compact. A hidden helper chat on the cheapest model that has room reads this chat
+     * through the parent tools and hands over a briefing (apply_compact). This chat then starts
+     * again from the briefing, in the same chat, with a "Session compacted" marker. The user never
+     * sees the helper: it is hidden at once and deleted when it is done, and the parent chat shows
+     * a "compacting" notice meanwhile (see the compact watcher below).
      */
     async function compactChat(agentId: string) {
       if (creatingAgent()) return;
+      if (compacting()[agentId]) {
+        actionToast.warning(currentText().t("composer.compact.running"));
+        return;
+      }
       const parent = agentList().find((candidate) => candidate.id === agentId);
       if (!parent) return;
       setCreatingAgent(true);
@@ -268,15 +280,16 @@ const AgentActions = createSimpleContext({
               "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. Do not write the briefing in this chat: pass it to openbot.apply_compact as summary, once. Then answer with one short line.",
           }),
         );
-        const sectionName = t("agent.subagent.section");
-        const section = sidebarLayout().sections.find(
-          (item) => item.name === sectionName || item.name === "Subagents" || item.name === "Subagenci",
-        );
-        void applySidebarLayoutAction(
-          section
-            ? { type: "assign", agentId: helper.id, sectionId: section.id }
-            : { type: "create", name: sectionName, agentId: helper.id },
-        ).catch(() => undefined);
+        // No sidebar section: the helper stays out of every section, and it is hidden at once so
+        // the user never sees it, not even in the Hidden group.
+        const serverId = activeServerId();
+        try {
+          const snapshot = await agentsPort().agent.setAgentHidden({ agentId: helper.id, hidden: true }, serverId);
+          applyUserHiddenAgents(snapshot.agents);
+        } catch {
+          // The watcher still deletes the helper when it is done; it only stays visible until then.
+        }
+        markCompacting(agentId, { helperId: helper.id, serverId, startedAt: Date.now() });
         actionToast.success(t("composer.compact.started", { model: cheap?.name ?? parent.model }));
       } catch (error) {
         const { t, errorMessage } = currentText();
@@ -289,6 +302,75 @@ const AgentActions = createSimpleContext({
     }
     compactHook.run = compactChat;
     compactHook.subagent = startSubagent;
+
+    /**
+     * Fork: the /compact background watcher. Every few seconds it reads the latest page of each
+     * compacting chat: a fresh context-reset marker means the helper applied its briefing, and a
+     * finished helper answer without a marker means it failed (usually the chat was busy, so the
+     * reset was refused). Either way the helper is deleted and the notice goes away. A run that
+     * hears nothing for a while is dropped the same way.
+     */
+    const COMPACT_POLL_MS = 5000;
+    const COMPACT_TIMEOUT_MS = 15 * 60 * 1000;
+    const compactTimer = window.setInterval(() => void pollCompactRuns(), COMPACT_POLL_MS);
+    onCleanup(() => window.clearInterval(compactTimer));
+
+    async function pollCompactRuns() {
+      const parentIds = Object.keys(compacting());
+      if (parentIds.length === 0) return;
+      for (const parentId of parentIds) {
+        const run = compacting()[parentId];
+        if (!run) continue;
+        try {
+          if (Date.now() - run.startedAt > COMPACT_TIMEOUT_MS) {
+            await finishCompactRun(parentId, false);
+            continue;
+          }
+          const parentPage = await conversationPort()
+            .agent.readConversationPage({ agentId: parentId, anchor: { type: "latest" }, limit: 10 }, run.serverId)
+            .catch(() => null);
+          const marked = parentPage?.messages.some(
+            (message) =>
+              message.itemType === CONTEXT_RESET_ITEM_TYPE &&
+              message.status === "completed" &&
+              Date.parse(message.createdAt) > run.startedAt,
+          );
+          const helperPage = await conversationPort()
+            .agent.readConversationPage({ agentId: run.helperId, anchor: { type: "latest" }, limit: 5 }, run.serverId)
+            .catch(() => null);
+          const helperDone = helperPage?.messages.some(
+            (message) =>
+              message.author === "assistant" &&
+              message.status !== "streaming" &&
+              Date.parse(message.createdAt) > run.startedAt,
+          );
+          if (marked && helperDone) await finishCompactRun(parentId, true);
+          // The marker is written before the helper answers, so a finished helper without one failed.
+          else if (!marked && helperDone) await finishCompactRun(parentId, false);
+        } catch {
+          // The next tick tries again; the timeout bounds the wait.
+        }
+      }
+    }
+
+    /** Fork: ends one /compact run: the helper is deleted and the parent notice goes away. */
+    async function finishCompactRun(parentId: string, ok: boolean) {
+      const run = compacting()[parentId];
+      clearCompacting(parentId);
+      if (run) {
+        try {
+          await agentsPort().agent.deleteAgent(run.helperId, run.serverId);
+        } catch {
+          // A helper whose turn still runs refuses the delete; it stays hidden, out of sight.
+        }
+        setAgentList((current) => current.filter((candidate) => candidate.id !== run.helperId));
+        threads.forgetAgent(run.helperId);
+        removeConversation(run.helperId);
+      }
+      const { t } = currentText();
+      if (ok) actionToast.success(t("composer.compact.done"));
+      else actionToast.error(t("composer.compact.failed"));
+    }
 
     async function startChatInFolder() {
       const folder = await agentsPort().chooseFolder();

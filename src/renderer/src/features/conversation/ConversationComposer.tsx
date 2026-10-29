@@ -53,7 +53,7 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, createStore, For, Loading, lazy, Show } from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
-import { compactHook } from "../agents/compact-hook";
+import { compactHook, compacting } from "../agents/compact-hook";
 import { speechReading } from "../speech/speech-playback";
 import { stopSpokenReply } from "../speech/speech-replies";
 import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
@@ -567,6 +567,11 @@ export function ConversationComposer() {
                 }
               />
             )}
+          </Show>
+          {/* Fork: /compact works in the background (see agent-actions); the chat shows the same
+              compacting slab as a native compaction until the "Session compacted" marker lands. */}
+          <Show when={props.agent && compacting()[props.agent.id]} keyed>
+            {(run) => <ComposerCompactionNotice startedAt={run.startedAt} status="running" />}
           </Show>
           <Show
             when={
