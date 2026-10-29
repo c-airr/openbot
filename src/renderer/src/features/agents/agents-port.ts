@@ -23,6 +23,7 @@ export interface AgentsPort {
     | "onEvent"
     | "getRuntimeSnapshot"
     | "setAgentHidden"
+    | "archiveInactiveAgents"
     | "setAvatar"
     | "updateAgent"
     | "updateAgentAdminSettings"

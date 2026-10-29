@@ -55,3 +55,23 @@ export function parseSetAgentHiddenInput(value: unknown): SetAgentHiddenInput {
     throw new Error("Invalid hidden agent request.");
   return { agentId: value.agentId, hidden: value.hidden };
 }
+
+/**
+ * Fork: hides the chats and subagents untouched for three days. `exceptAgentIds` names the agents
+ * to keep, such as the open chat. The Hidden group keeps them with thread, files and memories.
+ */
+export interface ArchiveInactiveAgentsInput {
+  exceptAgentIds: string[];
+}
+
+export function parseArchiveInactiveAgentsInput(value: unknown): ArchiveInactiveAgentsInput {
+  if (
+    !isDynamicRecord(value) ||
+    Object.keys(value).some((key) => key !== "exceptAgentIds") ||
+    !Array.isArray(value.exceptAgentIds) ||
+    value.exceptAgentIds.length > INPUT_LIMITS.agents ||
+    !value.exceptAgentIds.every(isIdentifier)
+  )
+    throw new Error("Invalid archive request.");
+  return { exceptAgentIds: value.exceptAgentIds };
+}

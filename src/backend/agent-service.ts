@@ -26,6 +26,7 @@ import type {
   AgentTaskInput,
   AgentTasksSnapshot,
   AgentWaitsSnapshot,
+  ArchiveInactiveAgentsInput,
   AskSideQuestionInput,
   AttachmentDataInput,
   AvatarImageInput,
@@ -393,6 +394,8 @@ const USER_SEND_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_SECTION_TEAMMATES = 32;
 /** How long an archive waits for the provider to end the turn that it stopped. After it, the archive is refused. */
 const TASK_STOP_WAIT_MS = 15_000;
+/** Fork: chats and subagents untouched this long are hidden, so the sidebar shows only live work. */
+const INACTIVE_ARCHIVE_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** The user's update, and the browser profile choice that the profile operations set after their checks. */
 export type AgentUpdate = UpdateAgentInput & { ownBrowserSession?: boolean; browserProfileId?: string | null };
@@ -2524,6 +2527,47 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     }
     this.#emit({ type: "hidden-agents-changed", agents: snapshot.agents });
     this.#emit({ type: "agents-changed", agents: this.listAgents() });
+    return snapshot;
+  }).bind(this);
+
+  /**
+   * Fork: hides the chats and subagents untouched for three days, so the sidebar shows only live
+   * work and the Subagents section stays in reach. The Hidden group keeps them with thread, files,
+   * memories and section, and the context between chats is untouched. Skips routine owners, running
+   * or queued work, waiting agents, and the ids the caller names, such as the open chat.
+   */
+  readonly archiveInactiveAgents = Effect.fn("AgentService.archiveInactiveAgents")(function* (
+    this: AgentService,
+    input: ArchiveInactiveAgentsInput,
+  ) {
+    const cutoff = Date.now() - INACTIVE_ARCHIVE_MS;
+    const except = new Set(input.exceptAgentIds);
+    const candidates = yield* lifecycleStep("find inactive agents", () => {
+      const found: string[] = [];
+      for (const candidate of this.#store.list()) {
+        if (candidate.hiddenAt !== undefined || except.has(candidate.id)) continue;
+        if (!candidate.updatedAt || Number.isNaN(Date.parse(candidate.updatedAt))) continue;
+        if (Date.parse(candidate.updatedAt) > cutoff) continue;
+        if (this.#routines.listRecordsFor(candidate.id).length > 0) continue;
+        if (this.#attention.hasAttentionFor(candidate.id)) continue;
+        const agent = this.#conversation.requireKnownAgent(candidate.id);
+        const activeTurn =
+          this.#conversation.workingSnapshot(candidate.id)?.activeTurnId ??
+          (agent.threadId ? this.#store.database.readActiveTurnId(candidate.id, agent.threadId) : null);
+        if (
+          activeTurn ||
+          this.#mailbox.hasUnfinishedDeliveryOutsideTasks(candidate.id) ||
+          this.#threads.mainContextBusy(agent)
+        )
+          continue;
+        found.push(candidate.id);
+      }
+      return found;
+    });
+    let snapshot = this.listHiddenAgents();
+    for (const agentId of candidates) {
+      snapshot = yield* this.setAgentHidden({ agentId, hidden: true });
+    }
     return snapshot;
   }).bind(this);
 

@@ -285,7 +285,7 @@ import type {
 } from "./ipc-external-links";
 import type { GitHubConnectorRepositories, GitHubConnectorStatus } from "./ipc-github-connector";
 import type { ApplyHermesImportInput, HermesImportPreview } from "./ipc-hermes-import";
-import type { HiddenAgentsSnapshot, SetAgentHiddenInput } from "./ipc-hidden-agents";
+import type { ArchiveInactiveAgentsInput, HiddenAgentsSnapshot, SetAgentHiddenInput } from "./ipc-hidden-agents";
 import type { HostAnalytics, HostAnalyticsInput } from "./ipc-host-analytics";
 import type { HostReleaseStatus } from "./ipc-host-release";
 import type { HostTimezoneSettings } from "./ipc-host-timezone";
@@ -1326,6 +1326,10 @@ export const IPC_ENDPOINTS = {
     // A joined server answers through `agent-hidden-v1`. A server without it has no hidden agents.
     listHiddenAgents: scopedQuery<HiddenAgentsSnapshot>()("agent:hidden:list"),
     setAgentHidden: scopedRequest<SetAgentHiddenInput, HiddenAgentsSnapshot>()("agent:hidden:set"),
+    // Fork: only the computer that runs the agent answers. A joined server has no route for it.
+    archiveInactiveAgents: scopedRequest<ArchiveInactiveAgentsInput, HiddenAgentsSnapshot>()(
+      "agent:hidden:archive-inactive",
+    ),
     generateProfile: scopedRequest<GenerateAgentProfileInput, AgentProfileDraft>()("agent:generate-profile"),
     saveProfile: scopedRequest<SaveAgentProfileInput, SaveAgentProfileResult>()("agent:save-profile"),
     // Only the computer that runs the agent answers. A joined server has no route for it.

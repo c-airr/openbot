@@ -11,7 +11,7 @@ import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/p
 import type { AgentProfile } from "@openbot/ui/data";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { currentText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
 import { FALLBACK_STATUS } from "../../app-defaults";
 import { agentProfilesEqual, toAgentProfile } from "../../app-message-projection";
@@ -180,6 +180,37 @@ const Agents = createSimpleContext({
     function applyUserHiddenAgents(agents: HiddenAgent[]): void {
       if (!scopeIsCurrent()) return;
       setUserHiddenAgents(agents);
+    }
+
+    /**
+     * Fork: hides the chats and subagents untouched for three days, so the sidebar shows only live
+     * work and the Subagents section stays in reach. Once the roster lands, then every six hours.
+     * Local server only: a joined server's host archives its own agents. Silent: the Hidden group
+     * keeps them with thread, files, memories and section.
+     */
+    {
+      let archiveTimer: ReturnType<typeof setInterval> | null = null;
+      const archiveInactive = () => {
+        if (!scopeIsCurrent() || activeServer()?.kind !== "local") return;
+        const active = activeAgentId();
+        void agentsPort()
+          .agent.archiveInactiveAgents({ exceptAgentIds: active ? [active] : [] }, activeServerId())
+          .then((snapshot) => {
+            if (scopeIsCurrent()) applyUserHiddenAgents(snapshot.agents);
+          })
+          .catch(() => undefined);
+      };
+      createEffect(
+        () => agentListSettled(),
+        (settled) => {
+          if (!settled || archiveTimer !== null) return;
+          archiveInactive();
+          archiveTimer = setInterval(archiveInactive, 6 * 60 * 60 * 1000);
+        },
+      );
+      onCleanup(() => {
+        if (archiveTimer !== null) clearInterval(archiveTimer);
+      });
     }
 
     const activeAgent = createMemo(() => {

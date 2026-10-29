@@ -1749,6 +1749,23 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         emitAgentEvent({ type: "agents-changed", agents });
         return snapshot;
       },
+      // Fork: the preview hides what the roster has not touched for three days, except the ids named.
+      archiveInactiveAgents: async ({ exceptAgentIds }) => {
+        const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000;
+        const except = new Set(exceptAgentIds);
+        for (const agent of agents) {
+          if (agent.hiddenAt !== undefined || except.has(agent.id)) continue;
+          if (!agent.updatedAt || Number.isNaN(Date.parse(agent.updatedAt))) continue;
+          if (Date.parse(agent.updatedAt) > cutoff) continue;
+          agents = agents.map((candidate) =>
+            candidate.id === agent.id ? { ...candidate, hiddenAt: new Date().toISOString() } : candidate,
+          );
+        }
+        const snapshot = hiddenAgents();
+        emitAgentEvent({ type: "hidden-agents-changed", agents: snapshot.agents });
+        emitAgentEvent({ type: "agents-changed", agents });
+        return snapshot;
+      },
       readAgentSessionSettings: async (agentId) => clone(previewSessionSettings(agentId)),
       setAgentSessionSetting: async ({ agentId, settingId, value }) => {
         const settings = previewSessionSettings(agentId);

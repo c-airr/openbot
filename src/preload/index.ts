@@ -502,6 +502,7 @@ const agentGroup = bridgeGroup(IPC_ENDPOINTS.agent, {
   resetAgentSessionSetting: decodeAgentSessionSettingsFromMain,
   listHiddenAgents: decodeHiddenAgentsFromMain,
   setAgentHidden: decodeHiddenAgentsFromMain,
+  archiveInactiveAgents: decodeHiddenAgentsFromMain,
   listInstalledSkills: decodeInstalledSkillsFromMain,
   listChannels: decodeChannelSummaries,
   readChannel: decodeChannelPage,

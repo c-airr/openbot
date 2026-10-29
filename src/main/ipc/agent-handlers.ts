@@ -28,6 +28,7 @@ import {
   hostAnalyticsQuery,
   isAgentModelOption,
   parseAgentAnalyticsInput,
+  parseArchiveInactiveAgentsInput,
   parseAskSideQuestion,
   parseChannelCommand,
   parseChannelRead,
@@ -306,6 +307,13 @@ export function agentIpcHandlers({
               body: input,
             }),
           );
+        },
+      }),
+      // Fork: only the computer that runs the agent archives. A joined server has no route for it.
+      archiveInactiveAgents: scopedHandler(parseArchiveInactiveAgentsInput, {
+        local: (input) => runCauseEffect(service.archiveInactiveAgents(input)),
+        remote: () => {
+          throw new Error(sourceText("error.team.agentHideUnsupported"));
         },
       }),
       listAgents: scopedQueryHandler({

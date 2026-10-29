@@ -7,7 +7,7 @@ import {
   isFreeOpencodeModel,
   isKnownAgentProvider,
 } from "@openbot/contracts/ipc";
-import type { AppTextKey } from "@openbot/i18n";
+import type { AppTextKey, AppTranslate } from "@openbot/i18n";
 import { currentText } from "../text";
 
 /** The efforts that have a name in the catalog. The other efforts show their id. */
@@ -90,6 +90,57 @@ function modelTier(model: PickerModel): 0 | 1 {
   return model.free ? 0 : 1;
 }
 
+/** The reasoning levels Cursor puts in its ids, in picker order. */
+const CURSOR_EFFORT_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] as const;
+type CursorEffort = (typeof CURSOR_EFFORT_ORDER)[number];
+
+function isCursorEffort(value: string): value is CursorEffort {
+  return CURSOR_EFFORT_ORDER.some((effort) => effort === value);
+}
+
+function cursorReasoning(id: string): string {
+  const match = /^(.*)\[([^\][]*)\]$/.exec(id);
+  const params =
+    match?.[2]?.split(",").map((part) =>
+      part
+        .trim()
+        .split("=")
+        .map((piece) => piece.trim()),
+    ) ?? [];
+  return params.find(([key]) => key === "reasoning")?.[1] ?? "";
+}
+
+/** Cursor ids that differ only in `reasoning`, grouped by the rest of the id. */
+function cursorEffortGroups(options: readonly ClientAgentModelOption[]): Map<string, ClientAgentModelOption[]> {
+  const groups = new Map<string, ClientAgentModelOption[]>();
+  for (const model of options) {
+    if (model.provider !== "cursor") continue;
+    const match = /^(.*)\[([^\][]*)\]$/.exec(model.id);
+    const base = match?.[1];
+    const params = match?.[2]?.split(",").map((part) => part.trim()) ?? [];
+    const reasoning = cursorReasoning(model.id);
+    if (!base || !isCursorEffort(reasoning)) continue;
+    const rest = params
+      .filter((part) => !part.startsWith("reasoning="))
+      .sort()
+      .join(",");
+    const key = `${base}[${rest}]`;
+    groups.set(key, [...(groups.get(key) ?? []), model]);
+  }
+  return groups;
+}
+
+function effortRank(reasoning: string): number {
+  const rank = isCursorEffort(reasoning) ? CURSOR_EFFORT_ORDER.indexOf(reasoning) : -1;
+  return rank < 0 ? CURSOR_EFFORT_ORDER.length : rank;
+}
+
+function effortName(reasoning: string, t: AppTranslate): string {
+  const label = EFFORT_LABELS[reasoning];
+  if (label) return t(label);
+  return reasoning.charAt(0).toUpperCase() + reasoning.slice(1);
+}
+
 /** OpenCode exposes reasoning variants as model IDs. Keep those IDs at the selection boundary. */
 export function pickerModels(options: ClientAgentModelOption[]): PickerModel[] {
   const { t } = currentText();
@@ -106,6 +157,27 @@ export function pickerModels(options: ClientAgentModelOption[]): PickerModel[] {
     const name = label ? t(label) : effort.charAt(0).toUpperCase() + effort.slice(1);
     variants.set(base.id, [...(variants.get(base.id) ?? []), { id: model.id, name }]);
     variantIds.add(model.id);
+  }
+  // Fork: Cursor lists each reasoning level as its own id (`base[..,reasoning=high,..]`), so the
+  // picker shows one model with an effort choice, as for OpenCode. Entries that differ in anything
+  // but `reasoning` stay separate rows. A level on its own stays a plain row.
+  for (const entries of cursorEffortGroups(options).values()) {
+    if (entries.length < 2) continue;
+    const ordered = [...entries].sort(
+      (left, right) => effortRank(cursorReasoning(left.id)) - effortRank(cursorReasoning(right.id)),
+    );
+    const row = entries.find((entry) => cursorReasoning(entry.id) === "medium") ?? ordered[0];
+    if (!row) continue;
+    variants.set(
+      row.id,
+      ordered.map((entry) => ({
+        id: entry.id,
+        name: entry.id === row.id ? t("app.modelVariant.default") : effortName(cursorReasoning(entry.id), t),
+      })),
+    );
+    for (const entry of entries) {
+      if (entry.id !== row.id) variantIds.add(entry.id);
+    }
   }
   const labNames = openRouterLabNames(options);
   // A model of a provider that this build does not know has no tab here; the picker shows it alone.
