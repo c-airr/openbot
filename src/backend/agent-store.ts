@@ -317,6 +317,7 @@ export class AgentStore {
       }
       yield* this.#reconcileLegacyDirectoriesEffect();
       yield* this.#recoverPendingDuplicationsEffect();
+      yield* storedIO(() => this.#removeLockedFolders());
       yield* this.#profileCreationRecovery.recover(this.#database, (agentId) =>
         this.deleteAgent(agentId).pipe(Effect.asVoid),
       );
@@ -984,7 +985,14 @@ export class AgentStore {
         join(this.#agentsRoot, id),
         `${join(this.#agentsRoot, id)}.openbot-stage`,
       ]) {
-        yield* storedIO(() => rm(path, AGENT_FILES_REMOVAL));
+        // Fork: on Windows a provider's MCP server can keep the folder open until OpenBot quits. The chat
+        // goes now, and the folder goes at the next start (`#removeLockedFolders`).
+        yield* storedIO(() =>
+          rm(path, AGENT_FILES_REMOVAL).catch(async (error: unknown) => {
+            if (!isRecord(error) || (error.code !== "EBUSY" && error.code !== "EPERM")) throw error;
+            await this.#rememberLockedFolder(id);
+          }),
+        );
       }
       yield* storedIO(() => rm(this.#duplicationMarkerPath(id), { force: true }));
       // A workspace that could not follow the rename legitimately sits under the pre-rename root, and deleting
@@ -1400,6 +1408,45 @@ export class AgentStore {
       this.#state.agents.find((candidate) => candidate.id === id) ??
       this.#state.agents.find((candidate) => legacyAgentId(candidate.id) === id)
     );
+  }
+
+  /** Ids of deleted agents whose folders were in use at deletion. */
+  get #lockedFoldersPath(): string {
+    return join(this.#duplicationsRoot, "..", "agent-folders-to-delete.json");
+  }
+
+  async #readLockedFolders(): Promise<string[]> {
+    try {
+      const value = JSON.parse(await readFile(this.#lockedFoldersPath, "utf8"));
+      return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async #rememberLockedFolder(id: string): Promise<void> {
+    const ids = new Set(await this.#readLockedFolders()).add(id);
+    await writeFile(this.#lockedFoldersPath, JSON.stringify([...ids]));
+  }
+
+  /** At start nothing holds them any more. An id that is an agent again (never expected) keeps its files. */
+  async #removeLockedFolders(): Promise<void> {
+    const ids = await this.#readLockedFolders();
+    if (ids.length === 0) return;
+    const live = new Set(this.#state.agents.map((agent) => agent.id));
+    const kept: string[] = [];
+    for (const id of ids) {
+      if (live.has(id)) continue;
+      try {
+        validateAgentId(id);
+        for (const path of [join(this.#avatarsRoot, id), join(this.#agentsRoot, id)])
+          await rm(path, AGENT_FILES_REMOVAL);
+      } catch (error) {
+        logger.warn("Could not remove the folder of a deleted agent.", toLogValue(error));
+        kept.push(id);
+      }
+    }
+    await writeFile(this.#lockedFoldersPath, JSON.stringify(kept));
   }
 
   #duplicationMarkerPath(id: string): string {

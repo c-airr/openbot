@@ -400,11 +400,17 @@ function antigravityFolder(value: unknown): string | null {
   return null;
 }
 
-/** The full transcript when the app wrote one, else the short one. */
+/**
+ * The full transcript when the app wrote one, else the short one, else the conversation's own database.
+ * Newer Antigravity versions write only the database.
+ */
 async function antigravityTranscript(root: string, id: string): Promise<string | null> {
   const logs = join(root, "brain", id, ".system_generated", "logs");
-  for (const name of ["transcript_full.jsonl", "transcript.jsonl"]) {
-    const path = join(logs, name);
+  for (const path of [
+    join(logs, "transcript_full.jsonl"),
+    join(logs, "transcript.jsonl"),
+    join(root, "conversations", `${id}.db`),
+  ]) {
     try {
       await stat(path);
       return path;
@@ -439,7 +445,11 @@ async function listAntigravityRoot(root: string): Promise<Locator[]> {
       if (isOpenBotWorkspace(cwd)) continue;
       const path = await antigravityTranscript(root, id);
       if (!path) continue;
-      const title = titleOf(String(entry.title || entry.preview || "Antigravity"));
+      // Newer conversations have no title or preview in the list: the first message names them.
+      const named = String(entry.title || entry.preview || "");
+      const firstUser =
+        named || !path.endsWith(".db") ? null : readAntigravityDatabase(path).find((turn) => turn.role === "user");
+      const title = titleOf(named || firstUser?.text || "Antigravity");
       const updatedAt = antigravityTime(entry.last_modified_time) || (await stat(path)).mtimeMs;
       found.push({ session: row("antigravity", id, { title, cwd, updatedAt, resumable: false }), path, id });
     }
@@ -475,10 +485,75 @@ function antigravityTurn(record: DynamicRecord): SessionTurn | null {
   return null;
 }
 
+/**
+ * The text at `path` in a protobuf message, read without its schema: each number is a field that
+ * holds a nested message, the last one a string. Null when a field is missing or the bytes do not parse.
+ */
+function protobufText(bytes: Uint8Array, path: readonly number[]): string | null {
+  let message = bytes;
+  for (const [depth, wanted] of path.entries()) {
+    let found: Uint8Array | null = null;
+    let at = 0;
+    const varint = () => {
+      let value = 0;
+      for (let shift = 0; at < message.length && shift < 50; shift += 7) {
+        const byte = message[at++] ?? 0;
+        value += (byte & 0x7f) * 2 ** shift;
+        if (byte < 0x80) return value;
+      }
+      throw new Error("Bad varint.");
+    };
+    try {
+      while (at < message.length && !found) {
+        const key = varint();
+        const wire = key % 8;
+        if (wire === 0) varint();
+        else if (wire === 1) at += 8;
+        else if (wire === 5) at += 4;
+        else if (wire === 2) {
+          const length = varint();
+          if (at + length > message.length) return null;
+          if (Math.floor(key / 8) === wanted) found = message.subarray(at, at + length);
+          at += length;
+        } else return null;
+      }
+    } catch {
+      return null;
+    }
+    if (!found) return null;
+    if (depth === path.length - 1) return Buffer.from(found).toString("utf8");
+    message = found;
+  }
+  return null;
+}
+
+/** Step 14 is the user's input (its text at 19.2), step 15 the model's answer (20.1; 20.3 is its thinking). */
+function readAntigravityDatabase(path: string): SessionTurn[] {
+  const database = new DatabaseSync(path, { readOnly: true });
+  try {
+    return database
+      .prepare("SELECT step_type, step_payload FROM steps ORDER BY idx")
+      .all()
+      .flatMap((step): SessionTurn[] => {
+        const payload = step.step_payload;
+        if (!(payload instanceof Uint8Array)) return [];
+        const user = step.step_type === 14;
+        if (!user && step.step_type !== 15) return [];
+        const text = protobufText(payload, user ? [19, 2] : [20, 1])?.trim();
+        return text && !isScaffolding(text) ? [{ role: user ? "user" : "assistant", text }] : [];
+      });
+  } finally {
+    database.close();
+  }
+}
+
 async function readAntigravity(path: string): Promise<SessionTurn[]> {
   const turns: SessionTurn[] = [];
+  const records = path.endsWith(".db")
+    ? readAntigravityDatabase(path)
+    : parseLines(await readFile(path, "utf8")).map(antigravityTurn);
   // A turn arrives in pieces: one answer is often several PLANNER_RESPONSE records in a row.
-  for (const turn of parseLines(await readFile(path, "utf8")).map(antigravityTurn)) {
+  for (const turn of records) {
     if (!turn) continue;
     const last = turns[turns.length - 1];
     if (last && last.role === turn.role) last.text = `${last.text}\n\n${turn.text}`;
