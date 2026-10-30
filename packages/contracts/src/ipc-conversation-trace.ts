@@ -11,6 +11,19 @@ import { isDynamicRecord, isNumber, isOneOf } from "./runtime-values";
 export const CONVERSATION_TRACE_STEP_KINDS = ["reasoning", "tool", "message"] as const;
 export type ConversationTraceStepKind = (typeof CONVERSATION_TRACE_STEP_KINDS)[number];
 
+/** Fork: what a tool step did, for the grouped tool row of the chat. */
+export const CONVERSATION_TRACE_TOOL_KINDS = [
+  "command",
+  "file_read",
+  "file_change",
+  "web_search",
+  "web_fetch",
+  "mcp",
+  "subagent",
+  "other",
+] as const;
+export type ConversationTraceToolKind = (typeof CONVERSATION_TRACE_TOOL_KINDS)[number];
+
 export interface ConversationTraceStep {
   /** The provider's item id. */
   id: string;
@@ -19,6 +32,10 @@ export interface ConversationTraceStep {
   text?: string | undefined;
   /** On a shell command step: the command, with known secrets removed. */
   command?: string | undefined;
+  /** Fork, on a tool step: what kind of tool ran. */
+  toolKind?: ConversationTraceToolKind | undefined;
+  /** Fork, on a tool step that is not a command: its file, query, address or tool name, with known secrets removed. */
+  detail?: string | undefined;
   /** On a `send_message` step: the agents that the message went to. */
   recipientAgentIds?: string[] | undefined;
   startedAt: string;
@@ -63,6 +80,8 @@ function isConversationTraceStep(value: unknown): value is ConversationTraceStep
     isOneOf(CONVERSATION_TRACE_STEP_KINDS, value.kind) &&
     (value.text === undefined || isBoundedString(value.text, CONVERSATION_TRACE_TEXT_LIMIT)) &&
     (value.command === undefined || isBoundedString(value.command, CONVERSATION_TRACE_TEXT_LIMIT)) &&
+    (value.toolKind === undefined || isOneOf(CONVERSATION_TRACE_TOOL_KINDS, value.toolKind)) &&
+    (value.detail === undefined || isBoundedString(value.detail, CONVERSATION_TRACE_TEXT_LIMIT)) &&
     (value.recipientAgentIds === undefined ||
       (Array.isArray(value.recipientAgentIds) &&
         value.recipientAgentIds.length <= INPUT_LIMITS.messageRecipients &&

@@ -8,6 +8,7 @@ import {
   type ConversationMessage,
   type ConversationTraceStep,
   type ConversationTraceStepKind,
+  type ConversationTraceToolKind,
   type ConversationTurnTrace,
 } from "@openbot/contracts/ipc";
 import { redactText } from "@openbot/logging";
@@ -45,6 +46,8 @@ export class TurnTraces {
       failed?: boolean;
       text?: string | null;
       command?: string | null;
+      toolKind?: ConversationTraceToolKind | null;
+      detail?: string | null;
       recipientAgentIds?: string[] | null;
     },
   ): void {
@@ -65,6 +68,11 @@ export class TurnTraces {
     const command = event.command?.trim();
     if (kind === "tool" && step.command === undefined && command)
       step.command = redactText(command).slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
+    if (kind === "tool" && event.toolKind && (step.toolKind === undefined || step.toolKind === "other"))
+      step.toolKind = event.toolKind;
+    const detail = event.detail?.trim();
+    if (kind === "tool" && step.detail === undefined && detail)
+      step.detail = redactText(detail).slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
     if (kind === "tool" && step.recipientAgentIds === undefined && event.recipientAgentIds?.length)
       step.recipientAgentIds = [...event.recipientAgentIds];
     if (event.completed && step.endedAt === null) step.endedAt = now;

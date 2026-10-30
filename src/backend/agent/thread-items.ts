@@ -3,6 +3,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   agentProviderName,
   COMPUTER_USE_MCP_SERVER_NAME,
+  type ConversationTraceToolKind,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   GENERIC_AGENT_TOOL_PROGRESS_TEXTS,
 } from "@openbot/contracts/ipc";
@@ -372,10 +373,72 @@ function messageRecipients(item: ThreadItem): string[] {
 }
 
 /** What the trace keeps of a tool step: its shell command, and the agents that an OpenBot message went to. */
-export function toolTraceDetail(item: ThreadItem): { command: string | null; recipientAgentIds: string[] | null } {
-  const command = getString(item, "command");
+export function toolTraceDetail(item: ThreadItem): {
+  command: string | null;
+  toolKind: ConversationTraceToolKind | null;
+  detail: string | null;
+  recipientAgentIds: string[] | null;
+} {
+  const args = getRecord(item, "arguments");
+  const acpCommand = args?.command;
+  const command =
+    getString(item, "command") ??
+    (typeof acpCommand === "string"
+      ? acpCommand
+      : Array.isArray(acpCommand)
+        ? acpCommand.filter(isString).join(" ")
+        : null);
+  const usage = toolUsage(item);
   const recipients = openBotTool(item) === "send_message" ? messageRecipients(item) : [];
-  return { command, recipientAgentIds: recipients.length > 0 ? recipients : null };
+  return {
+    command,
+    toolKind: usage ? TRACE_TOOL_KINDS[usage.kind] : null,
+    detail: command ? null : toolDetail(item, usage),
+    recipientAgentIds: recipients.length > 0 ? recipients : null,
+  };
+}
+
+/** Fork: the tool kinds of analytics, as the chat groups them. */
+const TRACE_TOOL_KINDS: Record<ToolUsageKind, ConversationTraceToolKind> = {
+  command: "command",
+  file_read: "file_read",
+  file_change: "file_change",
+  web_search: "web_search",
+  web_fetch: "web_fetch",
+  mcp: "mcp",
+  subagent: "subagent",
+  image_generation: "other",
+  other: "other",
+};
+
+/**
+ * Fork: what a tool step worked on, for the chat: its files, query, address or tool. The fields are
+ * the providers' own: Codex `changes` and `query`, Claude `filePaths`, `query`, `url` and `pattern`,
+ * ACP `arguments` and `title`.
+ */
+function toolDetail(item: ThreadItem, usage: ToolUsage | null): string | null {
+  const args = getRecord(item, "arguments");
+  const text = (...values: unknown[]) =>
+    values.find((value): value is string => typeof value === "string" && value.trim() !== "") ?? null;
+  const files = [
+    ...getArray(item, "filePaths").filter(isString),
+    ...getArray(item, "changes").flatMap((change) => getString(change, "path") ?? []),
+  ];
+  switch (usage?.kind) {
+    case "file_read":
+    case "file_change":
+      return files.length > 0
+        ? files.join(", ")
+        : text(args?.path, args?.file_path, getString(item, "pattern"), args?.pattern, getString(item, "name"));
+    case "web_search":
+      return text(getString(item, "query"), args?.query, getString(item, "name"));
+    case "web_fetch":
+      return text(getString(item, "url"), args?.url, getString(item, "name"));
+    case "mcp":
+      return usage.server && usage.tool ? `${usage.server}/${usage.tool}` : text(getString(item, "name"));
+    default:
+      return text(getString(item, "title"), getString(item, "name"), getString(item, "tool"), files.join(", "));
+  }
 }
 
 /** Whether a finished tool item failed: its status says so, or its command ended with an exit code other than 0. */

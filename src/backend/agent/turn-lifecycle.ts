@@ -614,7 +614,9 @@ export class TurnLifecycle {
           this.#deltas.flush(`${threadId}:${turnId}:${itemId}`);
         }
         if (item.type === "collabAgentToolCall") this.#applyCodexSubagents(agentId, threadId, turnId, item);
-        const threadItem = toThreadItem(item);
+        // Fork: the files of a Claude or ACP tool step come beside the item; the chat shows them.
+        const filePaths = getArray(params, "filePaths");
+        const threadItem = toThreadItem(filePaths.length > 0 && !("filePaths" in item) ? { ...item, filePaths } : item);
         if (!threadItem) return;
         yield* this.#applyItem(agentId, threadId, turnId, threadItem, notification.method === "item/completed");
         return;

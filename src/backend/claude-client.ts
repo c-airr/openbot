@@ -1510,6 +1510,14 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           ...(name === "Skill" && isRecord(input) && typeof input.skill === "string"
             ? { skill: input.skill.slice(0, INPUT_LIMITS.identifier) }
             : {}),
+          // Fork: what a search or fetch tool looked for, for the tool row of the chat.
+          ...(["WebSearch", "WebFetch", "Grep", "Glob"].includes(name) && isRecord(input)
+            ? Object.fromEntries(
+                (["query", "url", "pattern"] as const).flatMap((key) =>
+                  typeof input[key] === "string" ? [[key, input[key].slice(0, INPUT_LIMITS.promptQuestion)]] : [],
+                ),
+              )
+            : {}),
           // The turn trace shows the command and the recipients; it redacts the command.
           ...(name === "Bash" && isRecord(input) && typeof input.command === "string"
             ? { command: input.command.slice(0, INPUT_LIMITS.messageText) }

@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.4] - 2026-10-30
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- The tool steps of a turn show as one row per run, such as "Ran 2 commands, read 1 file". The row
+  opens to each full command, file, search or MCP tool.
+- The steps row of a turn opens its list; the timeline opens from a button in the list.
+
 ## [0.54.3] - 2026-10-30
 
 Fork release (c-airr/openbot).

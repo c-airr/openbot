@@ -217,3 +217,73 @@
     animation: none;
   }
 }
+
+/* Fork: a run of tool steps, as Claude Code shows its tool calls. The summary opens to each step. */
+.agent-step-tools {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: var(--openbot-space-1);
+}
+
+.agent-step-tools .agent-step-tools-header {
+  display: flex;
+  height: auto;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  margin-left: calc(-1 * var(--openbot-space-1));
+  border-radius: var(--openbot-radius-xs);
+  padding: 0 var(--openbot-space-1);
+  color: inherit;
+  font-size: inherit;
+  font-weight: var(--openbot-weight-regular);
+  line-height: inherit;
+  text-align: left;
+}
+
+.agent-step-tools-header[aria-expanded="true"] .agent-steps-chevron {
+  rotate: 90deg;
+}
+
+.agent-step-tools-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--openbot-space-1);
+  list-style: none;
+}
+
+.agent-step-tool {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--openbot-space-2);
+}
+
+.agent-step-tool .agent-step-icon {
+  margin-top: 2px;
+}
+
+.agent-step-tool-command,
+.agent-step-tool-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.agent-step-tool-command {
+  color: var(--openbot-text-primary);
+  font-family: var(--openbot-font-mono);
+  font-size: var(--openbot-text-xs);
+}
+
+.agent-step-tool[data-failed] .agent-step-icon {
+  color: var(--openbot-danger-text);
+}
+
+.agent-steps-panel .agent-steps-trace {
+  margin-top: var(--openbot-space-1);
+  margin-left: calc(-1 * var(--openbot-space-1-5));
+  color: var(--openbot-text-muted);
+}

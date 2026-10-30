@@ -1,6 +1,6 @@
 import type { ConversationTurnTrace } from "@openbot/contracts/ipc";
 import type { AgentMessage } from "@openbot/ui/data";
-import type { AgentStep, AgentStepsFacts } from "@openbot/ui/features/conversation/AgentSteps";
+import { type AgentStep, type AgentStepsFacts, groupToolSteps } from "@openbot/ui/features/conversation/AgentSteps";
 import { silentAgentAnswer } from "@openbot/ui/features/conversation/new-message-tally";
 import type { TraceSpan } from "@openbot/ui/features/conversation/TraceWaterfall";
 import { createMemo } from "solid-js";
@@ -26,6 +26,7 @@ function sameSteps(left: readonly AgentStep[], right: readonly AgentStep[]): boo
 }
 
 function stepText(step: AgentStep): string {
+  if (step.kind === "tools") return step.steps.map((tool) => `${tool.id}:${tool.text}:${tool.tool?.detail}`).join("\n");
   return step.kind === "memory" ? step.change.text : step.text;
 }
 
@@ -231,17 +232,24 @@ export function createTurnSteps(deps: {
       seenAt.set(id, at);
       timed.push({ step: { id, kind: "thinking", text }, at });
     }
-    const lines = deps.lines()?.[turnId] ?? [];
-    for (const line of lines) {
-      timed.push({ step: { id: line.id, kind: "progress", text: line.text }, at: line.at });
-    }
-    // After a restart the progress lines are gone. The stored trace keeps the text and start of each
-    // tool step, so the turn keeps its steps.
-    if (lines.length === 0) {
-      for (const step of sources().traces.get(turnId)?.steps ?? []) {
+    // A turn that ended has a stored trace: its tool steps say what ran (fork: the command, file or
+    // query too), so they take the place of the progress lines, also after a restart.
+    const trace = sources().traces.get(turnId);
+    if (trace) {
+      for (const step of trace.steps) {
         const at = Date.parse(step.startedAt);
-        if (step.kind !== "tool" || !step.text?.trim() || !Number.isFinite(at)) continue;
-        timed.push({ step: { id: `${turnId}:trace:${step.id}`, kind: "progress", text: step.text }, at });
+        const detail = step.command?.trim() || step.detail?.trim() || null;
+        if (step.kind !== "tool" || (!step.text?.trim() && !detail) || !Number.isFinite(at)) continue;
+        const tool = {
+          kind: step.command ? "command" : (step.toolKind ?? null),
+          detail,
+          failed: step.failed === true,
+        } as const;
+        timed.push({ step: { id: `${turnId}:trace:${step.id}`, kind: "progress", text: step.text ?? "", tool }, at });
+      }
+    } else {
+      for (const line of deps.lines()?.[turnId] ?? []) {
+        timed.push({ step: { id: line.id, kind: "progress", text: line.text }, at: line.at });
       }
     }
     // A stable sort keeps the thoughts in their order when they share a time.
@@ -251,7 +259,7 @@ export function createTurnSteps(deps: {
   function stepsOf(turnId: string | null | undefined): AgentStep[] {
     if (!turnId) return [];
     const { memory } = sources();
-    const steps = timedSteps(turnId).map(({ step }) => step);
+    const steps = groupToolSteps(timedSteps(turnId).map(({ step }) => step));
     const changes = memory.get(turnId);
     if (changes?.memoryChanges) {
       for (const [index, change] of changes.memoryChanges.entries())
