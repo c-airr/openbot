@@ -67,6 +67,28 @@ const PiSessionUsage = Schema.Struct({
   }),
 });
 
+/** Fork: OpenRouter's public model list. It needs no key. */
+const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
+
+const OpenRouterModels = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.String })) });
+
+/** The ids OpenRouter serves now, or null when its list cannot be read within 3 s. */
+const openRouterModelIds = Effect.fn("PiClient.openRouterModelIds")(
+  function* () {
+    const body = yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(OPENROUTER_MODELS_URL, { signal, headers: { accept: "application/json" } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      },
+      catch: (cause) => cause,
+    }).pipe(Effect.timeout(3_000));
+    const { data } = yield* Schema.decodeUnknownEffect(OpenRouterModels)(body);
+    return new Set(data.map((model) => model.id));
+  },
+  Effect.catch(() => Effect.succeed(null)),
+);
+
 export interface PiProviderOptions {
   requestTimeoutMs?: number;
   discoveryCwd?: () => string;
@@ -372,6 +394,12 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
               supportedReasoningEfforts: levels.map((reasoningEffort) => ({ reasoningEffort })),
               reasoningEffortConfigurable: levels.length > 0,
             });
+          }
+          // Fork: Pi's OpenRouter catalog is built into the CLI, so a free model that OpenRouter ended stays
+          // in it. OpenRouter's live list drops those; when it cannot be read, Pi's list stays as it is.
+          if (keyProvider?.id === "openrouter") {
+            const live = yield* openRouterModelIds();
+            if (live) return models.filter((model) => !model.model.endsWith(":free") || live.has(model.model));
           }
           return models;
         }),
