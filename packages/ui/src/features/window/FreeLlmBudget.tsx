@@ -67,7 +67,28 @@ function useClock() {
   return now;
 }
 
-/** The hover card of the rail button: what each provider has left today. */
+/** The sum of the providers that publish a daily limit, as one row. */
+function totalOf(budget: FreeLlmBudget): FreeLlmBudgetProvider {
+  const limited = budget.providers.filter((provider) => provider.tokensPerDay);
+  return {
+    platform: "",
+    tokensPerDay: limited.reduce((sum, provider) => sum + (provider.tokensPerDay ?? 0), 0) || null,
+    tokensToday: budget.providers.reduce((sum, provider) => sum + provider.tokensToday, 0),
+    tokensLeft: limited.reduce((sum, provider) => sum + (provider.tokensLeft ?? 0), 0),
+  };
+}
+
+/** The title: FreeLLMAPI, and the chain when the config names one ("FreeLLMAPI · auto:code"). */
+function titleOf(budget: FreeLlmBudget | null, text: Text): string {
+  return budget?.chain
+    ? text.t("account.freeLlm.titleChain", { chain: budget.chain })
+    : text.t("account.freeLlm.title");
+}
+
+/**
+ * The hover card of the rail button: a short note, not the list. What the chain has left today, and
+ * how many models it has; the click opens every model.
+ */
 export function FreeLlmBudgetCard(props: { budget: FreeLlmBudget }) {
   const text = useText();
   const now = useClock();
@@ -76,20 +97,16 @@ export function FreeLlmBudgetCard(props: { budget: FreeLlmBudget }) {
       <header class="account-usage-popover-header">
         <div class="account-usage-popover-heading">
           <Gauge aria-hidden="true" />
-          <h2 class="account-usage-popover-title">{text.t("account.freeLlm.title")}</h2>
+          <h2 class="account-usage-popover-title">{titleOf(props.budget, text)}</h2>
         </div>
       </header>
-      <ul class="account-usage-providers" aria-label={text.t("account.freeLlm.providers")}>
-        <For each={props.budget.providers} keyed={(provider) => provider.platform}>
-          {(provider) => (
-            <li class="account-usage-provider">
-              <strong class="account-usage-provider-name">{provider().platform}</strong>
-              <AccountUsageWindowList windows={[tokenWindow(provider(), props.budget.resetsAt, text)]} now={now()} />
-            </li>
-          )}
-        </For>
-      </ul>
-      <p class="account-usage-empty">{text.t("account.freeLlm.openHint")}</p>
+      <AccountUsageWindowList windows={[tokenWindow(totalOf(props.budget), props.budget.resetsAt, text)]} now={now()} />
+      <p class="account-usage-empty">
+        {text.t("account.freeLlm.openHint", {
+          models: props.budget.models.length,
+          providers: props.budget.providers.length,
+        })}
+      </p>
     </>
   );
 }
@@ -119,7 +136,7 @@ export function FreeLlmBudgetDialog(props: {
           <Dialog.Content as="section" class="custom-provider-dialog provider-more-dialog free-llm-dialog">
             <header class="provider-more-header">
               <Dialog.Title as="h2" class="provider-more-title">
-                {text.t("account.freeLlm.title")}
+                {titleOf(props.budget, text)}
               </Dialog.Title>
               <IconButton label={text.t("common.close")} variant="ghost" onClick={() => props.onOpenChange(false)}>
                 <X />

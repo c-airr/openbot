@@ -1,5 +1,5 @@
 // Fork: the FreeLLMAPI budget for the rail. Only for a computer that has
-// `openbot-freellmapi-v1.json` ({ "url": "http://host:3001", "apiKey": "..." }) in the app data
+// `openbot-freellmapi-v1.json` ({ "url": "http://host:3001", "apiKey": "...", "chain": "code" }) in the app data
 // folder; there is no setting for it, so other installs never show it. The key stays in that file.
 
 import { readFile } from "node:fs/promises";
@@ -11,7 +11,12 @@ import { app } from "electron";
 const CONFIG_FILE = "openbot-freellmapi-v1.json";
 const TIMEOUT_MS = 10_000;
 
-const Config = Schema.Struct({ url: Schema.NonEmptyString, apiKey: Schema.NonEmptyString });
+/** `chain`: the chain whose models show, as `auto:<chain>` routes them; without it the active chain. */
+const Config = Schema.Struct({
+  url: Schema.NonEmptyString,
+  apiKey: Schema.NonEmptyString,
+  chain: Schema.optionalKey(Schema.NonEmptyString),
+});
 
 const Count = Schema.NullOr(Schema.Finite);
 const Row = Schema.Struct({
@@ -21,6 +26,7 @@ const Row = Schema.Struct({
   tokenyZostalo: Count,
 });
 const Budget = Schema.Struct({
+  lancuch: Schema.optionalKey(Schema.NullOr(Schema.String)),
   resetAt: Schema.String,
   dostawcy: Schema.Array(Row),
   modele: Schema.Array(
@@ -55,13 +61,16 @@ const provider = (row: typeof Row.Type) => ({
 export async function readFreeLlmBudget(): Promise<FreeLlmBudget | null> {
   const config = await readConfig();
   if (!config) return null;
-  const response = await fetch(new URL("/v1/budzet", config.url), {
+  const url = new URL("/v1/budzet", config.url);
+  if (config.chain) url.searchParams.set("lancuch", config.chain);
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${config.apiKey}` },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`FreeLLMAPI budget returned HTTP ${response.status}.`);
   const body = Schema.decodeUnknownSync(Budget)(await response.json());
   return {
+    chain: body.lancuch ?? null,
     resetsAt: Date.parse(body.resetAt) / 1_000,
     providers: body.dostawcy.map(provider),
     models: body.modele.map((model) => ({

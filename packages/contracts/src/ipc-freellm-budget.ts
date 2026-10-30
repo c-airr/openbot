@@ -23,6 +23,8 @@ export interface FreeLlmBudgetModel extends FreeLlmBudgetProvider {
 }
 
 export interface FreeLlmBudget {
+  /** The chain whose models these are (`auto:<chain>`), or null for the active chain. */
+  chain: string | null;
   /** Unix seconds of the next midnight UTC. */
   resetsAt: number;
   providers: FreeLlmBudgetProvider[];
@@ -65,6 +67,7 @@ export function decodeFreeLlmBudget(value: unknown): FreeLlmBudget | null {
   if (value === null) return null;
   if (
     !isDynamicRecord(value) ||
+    (value.chain !== null && typeof value.chain !== "string") ||
     !isCount(value.resetsAt) ||
     !Array.isArray(value.providers) ||
     !value.providers.every(isProvider) ||
@@ -72,5 +75,5 @@ export function decodeFreeLlmBudget(value: unknown): FreeLlmBudget | null {
     !value.models.every(isModel)
   )
     throw new Error("Invalid FreeLLMAPI budget.");
-  return { resetsAt: value.resetsAt, providers: value.providers, models: value.models };
+  return { chain: value.chain, resetsAt: value.resetsAt, providers: value.providers, models: value.models };
 }

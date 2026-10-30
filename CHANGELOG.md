@@ -6,6 +6,15 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.5] - 2026-10-30
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- The FreeLLMAPI hover card is a short note: what is left today and how many models. The click shows
+  the list. A `chain` in the config file shows the models of that chain (`auto:<chain>`).
+
 ## [0.54.4] - 2026-10-30
 
 Fork release (c-airr/openbot).
