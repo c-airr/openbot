@@ -351,7 +351,10 @@ const AgentActions = createSimpleContext({
           const helperMessages = (helperPage?.messages ?? []).filter(
             (message) => message.author === "assistant" && Date.parse(message.createdAt) > run.startedAt,
           );
-          const helperDone = helperMessages.some((message) => message.status !== "streaming");
+          // Only the final answer ends the helper: its thinking notes are complete messages too.
+          const helperDone = helperMessages.some(
+            (message) => message.itemType === "final_answer" && message.status !== "streaming",
+          );
           if (marked) await finishCompactRun(parentId, true);
           // The marker is written before the helper answers, so a finished helper without one failed.
           else if (helperDone) await finishCompactRun(parentId, false);
