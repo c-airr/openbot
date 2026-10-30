@@ -174,7 +174,9 @@ export async function routeAgents(
     const input = parseSaveAgentProfile(body);
     const saved = await runCauseEffect(agents.saveProfile(input, sidebarLayout, memberSender(member)));
     if (input.agentId !== undefined) return json(200, saved);
-    return json(200, { ...saved, layout: await assignToChats(sidebarLayout, agents, saved.agent.id) });
+    // The chat exists already: a section that cannot take it must not fail the request and invite a retry.
+    const layout = await assignToChats(sidebarLayout, agents, saved.agent.id).catch(() => null);
+    return json(200, layout ? { ...saved, layout } : saved);
   }
   if (method === "GET" && url.pathname === TEAM_API_ROUTES.messages.search) {
     const query = url.searchParams.get("q") ?? "";
