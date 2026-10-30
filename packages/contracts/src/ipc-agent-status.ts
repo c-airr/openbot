@@ -211,6 +211,8 @@ export interface AccountUsageLimit {
    * rail then shows the ring of that provider alone. The Team API does not send this field.
    */
   sharedQuotaWith?: AgentProviderId;
+  /** Fork, OpenRouter only: the free-model requests of the UTC day. The Team API does not send this field. */
+  freeRequests?: { used: number; limit: number };
 }
 
 export interface AccountUsage {
@@ -232,7 +234,11 @@ export function isAccountUsage(value: unknown): value is AccountUsage {
           (Array.isArray(limit.groups) &&
             limit.groups.length <= MAX_USAGE_GROUPS &&
             limit.groups.every(isAccountUsageGroup))) &&
-        (limit.sharedQuotaWith === undefined || isAgentProvider(limit.sharedQuotaWith)),
+        (limit.sharedQuotaWith === undefined || isAgentProvider(limit.sharedQuotaWith)) &&
+        (limit.freeRequests === undefined ||
+          (isDynamicRecord(limit.freeRequests) &&
+            isFiniteNumber(limit.freeRequests.used) &&
+            isFiniteNumber(limit.freeRequests.limit))),
     )
   );
 }

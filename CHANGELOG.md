@@ -6,6 +6,15 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.2] - 2026-10-30
+
+Fork release (c-airr/openbot).
+
+### Added
+
+- The usage rail shows the free OpenRouter requests left today (50 or 1000 a day), as OpenRouter
+  counts them for the key.
+
 ## [0.54.1] - 2026-10-30
 
 Fork release (c-airr/openbot), on top of OpenBot 0.54.0.

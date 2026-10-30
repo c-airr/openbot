@@ -44,6 +44,7 @@ export const messages = {
   "account.usage.window.minutes": "{minutes} min",
   "account.usage.window.cursorModels": "Modele Cursor",
   "account.usage.window.otherModels": "Inne modele",
+  "account.usage.window.freeRequests": "Darmowe modele dziś, zostało {remaining} z {limit}",
   "account.usage.window.group": "{group} · {window}",
   "account.update.failedRetry": "Aktualizacja nie powiodła się. Spróbuj ponownie.",
   "account.update.managedByHost": "Zarządza host",

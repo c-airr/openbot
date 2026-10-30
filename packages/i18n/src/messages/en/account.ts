@@ -38,6 +38,7 @@ export const messages = defineMessages("account", {
   "account.usage.window.minutes": "{minutes} min",
   "account.usage.window.cursorModels": "Cursor models",
   "account.usage.window.otherModels": "Other models",
+  "account.usage.window.freeRequests": "Free models today, {remaining} of {limit} left",
   "account.usage.window.group": "{group} · {window}",
   "account.update.failedRetry": "Update failed. Try again.",
   "account.update.managedByHost": "Managed by host",

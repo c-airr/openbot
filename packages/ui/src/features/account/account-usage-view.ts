@@ -139,7 +139,12 @@ function usageRow(
       // window alone is the whole plan.
       provider === "cursor" && limit?.primary && limit.secondary
         ? text.t(window === limit?.primary ? "account.usage.window.cursorModels" : "account.usage.window.otherModels")
-        : usageWindowLabel(window.windowDurationMins, text),
+        : limit?.freeRequests
+          ? text.t("account.usage.window.freeRequests", {
+              remaining: limit.freeRequests.limit - limit.freeRequests.used,
+              limit: limit.freeRequests.limit,
+            })
+          : usageWindowLabel(window.windowDurationMins, text),
     ),
   );
   // Antigravity limits each group of models apart, such as Gemini 4 Argon: one line per group, by
@@ -199,7 +204,8 @@ function usageRow(
     tone: usageTone(remainingPercent),
     windows,
     ringWindows,
-    reportsUsage: agentProviderDescriptor(provider).reportsUsage,
+    // Fork: OpenRouter reports only its free-model allowance, read apart from Pi.
+    reportsUsage: agentProviderDescriptor(provider).reportsUsage || limit !== null,
     sharedQuotaWith: limit?.sharedQuotaWith ?? null,
   };
 }

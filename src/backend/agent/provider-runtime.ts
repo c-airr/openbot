@@ -47,6 +47,7 @@ import { McpHandoffLog } from "./../mcp-handoff-log";
 import { providerMcpServerName } from "./../mcp-provider-shapes";
 import { openCodeSignInMessage } from "./../opencode-config";
 import { readOpenCodeGoUsage } from "./../opencode-usage";
+import { readOpenRouterUsage } from "./../openrouter-usage";
 import type { ProcessConfinement } from "../process-confinement";
 import {
   type AccountLoginCompletedResult,
@@ -958,6 +959,12 @@ export class ProviderRuntime implements ProviderPort {
           } else if (provider === "cursor") {
             // Cursor's usage is two HTTPS requests with the CLI's token, so do not start the CLI for it.
             usage = normalizeAccountUsage(yield* readCursorUsage().pipe(toProviderOperationFailed, deadline));
+          } else if (provider === "openrouter") {
+            // Fork: the free-model allowance is one HTTPS request with the saved key; Pi need not start.
+            usage = yield* readOpenRouterUsage(this.#credentials.apiKey("openrouter")).pipe(
+              toProviderOperationFailed,
+              deadline,
+            );
           } else {
             // Starting a provider that has no usage reading only to get nothing back cost a cold
             // start on every dock poll.
