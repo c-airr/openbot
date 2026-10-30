@@ -138,6 +138,7 @@ export const messages = {
   "provider.picker.effort": "Wysiłek",
   "provider.picker.effortLabel": "Wysiłek rozumowania agenta",
   "provider.picker.fast": "Szybki",
+  "provider.picker.freeOnly": "Tylko darmowe modele",
   "provider.picker.fastLabel": "Tryb szybki",
   "provider.picker.selectEffort": "Wybierz wysiłek",
   "provider.picker.custom": "Własny",

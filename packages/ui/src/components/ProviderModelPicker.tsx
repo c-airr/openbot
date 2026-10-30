@@ -648,7 +648,11 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
                   return id && id !== DEFAULT_PROVIDER_ACCOUNT_ID ? id : null;
                 };
                 const status = () => entryStatus(key);
-                const models = createMemo(() => pickerModels(railModelOptions(provider)));
+                // Fork: OpenRouter's tab can show only its free (`:free`) models.
+                const [freeOnly, setFreeOnly] = createSignal(false);
+                const models = createMemo(() =>
+                  pickerModels(railModelOptions(provider)).filter((model) => !freeOnly() || model.free),
+                );
                 const groups = createMemo(() => groupPickerModels(models(), search()));
                 // An endpoint and a custom agent can both list `goose/default`: match the provider too.
                 // Another account of the same provider lists the same models, but not this agent's.
@@ -816,6 +820,16 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
                             </Button>
                           )}
                         </Show>
+                      </div>
+                    </Show>
+                    <Show when={provider === "openrouter"}>
+                      <div class="provider-model-effort">
+                        <span>{t("provider.picker.freeOnly")}</span>
+                        <Switch
+                          aria-label={t("provider.picker.freeOnly")}
+                          checked={freeOnly()}
+                          onChange={setFreeOnly}
+                        />
                       </div>
                     </Show>
                     <Input
