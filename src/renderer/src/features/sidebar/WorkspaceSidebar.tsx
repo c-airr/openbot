@@ -35,7 +35,6 @@ import { serverUpdateBadge, showServerUpdate } from "../servers/server-update-fl
 import { useServers } from "../servers/servers-context";
 import { useSettings } from "../settings/settings-context";
 import { usePresence } from "../team/team-context";
-import { SidebarUpdateIsland } from "../updates/SidebarUpdateIsland";
 import { createCommunityCardVisibility } from "./community-card";
 import { createMachineCard } from "./machine-card";
 import { useSidebar } from "./sidebar-context";
@@ -399,7 +398,6 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
               onDismiss={communityCard.dismiss}
             />
           </Show>
-          <SidebarUpdateIsland />
         </>
       }
       onOpenMarketplace={() => setSkillsMarketplaceOpen(true)}

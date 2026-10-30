@@ -335,3 +335,16 @@
   border-radius: var(--openbot-radius-lg);
   padding: var(--openbot-space-1-5) var(--openbot-space-1-5) var(--openbot-space-1-5) var(--openbot-space-3);
 }
+
+/* Fork: the island sits top right, over the window, instead of in the sidebar footer. */
+.update-corner {
+  position: fixed;
+  top: var(--openbot-space-8);
+  right: var(--openbot-space-4);
+  z-index: var(--openbot-layer-toast);
+  pointer-events: none;
+}
+
+.update-corner > .sidebar-update-island {
+  pointer-events: auto;
+}

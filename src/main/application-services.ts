@@ -2895,7 +2895,8 @@ export async function createApplicationServices({
   const updater = new UpdateService(updateAdapter, {
     currentVersion,
     enabled: updaterEnabled,
-    autoDownload: updatePreference.autoDownload,
+    // Fork: never download on its own; the top-right island downloads and installs on a click.
+    autoDownload: false,
     beforeInstall: prepareForUpdateInstall,
     // Packaged runs share one application bundle across macOS users. Installing while another
     // login session runs OpenBot from that bundle would replace it underneath that session, so

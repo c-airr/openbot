@@ -6,6 +6,22 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.1] - 2026-10-30
+
+Fork release (c-airr/openbot), on top of OpenBot 0.54.0.
+
+### Added
+
+- A new release of the fork shows top right. It downloads and installs only when you click it.
+- The OpenRouter tab of the model picker has a switch for free models only. Free models that
+  OpenRouter ended leave the list.
+- Gemini (Antigravity) conversations that are stored as databases can be imported.
+
+### Fixed
+
+- /compact no longer hangs, and a late briefing no longer compacts a chat by surprise.
+- A chat whose folder is in use is deleted; its folder goes at the next start.
+
 ## [0.54.0] - 2026-10-29
 
 ### Added

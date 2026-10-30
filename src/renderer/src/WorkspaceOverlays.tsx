@@ -52,6 +52,7 @@ import { useServers } from "./features/servers/servers-context";
 import type { HostProviderSettings } from "./features/settings/ProviderSettingsSection";
 import { useSettings } from "./features/settings/settings-context";
 import { settingsPort } from "./features/settings/settings-port";
+import { SidebarUpdateIsland } from "./features/updates/SidebarUpdateIsland";
 import { useUpdates } from "./features/updates/updates-context";
 import { useWhatsNew } from "./features/updates/whats-new-context";
 import { usePlanLimitRows } from "./features/usage/plan-limit-rows";
@@ -118,6 +119,10 @@ export function WorkspaceOverlays(props: AccountProps) {
       <ChannelCreateOverlay />
       <SessionImportOverlay />
       <SharedMemoryOverlay />
+      {/* Fork: a new release of the fork shows top right; the user installs it with one click. */}
+      <div class="update-corner">
+        <SidebarUpdateIsland />
+      </div>
     </>
   );
 }
