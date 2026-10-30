@@ -243,3 +243,28 @@
   > * {
   fill-opacity: 1;
 }
+
+/* Fork: the hover card of a usage ring is wider than the usage popover, so a long window label such
+ * as a Gemini quota group fits on one line. */
+.account-usage-popover.window-rail-usage-card {
+  width: min(420px, calc(100vw - var(--openbot-space-4)));
+  max-height: min(75vh, 600px);
+}
+
+/* Fork: every FreeLLMAPI model, a wide list that scrolls under the provider filter and the search. */
+.custom-provider-dialog.provider-more-dialog.free-llm-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100dvh - min(14vh, 120px) - var(--openbot-space-6));
+}
+
+.free-llm-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1);
+  padding: 0 var(--openbot-space-1);
+}
+
+.free-llm-models {
+  min-height: 0;
+  overflow-y: auto;
+}

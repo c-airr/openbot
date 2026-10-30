@@ -10,6 +10,7 @@ import type {
   ResetAgentSessionSettingInput,
   SetAgentSessionSettingInput,
 } from "./ipc-agent-session-settings";
+import type { FreeLlmBudget } from "./ipc-freellm-budget";
 import type {
   ApplySessionImportInput,
   ImportableSession,
@@ -718,6 +719,8 @@ export const IPC_ENDPOINTS = {
     // Fork: sessions of other coding apps on this computer, and the chats made from them.
     listImportableSessions: request<undefined, ImportableSession[]>()("app:list-importable-sessions"),
     importSessions: request<ApplySessionImportInput, SessionImportResult>()("app:import-sessions"),
+    /** Fork: FreeLLMAPI budget, null without a local config file. */
+    getFreeLlmBudget: request<undefined, FreeLlmBudget | null>()("app:get-freellm-budget"),
     // Fork: the memories every chat gets.
     listSharedMemories: request<undefined, MemoryEntry[]>()("app:list-shared-memories"),
     saveSharedMemory: request<SaveSharedMemoryInput, MemoryEntry>()("app:save-shared-memory"),

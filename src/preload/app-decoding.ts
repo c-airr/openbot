@@ -378,7 +378,7 @@ export function decodeExternalLinkBrowserOrNull(value: unknown): ExternalLinkBro
   return value === null ? null : decodeExternalLinkBrowser(value);
 }
 
-export { decodeImportableSessions, decodeSessionImportResult } from "@openbot/contracts/ipc";
+export { decodeFreeLlmBudget, decodeImportableSessions, decodeSessionImportResult } from "@openbot/contracts/ipc";
 
 export function decodeSharedMemories(value: unknown): MemoryEntry[] {
   if (!Array.isArray(value) || !value.every(isMemoryEntry)) throw new Error("Invalid shared memories.");

@@ -1,8 +1,10 @@
-import { isUpdateActivePhase } from "@openbot/contracts/ipc";
+import { type FreeLlmBudget, isUpdateActivePhase } from "@openbot/contracts/ipc";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
 import type { SidebarView } from "@openbot/ui/features/sidebar/sidebar-types";
+import { FreeLlmBudgetDialog } from "@openbot/ui/features/window/FreeLlmBudget";
 import { PageRail, type PageRailPage } from "@openbot/ui/features/window/PageRail";
 import { useText } from "@openbot/ui/text";
+import { createSignal, onCleanup } from "solid-js";
 import { appPort } from "../../app-port";
 import { useLayout } from "../../layout";
 import { usePlatform } from "../../platform";
@@ -44,6 +46,16 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
     layout.setSidebarView(view);
   }
   const usageRows = usePlanLimitRows();
+  // Fork: FreeLLMAPI on the user's own server, every 5 minutes. A failed read keeps the last one.
+  const [freeLlm, setFreeLlm] = createSignal<FreeLlmBudget | null>(null);
+  const [freeLlmOpen, setFreeLlmOpen] = createSignal(false);
+  const readFreeLlm = () =>
+    appPort()
+      .getFreeLlmBudget()
+      .then(setFreeLlm, () => undefined);
+  void readFreeLlm();
+  const freeLlmTimer = window.setInterval(readFreeLlm, 5 * 60_000);
+  onCleanup(() => window.clearInterval(freeLlmTimer));
   const { customAgentUsage } = useCustomAgents();
   /** The custom agents run on this computer, so a joined server does not show their usage. */
   const localAgentUsage = () => (activeServer()?.kind === "local" ? customAgentUsage() : []);
@@ -64,31 +76,46 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
     return page === "server-settings" ? null : page;
   };
   return (
-    <PageRail
-      hidden={props.hidden}
-      current={current()}
-      pinned={layout.railPinned()}
-      onPinChange={layout.setRailPinned}
-      usageRows={usageRows()}
-      customAgentUsage={localAgentUsage()}
-      onAgents={() => showSidebarView("agents")}
-      onRoutines={() => showSidebarView("routines")}
-      // A joined server without workflows shows its notice on the page.
-      onWorkflows={() => windowPage.openWorkflows(null)}
-      onSchedule={windowPage.openSchedule}
-      onTasks={tasksAvailable() ? windowPage.openTasks : undefined}
-      onUsage={windowPage.openUsage}
-      onMarketplace={() => setSkillsMarketplaceOpen(true)}
-      onSettings={(button) => (updateNotice() ? openAppSettings(button, "updates") : windowPage.openSettings(button))}
-      settingsNotice={updateNotice()}
-      logo={logo()}
-      help={
-        <RailHelpMenu
-          version={whatsNew.state.version}
-          onOpenWhatsNew={whatsNew.reopen}
-          onOpenLink={(destination) => void appPort().openExternal(destination)}
-        />
-      }
-    />
+    <>
+      <PageRail
+        hidden={props.hidden}
+        current={current()}
+        pinned={layout.railPinned()}
+        onPinChange={layout.setRailPinned}
+        usageRows={usageRows()}
+        customAgentUsage={localAgentUsage()}
+        freeLlm={(() => {
+          const budget = freeLlm();
+          return budget
+            ? {
+                budget,
+                onOpen: () => {
+                  void readFreeLlm();
+                  setFreeLlmOpen(true);
+                },
+              }
+            : undefined;
+        })()}
+        onAgents={() => showSidebarView("agents")}
+        onRoutines={() => showSidebarView("routines")}
+        // A joined server without workflows shows its notice on the page.
+        onWorkflows={() => windowPage.openWorkflows(null)}
+        onSchedule={windowPage.openSchedule}
+        onTasks={tasksAvailable() ? windowPage.openTasks : undefined}
+        onUsage={windowPage.openUsage}
+        onMarketplace={() => setSkillsMarketplaceOpen(true)}
+        onSettings={(button) => (updateNotice() ? openAppSettings(button, "updates") : windowPage.openSettings(button))}
+        settingsNotice={updateNotice()}
+        logo={logo()}
+        help={
+          <RailHelpMenu
+            version={whatsNew.state.version}
+            onOpenWhatsNew={whatsNew.reopen}
+            onOpenLink={(destination) => void appPort().openExternal(destination)}
+          />
+        }
+      />
+      <FreeLlmBudgetDialog budget={freeLlm()} open={freeLlmOpen()} onOpenChange={setFreeLlmOpen} />
+    </>
   );
 }

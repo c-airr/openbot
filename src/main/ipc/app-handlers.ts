@@ -29,6 +29,7 @@ import type { AppearanceService } from "../appearance-service";
 import type { ApprovalAutomation } from "../approval-automation-store";
 import type { BusyMessageModePreferenceStore } from "../busy-message-mode-preference-store";
 import type { ExternalLinkOpener, ExternalLinkPreferenceStore } from "../external-link-opener";
+import { readFreeLlmBudget } from "../freellm-budget";
 import type { InterfaceSizeService } from "../interface-size-service";
 import type { LanguageService } from "../language-service";
 import type { LogoColorService } from "../logo-color-service";
@@ -295,6 +296,7 @@ export function appIpcHandlers({
       }),
       listImportableSessions: handler(() => listImportableSessions()),
       importSessions: payloadHandler(parseApplySessionImportInput, (input) => importSessions(service, input)),
+      getFreeLlmBudget: handler(() => readFreeLlmBudget()),
       listSharedMemories: handler(() => service.sharedMemories.list()),
       saveSharedMemory: payloadHandler(parseSaveSharedMemoryInput, (input) =>
         service.sharedMemories.save(input.text, "manual", input.memoryId),

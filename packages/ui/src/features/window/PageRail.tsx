@@ -1,4 +1,5 @@
 import { AppLogo, type AppLogoVariant, ProviderLogo } from "@openbot/brand";
+import type { FreeLlmBudget } from "@openbot/contracts/ipc";
 import {
   Bot,
   Button,
@@ -6,6 +7,7 @@ import {
   ChartArea,
   DropdownMenu,
   Ellipsis,
+  Gauge,
   ListChecks,
   MotionTooltip,
   Pin,
@@ -19,6 +21,7 @@ import { type AccountUsageProviderRow, accountUsageRowKey } from "@openbot/ui/fe
 import { useText } from "@openbot/ui/text";
 import { Dynamic, type JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { FreeLlmBudgetCard, freeLlmUsedPercent } from "./FreeLlmBudget";
 
 /** One rail button. Its name shows as a tooltip, unless it has a `card`: the card shows instead. */
 function RailButton(props: {
@@ -168,6 +171,48 @@ function CustomAgentUsageButton(props: { row: CustomAgentUsageRailRow; onOpen: (
   );
 }
 
+/**
+ * Fork: FreeLLMAPI on the user's own server. One ring for today's budget of every provider; the hover
+ * card lists the providers, a click opens every model.
+ */
+function FreeLlmButton(props: { budget: FreeLlmBudget; onOpen: () => void }) {
+  const { t } = useText();
+  const used = () => freeLlmUsedPercent(props.budget);
+  const outerRadius = (RING.size - RING.stroke) / 2;
+  return (
+    <RailButton
+      label={t("app.rail.freeLlm", { percent: used() })}
+      card={() => <FreeLlmBudgetCard budget={props.budget} />}
+      class="window-rail-usage"
+      onClick={() => props.onOpen()}
+    >
+      <svg class="window-rail-usage-ring" viewBox={`0 0 ${RING.size} ${RING.size}`} fill="none" aria-hidden="true">
+        <circle
+          class="window-rail-usage-track"
+          cx={RING.size / 2}
+          cy={RING.size / 2}
+          r={outerRadius}
+          stroke-width={RING.stroke}
+        />
+        <Show when={used() > 0}>
+          <circle
+            class="window-rail-usage-arc"
+            data-usage-tone={used() >= 90 ? "critical" : used() >= 70 ? "warning" : "neutral"}
+            cx={RING.size / 2}
+            cy={RING.size / 2}
+            r={outerRadius}
+            stroke-width={RING.stroke}
+            stroke-linecap="round"
+            pathLength={100}
+            stroke-dasharray={`${used()} 100`}
+          />
+        </Show>
+      </svg>
+      <Gauge class="window-rail-usage-logo" aria-hidden="true" />
+    </RailButton>
+  );
+}
+
 /** The rail pages. Agents and Routines show the same page with a different sidebar list. */
 export type PageRailPage =
   | "agents"
@@ -200,6 +245,8 @@ export interface PageRailProps {
   usageRows: readonly AccountUsageProviderRow[];
   /** The answers of the custom agents on this computer that have a usage prompt. Absent on the web. */
   customAgentUsage?: readonly CustomAgentUsageRailRow[] | undefined;
+  /** Fork: the FreeLLMAPI budget, only on a computer that has its config file. */
+  freeLlm?: { budget: FreeLlmBudget; onOpen: () => void } | undefined;
   onAgents: () => void;
   /** Absent when the server has no routines. */
   onRoutines?: (() => void) | undefined;
@@ -402,6 +449,9 @@ export function PageRail(props: PageRailProps) {
         <For each={props.customAgentUsage ?? []} keyed={(row) => row.id}>
           {(row) => <CustomAgentUsageButton row={row()} onOpen={props.onUsage} />}
         </For>
+        <Show when={props.freeLlm}>
+          {(freeLlm) => <FreeLlmButton budget={freeLlm().budget} onOpen={freeLlm().onOpen} />}
+        </Show>
         <Show when={props.onMarketplace}>
           {(onMarketplace) => (
             <RailButton

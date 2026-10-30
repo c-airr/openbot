@@ -68,6 +68,7 @@ export const messages = defineMessages("app", {
   "app.help.guides": "Guides",
   "app.help.discord": "Join the Discord",
   "app.rail.usageRings": "{name} usage: {windows}. Open usage",
+  "app.rail.freeLlm": "FreeLLMAPI: {percent}% of today's budget used. Open every model",
   "app.rail.customAgentUsage": "{name} usage. Open usage",
   "app.settingsPage.title": "Settings",
   "app.settingsPage.search": "Search settings",

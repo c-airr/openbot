@@ -6,6 +6,19 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.3] - 2026-10-30
+
+Fork release (c-airr/openbot).
+
+### Added
+
+- A FreeLLMAPI ring on the rail shows what each provider has left today; a click lists every model.
+  It shows only with a local `openbot-freellmapi-v1.json` file, so other installs do not change.
+
+### Changed
+
+- The hover card of a usage ring is wider, so long quota names fit.
+
 ## [0.54.2] - 2026-10-30
 
 Fork release (c-airr/openbot).

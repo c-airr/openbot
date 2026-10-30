@@ -67,6 +67,7 @@ export const messages = {
   "app.help.guides": "Poradniki",
   "app.help.discord": "Dołącz do Discorda",
   "app.rail.usageRings": "Użycie {name}: {windows}. Otwórz użycie",
+  "app.rail.freeLlm": "FreeLLMAPI: zużyto {percent}% dzisiejszego budżetu. Otwórz wszystkie modele",
   "app.rail.customAgentUsage": "Użycie {name}. Otwórz użycie",
   "app.settingsPage.title": "Ustawienia",
   "app.settingsPage.search": "Szukaj w ustawieniach",
