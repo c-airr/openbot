@@ -72,6 +72,8 @@ export const messages = {
   "error.backend.channelRoutingTooLong":
     "To żądanie przekracza limit kontekstu kierowania. Wybierz członka lub wyślij krótsze żądanie.",
   "error.backend.channelTaskMemberRequired": "Wybierz członka do tego zadania.",
+  "error.backend.channelTaskStopped": "Zatrzymano. Kontynuuj lub przydziel ponownie to zadanie.",
+  "error.backend.channelRoutingUnreadable": "Lider nie mógł przydzielić tej wiadomości. Przydziel ją członkowi.",
   "error.backend.channelRoutingFailed": "Kierowanie nie powiodło się. Wybierz członka lub spróbuj ponownie.",
   "error.backend.channelLeadTimedOut": "Lider kanału nie odpowiedział na czas. Wybierz członka lub spróbuj ponownie.",
   "error.backend.channelLeadFailed":
@@ -80,6 +82,8 @@ export const messages = {
   "error.backend.channelDeliveryNotCreated": "Nie utworzono dostarczenia kanału.",
   "error.backend.channelAssignmentStopped": "Ten przydział kanału został zatrzymany lub zastąpiony.",
   "error.backend.channelAssigneeUnavailable": "Przydzielony agent jest niedostępny.",
+  "error.backend.channelAssigneeRemoved": "Przydzielony członek został usunięty.",
+  "error.backend.channelAssigneeReassign": "Przydzielony członek jest niedostępny. Przydziel to zadanie ponownie.",
   "error.backend.channelAssignmentChanged": "Ten przydział kanału się zmienił.",
   "error.backend.channelMemberRequired": "Wybierz dostępnego członka tego kanału.",
   "error.backend.memoryEssentialBudget":
@@ -191,6 +195,7 @@ export const messages = {
   "error.backend.routineFlowHandoffFailed": "Rutyna nie mogła przekazać pracy temu agentowi.",
   "error.backend.mcpServerLimit": "OpenBot przechowuje maksymalnie {limit} serwerów MCP.",
   "error.backend.mcpServerNameTaken": "Serwer MCP o nazwie {name} już istnieje.",
+  "error.backend.mcpServerInvalid": "OpenBot nie może zapisać tej konfiguracji serwera MCP.",
   "error.backend.mcpServerNoAnswer": "Serwer nie odpowiedział w ciągu {seconds} s.",
   "error.backend.mcpSignInNotAccepted": "Serwer nie zaakceptował tego logowania.",
   "error.backend.mcpSignInClientRefused":
@@ -216,6 +221,7 @@ export const messages = {
     "OpenBot nie mógł odczytać informacji o logowaniu tego serwera. Sprawdź adres serwera i spróbuj ponownie.",
   "error.backend.mcpServerExited":
     "Serwer zatrzymał się przed odpowiedzią. Uruchom polecenie w terminalu, aby zobaczyć błąd.",
+  "error.backend.mcpServerFailedToStart": "Serwer się nie uruchomił: {reason}",
   "error.backend.mcpOAuthProxyUnavailable":
     "OpenBot nie mógł uruchomić lokalnego połączenia logowania dla tego serwera. Uruchom ponownie OpenBot i spróbuj jeszcze raz.",
   "error.backend.mcpOAuthSignInNeeded":

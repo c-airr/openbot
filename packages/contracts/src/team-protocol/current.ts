@@ -15,7 +15,10 @@ import { AGENT_MEMORY_LIMIT_CAPABILITY } from "./agent-memory-limit-v1";
 import { AGENT_PUBLISH_CAPABILITY } from "./agent-publish-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "./agent-session-settings-v1";
 import { AGENT_TASK_LIMIT_CAPABILITY } from "./agent-task-limit-v1";
+import { AGENT_TASK_UI_BLOCKS_CAPABILITY } from "./agent-task-ui-blocks-v1";
 import { AGENT_TASKS_CAPABILITY } from "./agent-tasks-v1";
+import { AGENT_THREAD_FILES_CAPABILITY } from "./agent-thread-files-v1";
+import { AGENT_THREAD_READS_CAPABILITY } from "./agent-thread-reads-v1";
 import { AGENT_THREADS_CAPABILITY } from "./agent-threads-v1";
 import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "./bitwarden-connector-v1";
@@ -37,6 +40,7 @@ import { TEAM_CHANNEL_ATTENTION_CAPABILITY } from "./channel-attention-v1";
 import { CLAUDE_API_KEY_CAPABILITY } from "./claude-api-key-v1";
 import { CONNECTORS_CAPABILITY } from "./connectors-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
+import { TEAM_CONTEXT_USAGE_CAPABILITY } from "./context-usage-v1";
 import { CONVERSATION_FILE_SEARCH_CAPABILITY } from "./conversation-file-search-v1";
 import { DISCORD_ACCESS_CAPABILITY } from "./discord-access-v1";
 import { EVENTS_CAPABILITY } from "./events-v1";
@@ -53,11 +57,13 @@ import { LIVE_ACTIVITY_PUSH_CAPABILITY } from "./live-activity-push-v1";
 import { MACHINE_RESOURCES_CAPABILITY } from "./machine-resources-v1";
 import { MCP_SIGN_IN_APP_CAPABILITY } from "./mcp-sign-in-app-v1";
 import { MCP_SIGN_IN_CAPABILITY } from "./mcp-sign-in-v1";
+import { MEMORY_REVIEW_CAPABILITY } from "./memory-review-v1";
 import { TEAM_MESSAGE_CLIENT_ID_CAPABILITY } from "./message-client-id-v1";
 import { ONEPASSWORD_CONNECTOR_CAPABILITY } from "./onepassword-connector-v1";
 import { PROMPT_CACHE_TTL_CAPABILITY } from "./prompt-cache-ttl-v1";
 import { TEAM_PROMPT_MULTI_SELECT_CAPABILITY } from "./prompt-multi-select-v1";
 import { PROVIDER_ACCOUNT_RELAY_CAPABILITY } from "./provider-account-relay-v1";
+import { PROVIDER_ACCOUNT_RELAY_V2_CAPABILITY } from "./provider-account-relay-v2";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "./provider-accounts-v1";
 import { PROVIDER_DEFAULT_CAPABILITY } from "./provider-default-v1";
 import { PROVIDER_HOST_SIGN_IN_CAPABILITY } from "./provider-host-sign-in-v1";
@@ -139,7 +145,10 @@ export {
   AGENT_PUBLISH_CAPABILITY,
   AGENT_SESSION_SETTINGS_CAPABILITY,
   AGENT_TASK_LIMIT_CAPABILITY,
+  AGENT_TASK_UI_BLOCKS_CAPABILITY,
   AGENT_TASKS_CAPABILITY,
+  AGENT_THREAD_FILES_CAPABILITY,
+  AGENT_THREAD_READS_CAPABILITY,
   AGENT_THREADS_CAPABILITY,
   AGENT_UPDATE_CAPABILITY,
   ANDROID_PUSH_NOTIFICATIONS_CAPABILITY,
@@ -168,9 +177,11 @@ export {
   MCP_SERVERS_CAPABILITY,
   MCP_SIGN_IN_APP_CAPABILITY,
   MCP_SIGN_IN_CAPABILITY,
+  MEMORY_REVIEW_CAPABILITY,
   ONEPASSWORD_CONNECTOR_CAPABILITY,
   PROMPT_CACHE_TTL_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
+  PROVIDER_ACCOUNT_RELAY_V2_CAPABILITY,
   PROVIDER_ACCOUNTS_CAPABILITY,
   PROVIDER_DEFAULT_CAPABILITY,
   PROVIDER_HOST_SIGN_IN_CAPABILITY,
@@ -202,6 +213,7 @@ export {
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
   TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
   TEAM_CHANNEL_ATTENTION_CAPABILITY,
+  TEAM_CONTEXT_USAGE_CAPABILITY,
   TEAM_HISTORY_EXTENT_CAPABILITY,
   TEAM_MESSAGE_CLIENT_ID_CAPABILITY,
   TEAM_PROMPT_MULTI_SELECT_CAPABILITY,
@@ -311,6 +323,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   AGENT_TASK_LIMIT_CAPABILITY,
   BROWSER_PROFILES_CAPABILITY,
   PROVIDER_ACCOUNT_RELAY_CAPABILITY,
+  PROVIDER_ACCOUNT_RELAY_V2_CAPABILITY,
   STORAGE_DISK_CAPABILITY,
   MACHINE_RESOURCES_CAPABILITY,
   PROMPT_CACHE_TTL_CAPABILITY,
@@ -318,10 +331,15 @@ export const TEAM_CURRENT_CAPABILITIES = [
   CLAUDE_API_KEY_CAPABILITY,
   WORKFLOWS_CAPABILITY,
   AGENT_THREADS_CAPABILITY,
+  AGENT_THREAD_READS_CAPABILITY,
+  AGENT_THREAD_FILES_CAPABILITY,
   VAULT_CAPABILITY,
   BROWSER_SECRET_VAULT_CAPABILITY,
   VAULT_IMPORT_CAPABILITY,
   VAULT_V2_CAPABILITY,
+  AGENT_TASK_UI_BLOCKS_CAPABILITY,
+  TEAM_CONTEXT_USAGE_CAPABILITY,
+  MEMORY_REVIEW_CAPABILITY,
   PROVIDER_SIGN_OUT_CAPABILITY,
 ] as const;
 
@@ -436,6 +454,7 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== AGENT_TASK_LIMIT_CAPABILITY &&
     capability !== BROWSER_PROFILES_CAPABILITY &&
     capability !== PROVIDER_ACCOUNT_RELAY_CAPABILITY &&
+    capability !== PROVIDER_ACCOUNT_RELAY_V2_CAPABILITY &&
     capability !== STORAGE_DISK_CAPABILITY &&
     capability !== MACHINE_RESOURCES_CAPABILITY &&
     capability !== PROMPT_CACHE_TTL_CAPABILITY &&
@@ -443,16 +462,24 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== CLAUDE_API_KEY_CAPABILITY &&
     capability !== WORKFLOWS_CAPABILITY &&
     capability !== AGENT_THREADS_CAPABILITY &&
+    capability !== AGENT_THREAD_READS_CAPABILITY &&
+    capability !== AGENT_THREAD_FILES_CAPABILITY &&
     capability !== TEAM_MP4_ATTACHMENTS_CAPABILITY &&
     capability !== VAULT_CAPABILITY &&
     capability !== BROWSER_SECRET_VAULT_CAPABILITY &&
     capability !== VAULT_IMPORT_CAPABILITY &&
     capability !== VAULT_V2_CAPABILITY &&
+    capability !== AGENT_TASK_UI_BLOCKS_CAPABILITY &&
+    capability !== TEAM_CONTEXT_USAGE_CAPABILITY &&
+    capability !== MEMORY_REVIEW_CAPABILITY &&
     capability !== PROVIDER_SIGN_OUT_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
-  (capability) => capability !== TEAM_OPEN_PROVIDERS_CAPABILITY && capability !== PROVIDERS_V8_CAPABILITY,
+  (capability) =>
+    capability !== TEAM_OPEN_PROVIDERS_CAPABILITY &&
+    capability !== PROVIDERS_V8_CAPABILITY &&
+    capability !== TEAM_CONTEXT_USAGE_CAPABILITY,
 );
 export function teamCapabilitiesForProtocol(protocol: number | null | undefined): readonly TeamCurrentCapability[] {
   if (protocol === null || protocol === undefined || protocol < 7) return TEAM_BOOTSTRAP_CAPABILITIES;
@@ -505,6 +532,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== AGENT_TASK_LIMIT_CAPABILITY &&
       capability !== BROWSER_PROFILES_CAPABILITY &&
       capability !== PROVIDER_ACCOUNT_RELAY_CAPABILITY &&
+      capability !== PROVIDER_ACCOUNT_RELAY_V2_CAPABILITY &&
       capability !== STORAGE_DISK_CAPABILITY &&
       capability !== MACHINE_RESOURCES_CAPABILITY &&
       capability !== PROMPT_CACHE_TTL_CAPABILITY &&
@@ -512,11 +540,16 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== CLAUDE_API_KEY_CAPABILITY &&
       capability !== WORKFLOWS_CAPABILITY &&
       capability !== AGENT_THREADS_CAPABILITY &&
+      capability !== AGENT_THREAD_READS_CAPABILITY &&
+      capability !== AGENT_THREAD_FILES_CAPABILITY &&
       capability !== TEAM_MP4_ATTACHMENTS_CAPABILITY &&
       capability !== VAULT_CAPABILITY &&
       capability !== BROWSER_SECRET_VAULT_CAPABILITY &&
       capability !== VAULT_IMPORT_CAPABILITY &&
       capability !== VAULT_V2_CAPABILITY &&
+      capability !== AGENT_TASK_UI_BLOCKS_CAPABILITY &&
+      capability !== TEAM_CONTEXT_USAGE_CAPABILITY &&
+      capability !== MEMORY_REVIEW_CAPABILITY &&
       capability !== PROVIDER_SIGN_OUT_CAPABILITY,
   );
 }

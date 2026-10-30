@@ -81,6 +81,7 @@ export const navItems: ReadonlyArray<SettingsNavItem> = [
       { titleKey: "agentSettings.agentNewChat.title" },
       { titleKey: "agentSettings.quickAcknowledgement.title" },
       { titleKey: "settings.busyMessage.title", descriptionKey: "settings.busyMessage.description" },
+      { titleKey: "settings.backgroundProcesses.title", descriptionKey: "settings.backgroundProcesses.description" },
     ],
   },
   {
@@ -156,12 +157,11 @@ export const navItems: ReadonlyArray<SettingsNavItem> = [
     icon: Smartphone,
     rows: [
       {
-        titleKey: "settings.mobileConnect.install.title",
-        descriptionKey: "settings.mobileConnect.install.description",
+        titleKey: "settings.mobileConnect.phones.title",
+        descriptionKey: "settings.mobileConnect.phones.description",
       },
-      { titleKey: "settings.mobileConnect.signIn.title", descriptionKey: "settings.mobileConnect.signIn.description" },
-      { titleKey: "settings.mobileConnect.link.title", descriptionKey: "settings.mobileConnect.link.description" },
-      { titleKey: "settings.mobileConnect.devices.title" },
+      { titleKey: "settings.mobileConnect.phones.add", descriptionKey: "settings.mobileConnect.add.question" },
+      { titleKey: "settings.mobileConnect.link.title", descriptionKey: "settings.mobileConnect.link.cardHint" },
       {
         titleKey: "settings.mobileConnect.route.title",
         descriptionKey: "settings.mobileConnect.route.description",

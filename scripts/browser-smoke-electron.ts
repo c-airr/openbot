@@ -1,8 +1,9 @@
+import assert from "node:assert/strict";
 import { constants } from "node:fs";
 import { mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { BrowserBounds } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
@@ -391,6 +392,8 @@ const server = createServer((request, response) => {
       <button aria-label="SPA" onclick="setTimeout(() => { history.pushState({}, '', '/v2#done'); document.querySelector('output').textContent='SPA done'; }, 20)">SPA</button>
       <button draggable="true" aria-label="Drag source">Drag source</button><button aria-label="Drop target" ondragover="event.preventDefault()" ondrop="event.preventDefault();document.querySelector('output').textContent='drag:' + event.isTrusted">Drop target</button>
       <input type="file" aria-label="Files" onchange="document.querySelector('output').textContent=this.files[0]?.name || ''" />
+      <button aria-label="Attach files" onclick="const input = document.createElement('input'); input.type = 'file'; input.onchange = () => { document.querySelector('output').textContent = 'chooser:' + (input.files[0]?.name || ''); }; input.click()">Attach files</button>
+      <button aria-label="No chooser">No chooser</button>
       <canvas width="40" height="20" style="display:block;width:80px;height:40px" onclick="document.querySelector('output').textContent='canvas:' + event.isTrusted"></canvas>
       <iframe title="Same origin frame" src="/same-frame"></iframe>
       <iframe title="Cross origin frame" src="http://localhost:${port}/frame?frame_token=frame-secret"></iframe>
@@ -428,6 +431,7 @@ const SCENARIOS = [
   "background",
   "focus",
   "controls",
+  "typing-focus",
   "tool-boundary",
   "evaluation",
   "wait-deadlines",
@@ -522,6 +526,8 @@ async function main(): Promise<void> {
           await runToolBoundaryScenario(browser, origin);
         } else if (scenario === "redirect-navigation") {
           await runRedirectNavigationScenario(browser, origin);
+        } else if (scenario === "typing-focus") {
+          await runTypingFocusScenario(browser, origin);
         } else {
           const { tab, contents } = await openTabWithContents(browser, `${origin}/v2`, "smoke-thread", "smoke-bot");
           try {
@@ -549,6 +555,7 @@ async function main(): Promise<void> {
       }
       return;
     }
+    await runTypingFocusScenario(browser, origin);
     const documentChangedTabs: string[] = [];
     const retainedDocumentChanges: Array<{ tabId: string; documentIds: ReadonlySet<string> }> = [];
     browser.onDocumentChanged((tabId, documentIds) => {
@@ -1366,6 +1373,26 @@ async function main(): Promise<void> {
       paths: [uploadPath],
     });
     if (!uploaded.success) throw new Error(`V2 upload failed: ${toolError(uploaded)}`);
+    // GitHub's comment box makes its file input only on click: the upload answers that file chooser.
+    const chooserUpload = await callBrowserTool(browser, "upload_files", {
+      tabId: v2Tab.id,
+      target: { kind: "role", role: "button", name: "Attach files", exact: true },
+      paths: [uploadPath],
+    });
+    if (!chooserUpload.success) throw new Error(`V2 file chooser upload failed: ${toolError(chooserUpload)}`);
+    const chooserOutput = await v2Contents.executeJavaScript("document.querySelector('output').textContent", true);
+    if (chooserOutput !== "chooser:v2-upload.txt") {
+      throw new Error(`V2 file chooser upload did not reach the page: ${String(chooserOutput)}`);
+    }
+    const noChooser = await callBrowserTool(browser, "upload_files", {
+      tabId: v2Tab.id,
+      target: { kind: "role", role: "button", name: "No chooser", exact: true },
+      paths: [uploadPath],
+      timeoutMs: 1_000,
+    });
+    if (noChooser.success || !toolError(noChooser).includes("did not open a file chooser")) {
+      throw new Error(`V2 upload to a target without a file chooser did not fail: ${toolError(noChooser)}`);
+    }
     const frameUploadInputIds: string[] = [];
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const frameUpload = await callBrowserTool(
@@ -1383,7 +1410,7 @@ async function main(): Promise<void> {
     if (frameUploadInputIds.length !== 2 || frameUploadInputIds[0] !== frameUploadInputIds[1]) {
       throw new Error("V2 frame upload input identity changed between CDP sessions.");
     }
-    await runStagedUploadScenario(browser, v2Tab.id, uploadPath, join(temporaryRoot, "missing-upload.txt"));
+    await runStagedUploadScenario(browser, v2Tab.id, v2Contents, uploadPath, join(temporaryRoot, "missing-upload.txt"));
     await runCauseEffect(browser.setVisible({ visible: true, bounds: { x: 0, y: 0, width: 220, height: 560 } }));
     const narrowFillEnvironment = await callBrowserTool(browser, "set_environment", {
       tabId: v2Tab.id,
@@ -1935,6 +1962,250 @@ async function main(): Promise<void> {
   }
 }
 
+async function runTypingFocusScenario(browser: BrowserHost, origin: string): Promise<void> {
+  const { tab, contents } = await openTabWithContents(
+    browser,
+    `${origin}/blocking-frame?typing-focus`,
+    "smoke-thread",
+    "smoke-bot",
+  );
+  const cases: Array<{ name: string; safe: boolean; toolSuccess: boolean; state: string; error: string }> = [];
+  try {
+    for (const surface of [
+      "ordinary",
+      "shadow",
+      "closed shadow",
+      "same-origin frame",
+      "cross-origin frame",
+      "closed-shadow cross-origin frame",
+      "contenteditable",
+    ]) {
+      const inFrame = surface.endsWith("frame");
+      const frameUrl = `${surface.includes("cross-origin frame") ? origin.replace("127.0.0.1", "localhost") : origin}/frame?typing-focus`;
+      if (inFrame) {
+        await contents.executeJavaScript(
+          `new Promise(resolve => {
+            document.body.innerHTML = '';
+            const frame = document.createElement('iframe');
+            frame.src = ${JSON.stringify(frameUrl)};
+            frame.onload = resolve;
+            ${
+              surface === "closed-shadow cross-origin frame"
+                ? `const host = document.createElement('div');
+                   document.body.append(host);
+                   host.attachShadow({mode:'closed'}).append(frame);`
+                : "document.body.append(frame);"
+            }
+          }).then(() => true)`,
+          true,
+        );
+      } else {
+        await contents.executeJavaScript("document.body.innerHTML = ''; true", true);
+      }
+      const frame = inFrame
+        ? contents.mainFrame.framesInSubtree.find((candidate) => candidate.url === frameUrl)
+        : contents.mainFrame;
+      assert(frame, `Typing focus frame is missing: ${surface}`);
+      const names = [
+        "normal append",
+        "normal replace submit",
+        "redirected focus append",
+        "redirected focus replace",
+        "redirected input",
+        "replaced target",
+      ];
+      if (surface === "same-origin frame") names.push("frame focus transfer", "sibling frame focus transfer");
+      if (surface === "cross-origin frame") names.push("frame focus transfer");
+      if (surface === "ordinary")
+        names.push(
+          "readonly",
+          "empty replacement",
+          "empty submit redirected focus",
+          "formatted input",
+          "End redirected focus",
+          "replaced focus target",
+        );
+      for (const name of names) {
+        const frameTransfer = name.endsWith("frame focus transfer");
+        const siblingTransfer = name === "sibling frame focus transfer";
+        const redirectFocus = name.includes("redirected focus") && name !== "End redirected focus";
+        const redirectInput = name === "redirected input" || name === "replaced target" || frameTransfer;
+        const replace = [
+          "normal replace submit",
+          "redirected focus replace",
+          "empty replacement",
+          "readonly",
+          "formatted input",
+        ].includes(name);
+        const empty = name.startsWith("empty");
+        const submit = name !== "normal append" && name !== "empty replacement" && name !== "readonly";
+        const changedBeforeInput = redirectFocus || name === "End redirected focus" || name === "replaced focus target";
+        const expectedSuccess = !changedBeforeInput && !redirectInput;
+        await frame.executeJavaScript(
+          `(() => {
+            document.body.innerHTML = '<div id="typing-root"></div>';
+            const host = document.querySelector('#typing-root');
+            const root = ${!inFrame && surface.includes("shadow") ? `host.attachShadow({mode:'${surface === "closed shadow" ? "closed" : "open"}'})` : "host"};
+            root.innerHTML = ${JSON.stringify(
+              surface === "contenteditable"
+                ? '<div id="intended" contenteditable="true" role="textbox" aria-label="Intended field">alpha</div><input id="other" aria-label="Other field" value="beta">'
+                : '<input id="intended" aria-label="Intended field" value="alpha"><input id="other" aria-label="Other field" value="beta">',
+            )};
+            globalThis.typingRoot = root;
+            globalThis.inputEvents = [];
+            globalThis.keyEvents = [];
+            const intended = root.querySelector('#intended');
+            const other = root.querySelector('#other');
+            for (const field of [intended, other]) field.oninput = event => {
+              globalThis.inputEvents.push({field: field.id, trusted: event.isTrusted});
+            };
+            root.addEventListener('keydown', event => {
+              globalThis.keyEvents.push({field: event.composedPath()[0].id, key: event.key, trusted: event.isTrusted});
+              if (event.key === 'Enter') event.preventDefault();
+            });
+            ${redirectFocus ? "intended.onfocus = () => other.focus();" : ""}
+            ${name === "redirected input" ? "intended.addEventListener('input', () => other.focus());" : ""}
+            ${name === "replaced target" ? "intended.addEventListener('input', () => { const replacement = intended.cloneNode(true); intended.replaceWith(replacement); replacement.focus(); });" : ""}
+            ${name === "replaced focus target" ? "intended.onfocus = () => { const replacement = intended.cloneNode(true); intended.replaceWith(replacement); replacement.focus(); };" : ""}
+            ${
+              frameTransfer
+                ? surface === "cross-origin frame"
+                  ? // The page in the other process takes focus while this handler still runs.
+                    `intended.addEventListener('input', () => {
+                      parent.postMessage('move-typing-focus', '*');
+                      for (const end = Date.now() + 500; Date.now() < end;);
+                    });`
+                  : `intended.addEventListener('input', () => parent.moveTypingFocus());`
+                : ""
+            }
+            ${name === "readonly" ? "intended.readOnly = true;" : ""}
+            ${name === "formatted input" ? "intended.addEventListener('input', () => { intended.value = intended.value.toLowerCase(); });" : ""}
+            ${name === "End redirected focus" ? "intended.type = 'email'; intended.onkeydown = event => { if (event.key === 'End') other.focus(); };" : ""}
+            return true;
+          })()`,
+          true,
+        );
+        if (frameTransfer) {
+          await contents.executeJavaScript(
+            `(() => {
+              document.querySelector('#outside')?.remove();
+              document.querySelector('#typing-sibling')?.remove();
+              let doc = document;
+              ${
+                siblingTransfer
+                  ? `const sibling = document.createElement('iframe');
+                     sibling.id = 'typing-sibling'; document.body.append(sibling);
+                     doc = sibling.contentDocument;`
+                  : ""
+              }
+              const outside = doc.createElement('input');
+              outside.id = 'outside'; outside.value = 'gamma';
+              globalThis.outsideEvents = []; globalThis.outsideKeys = [];
+              outside.oninput = event => globalThis.outsideEvents.push(event.isTrusted);
+              outside.onkeydown = event => { globalThis.outsideKeys.push(event.key); event.preventDefault(); };
+              doc.body.prepend(outside);
+              globalThis.moveTypingFocus = () => outside.focus();
+              globalThis.onmessage = event => { if (event.data === 'move-typing-focus') outside.focus(); };
+              return true;
+            })()`,
+            true,
+          );
+        }
+        const snapshot = await runCauseEffect(browser.snapshot(tab.id));
+        const target = snapshot.elements.find((element) => element.name === "Intended field");
+        assert(target || surface === "closed shadow", `Typing focus target is missing: ${surface}: ${name}`);
+        if (surface === "closed-shadow cross-origin frame")
+          assert(
+            target?.frame && new URL(target.frame.url).hostname === "localhost",
+            "Closed-root owner lost its cross-process frame ref.",
+          );
+        const result = await callBrowserTool(browser, "type", {
+          tabId: tab.id,
+          target: target
+            ? { kind: "ref", ref: target.ref, revision: snapshot.revision }
+            : { kind: "role", role: "textbox", name: "Intended field", exact: true },
+          text: empty ? "" : "X",
+          mode: replace ? "replace" : "append",
+          submit,
+        });
+        const state = await frame.executeJavaScript(
+          `JSON.stringify({
+            intended: globalThis.typingRoot.querySelector('#intended').value ?? globalThis.typingRoot.querySelector('#intended').textContent,
+            other: globalThis.typingRoot.querySelector('#other').value,
+            events: globalThis.inputEvents,
+            keys: globalThis.keyEvents,
+            locallyFocused: document.activeElement === globalThis.typingRoot.querySelector('#intended'),
+          })`,
+        );
+        assert(isString(state));
+        const observed = JSON.parse(state);
+        const outside = frameTransfer
+          ? await contents.executeJavaScript(`(() => {
+              const doc = ${siblingTransfer ? "document.querySelector('#typing-sibling').contentDocument" : "document"};
+              return {
+                value: doc.querySelector('#outside').value,
+                focused: doc.activeElement === doc.querySelector('#outside'),
+                events: globalThis.outsideEvents,
+                keys: globalThis.outsideKeys,
+              };
+            })()`)
+          : null;
+        const expectedValue =
+          changedBeforeInput || name === "readonly"
+            ? "alpha"
+            : empty
+              ? ""
+              : name === "formatted input"
+                ? "x"
+                : replace
+                  ? "X"
+                  : "alphaX";
+        const expectedKeys = name === "End redirected focus" ? ["End"] : expectedSuccess && submit ? ["Enter"] : [];
+        const expectedInputs = changedBeforeInput || name === "readonly" ? 0 : 1;
+        // The error tells the agent whether the text is already in the field.
+        const expectedError = expectedSuccess ? "" : changedBeforeInput ? "Nothing was typed" : "Enter was not sent";
+        const safe =
+          result.success === expectedSuccess &&
+          (result.success || toolError(result).includes(expectedError)) &&
+          observed.other === "beta" &&
+          observed.intended === expectedValue &&
+          observed.events.length === expectedInputs &&
+          observed.events.every((event: DynamicRecord) => event.field === "intended" && event.trusted === true) &&
+          JSON.stringify(observed.keys.map((event: DynamicRecord) => event.key)) === JSON.stringify(expectedKeys) &&
+          observed.keys.every((event: DynamicRecord) => event.field === "intended" && event.trusted === true) &&
+          (!frameTransfer ||
+            (outside.focused === true &&
+              outside.value === "gamma" &&
+              outside.events.length === 0 &&
+              outside.keys.length === 0));
+        cases.push({
+          name: `${surface}: ${name}`,
+          safe,
+          toolSuccess: result.success,
+          state: frameTransfer ? JSON.stringify({ frame: observed, outside }) : state,
+          error: result.success ? "" : toolError(result),
+        });
+      }
+    }
+    await mkdir(".openbot-build", { recursive: true });
+    await writeFile(
+      ".openbot-build/browser-typing-focus.json",
+      JSON.stringify(
+        { status: cases.every((item) => item.safe) ? "passed" : "issues_found", versions: process.versions, cases },
+        null,
+        2,
+      ),
+    );
+    assert(
+      cases.every((item) => item.safe),
+      // CI keeps no report file, so the message carries the failed cases.
+      JSON.stringify(cases.filter((item) => !item.safe)),
+    );
+  } finally {
+    await runCauseEffect(browser.close(tab.id));
+  }
+}
+
 async function runFocusScenario(browser: BrowserHost, origin: string): Promise<void> {
   const focusSentinel = new BrowserWindow({
     show: false,
@@ -2201,10 +2472,12 @@ async function runLiveViewScenario(browser: BrowserHost, tabId: string, contents
     true,
   );
   const frames: Array<{ sequence: number; at: number }> = [];
+  let frameWaiter: { count: number; resolve: () => void } | null = null;
   const stopView = await runCauseEffect(
     browser.startView(tabId, (frame) => {
       if (frame.image.byteLength === 0) throw new Error("A live view frame carried no image.");
       frames.push({ sequence: frame.sequence, at: Date.now() });
+      if (frameWaiter && frames.length >= frameWaiter.count) frameWaiter.resolve();
     }),
   );
   try {
@@ -2262,6 +2535,50 @@ async function runLiveViewScenario(browser: BrowserHost, tabId: string, contents
     }
     if (!pressed) throw new Error("A live view click did not reach the page.");
     await runLiveViewClipboard(browser, tabId, contents);
+
+    // An upload through a file chooser turns the Page domain on and off. The view must not stop.
+    await contents.executeJavaScript(
+      `(() => {
+      const button = document.createElement('button');
+      button.textContent = 'Live view attach';
+      button.style.cssText = 'position:fixed;left:250px;top:150px;width:200px;height:60px;z-index:2147483647';
+      button.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.click();
+      });
+      document.body.append(button);
+    })()`,
+      true,
+    );
+    const uploadRoot = await mkdtemp(join(tmpdir(), "openbot-live-view-upload-"));
+    try {
+      const uploadPath = join(uploadRoot, "live-view-upload.txt");
+      await writeFile(uploadPath, "live view upload");
+      const uploaded = await callBrowserTool(browser, "upload_files", {
+        tabId,
+        target: { kind: "role", role: "button", name: "Live view attach", exact: true },
+        paths: [uploadPath],
+      });
+      if (!uploaded.success) throw new Error(`A file chooser upload failed in live view: ${toolError(uploaded)}`);
+    } finally {
+      await rm(uploadRoot, { recursive: true, force: true });
+    }
+    const moreFrames = new Promise<void>((resolve) => {
+      frameWaiter = { count: frames.length + 5, resolve };
+    });
+    let stalled: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        moreFrames,
+        new Promise<never>((_resolve, reject) => {
+          stalled = setTimeout(() => reject(new Error("The live view stopped after a file chooser upload.")), 5_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(stalled);
+      frameWaiter = null;
+    }
   } finally {
     await Effect.runPromise(stopView());
   }
@@ -2927,6 +3244,7 @@ async function runCanvasGridScenario(browser: BrowserHost, origin: string): Prom
 async function runStagedUploadScenario(
   browser: BrowserHost,
   tabId: string,
+  contents: WebContents,
   uploadPath: string,
   missingPath: string,
 ): Promise<void> {
@@ -2964,6 +3282,16 @@ async function runStagedUploadScenario(
     if (missing.success) throw new Error("V2 staged upload reported success for a missing file.");
     const staged = await upload({ kind: "css", selector: 'input[aria-label="Files"]' }, [uploadPath]);
     if (!staged.success) throw new Error(`V2 staged upload failed: ${toolError(staged)}`);
+    await contents.executeJavaScript("document.querySelector('output').textContent = 'staged chooser pending'", true);
+    const stagedChooser = await upload({ kind: "role", role: "button", name: "Attach files", exact: true }, [
+      uploadPath,
+    ]);
+    if (!stagedChooser.success) throw new Error(`V2 staged file chooser upload failed: ${toolError(stagedChooser)}`);
+    // The staged copy keeps the file name, so the page names the file the agent chose.
+    const stagedOutput = await contents.executeJavaScript("document.querySelector('output').textContent", true);
+    if (stagedOutput !== `chooser:${basename(uploadPath)}`) {
+      throw new Error(`V2 staged file chooser upload did not reach the page: ${String(stagedOutput)}`);
+    }
   } finally {
     await runCauseEffect(uploads.dispose());
   }

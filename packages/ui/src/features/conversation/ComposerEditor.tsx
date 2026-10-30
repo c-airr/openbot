@@ -1,9 +1,9 @@
 import { rankAgentMentions } from "@openbot/contracts/agent-mention-rank";
 import { attachmentReferenceIds } from "@openbot/contracts/attachment-references";
-import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
+import { EVERYONE_MENTION, serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { Badge, Blocks, Command, Listbox, Puzzle } from "@openbot/ui";
+import { Badge, Blocks, Command, Listbox, Puzzle, UsersRound } from "@openbot/ui";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
 import {
@@ -76,7 +76,7 @@ interface ComposerEditorProps {
   skills?: ComposerSkill[] | undefined;
   /** The host's MCP servers, offered by the same `$` the skills answer. */
   mcpServers?: ComposerMcpServer[] | undefined;
-  attachments?: DraftAttachment[];
+  attachments?: DraftAttachment[] | undefined;
   value: string;
   placeholder: string;
   ariaLabel: string;
@@ -91,17 +91,21 @@ interface ComposerEditorProps {
   /** Opens the passage that a quote chip in the draft points to. */
   onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   /** The last skill list request failed, so an empty picker says so instead of "no skills". */
-  skillsLoadFailed?: boolean;
+  skillsLoadFailed?: boolean | undefined;
   onValueChange: (value: string) => void;
   onSubmit: () => void;
+  /** Tab sends the message into the agent's running turn. Absent, Tab moves the focus as usual. */
+  onSteer?: (() => void) | undefined;
   /**
    * Which chord sends the message. Enter keeps the current behavior; the platform modifier with
    * Enter sends and plain Enter adds a line. The renderer resolves the platform and passes it.
    */
   sendShortcut?: SendShortcut | undefined;
-  onOpenAttachment?: (attachment: DraftAttachment) => void;
+  onOpenAttachment?: ((attachment: DraftAttachment) => void) | undefined;
   /** Receives pasted files. Without it, a file paste does nothing here; the desktop preload imports it. */
-  onPasteFiles?: (files: File[], selection: ComposerSelection) => undefined | Promise<ComposerPasteResult | undefined>;
+  onPasteFiles?:
+    | ((files: File[], selection: ComposerSelection) => undefined | Promise<ComposerPasteResult | undefined>)
+    | undefined;
   onPasteAttachments?: (
     clipboard: DataTransfer,
     selection: ComposerSelection,
@@ -117,6 +121,8 @@ interface ComposerEditorProps {
     attachments: DraftAttachment[],
     remaining: string | undefined,
   ) => void;
+  /** Offers `@everyone` in the mention picker, which a channel reads as a message to each member. */
+  everyoneMention?: boolean | undefined;
   /** Told when the mention picker opens or closes, so the queue panel can give up the same space. */
   onPickerOpenChange?: (open: boolean) => void;
   /**
@@ -174,6 +180,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const others = props.agents.filter((agent) => agent.id !== props.agentId);
     return rankAgentMentions(others, mention()?.query ?? "");
   });
+  const matchesEveryone = createMemo(() => {
+    const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
+    if (!props.everyoneMention) return false;
+    return (
+      EVERYONE_MENTION.slice(1).startsWith(query) || t("composer.picker.everyone").toLocaleLowerCase().startsWith(query)
+    );
+  });
   const matchingAttachments = createMemo(() => {
     const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
     const referencedIds = attachmentReferenceIds(props.value);
@@ -224,6 +237,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     if (trigger !== "@") return [];
     return [
       ...matchingAgents().map((agent) => ({ type: "agent" as const, agent })),
+      ...(matchesEveryone() ? [{ type: "everyone" as const }] : []),
       ...matchingAttachments().map((attachment) => ({
         type: "attachment" as const,
         attachment,
@@ -326,6 +340,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
       quoteRequest,
       disabled,
     }) => {
+      // An owner can set its counter back to 0 after this editor read it, for example when the chat that it
+      // leaves closes after the next one opens. The next request after that must focus this editor.
+      if (focusRequest < lastFocusRequest) lastFocusRequest = focusRequest;
       if (!editor || (isComposing && agentId === lastAgentId)) return;
       const attachmentKey = attachments.map((attachment) => `${attachment.id}:${attachment.name}`).join("|");
       const skillKey = skills
@@ -604,11 +621,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const token =
       option.type === "agent"
         ? createMentionToken(option.agent)
-        : option.type === "skill"
-          ? createSkillToken(option.skill)
-          : option.type === "mcp"
-            ? createMcpToken(option.server)
-            : createAttachmentToken(option.attachment, attachmentTokenActions);
+        : option.type === "everyone"
+          ? document.createTextNode(EVERYONE_MENTION)
+          : option.type === "skill"
+            ? createSkillToken(option.skill)
+            : option.type === "mcp"
+              ? createMcpToken(option.server)
+              : createAttachmentToken(option.attachment, attachmentTokenActions);
     const trailingSpace = document.createTextNode(" ");
     range.insertNode(trailingSpace);
     range.insertNode(token);
@@ -753,6 +772,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
      */
     if (isComposing || event.isComposing || event.keyCode === 229 || event.key === "Process") return;
     if (handleMentionPickerKeyDown(event)) return;
+    if (event.key === "Tab" && props.onSteer && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      props.onSteer();
+      return;
+    }
     if (event.key === "Backspace" && removeAutomaticMentionSpace()) {
       event.preventDefault();
       return;
@@ -910,6 +934,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         aria-label={props.ariaLabel}
         aria-disabled={props.disabled ? "true" : "false"}
         aria-multiline="true"
+        aria-keyshortcuts={props.onSteer ? "Tab" : undefined}
         spellcheck="true"
         data-cuelume-type=""
         onFocus={ensureEditorSelection}
@@ -1049,6 +1074,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     >
                       {option.type === "agent" ? (
                         <AgentAvatar agent={option.agent} />
+                      ) : option.type === "everyone" ? (
+                        <span class="mention-picker-skill-icon" aria-hidden="true">
+                          <UsersRound />
+                        </span>
                       ) : option.type === "skill" ? (
                         <span class="mention-picker-skill-icon" aria-hidden="true">
                           <Puzzle />
@@ -1064,11 +1093,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
                       ) : (
                         <AttachmentReferenceVisual name={option.attachment.name} />
                       )}
-                      <strong>{pickerOptionName(option)}</strong>
+                      <strong>{pickerOptionName(option, t)}</strong>
                       <Show when={option.type === "skill" && option.showSlug ? option.skill.slug : undefined}>
                         {(slug) => <span class="mention-picker-slug">{slug()}</span>}
                       </Show>
-                      <Show when={pickerOptionDescription(option, format, t)}>
+                      <Show when={pickerOptionDescription(option, t, format)}>
                         {(description) => <span class="mention-picker-description">{description()}</span>}
                       </Show>
                       <Badge class="mention-picker-badge" variant="ghost">

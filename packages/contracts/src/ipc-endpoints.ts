@@ -59,6 +59,13 @@ import type {
 } from "./ipc-agent-admin";
 import type { AgentAnalytics, AgentAnalyticsInput } from "./ipc-agent-analytics";
 import type { AgentIpcRequest, ScopedAgentEvent } from "./ipc-agent-events";
+import type {
+  AgentExclusionChange,
+  AgentFolderChange,
+  AgentFolderInput,
+  AgentFolderList,
+  ChooseAgentFolderInput,
+} from "./ipc-agent-folders";
 import type { ClientAgentModelOption } from "./ipc-agent-identity";
 import type {
   AgentImportPreview,
@@ -73,6 +80,7 @@ import type {
   CreateAgentMemoryInput,
   DeleteAgentMemoryInput,
   HostAgentMemoryLimit,
+  HostMemoryReview,
   MemoryEntry,
   SetAgentMemoryInclusionInput,
   UpdateAgentMemoryInput,
@@ -107,7 +115,9 @@ import type {
 import type {
   AgentTask,
   AgentTaskInput,
+  AgentTaskReadState,
   AgentTasksSnapshot,
+  MarkAgentTaskReadInput,
   RenameAgentTaskInput,
   RunQueuedMessageAsTaskInput,
   StartAgentTaskInput,
@@ -134,6 +144,7 @@ import type {
   AnalyticsPreference,
   AppInfo,
   AppSetupState,
+  BackgroundProcess,
   CentralAuthState,
   ChatWindowTarget,
   ComputerUseHighlightPlacement,
@@ -497,6 +508,10 @@ import type {
   VoiceApiKeyInput,
   VoiceModelRequest,
   VoiceModelStatus,
+  VoiceServerConnection,
+  VoiceServerProbe,
+  VoiceServerSave,
+  VoiceServerSettings,
   VoiceSettings,
   VoiceStream,
   VoiceStreamAudio,
@@ -525,7 +540,13 @@ import type {
   WorkflowVersionInput,
   WorkflowWebhookSecret,
 } from "./ipc-workflows";
-import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
+import type {
+  LicenseCheckoutRequest,
+  LicensePlanRequest,
+  LicenseRenewalRequest,
+  LicenseState,
+  LicenseUsersRequest,
+} from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
 declare const payloadType: unique symbol;
@@ -680,6 +701,9 @@ export const IPC_ENDPOINTS = {
     // the renderer, so the menu click is broadcast rather than handled: every window opens its
     // own Settings.
     openSettings: event<undefined>()("app:open-settings"),
+    // The native Check for Updates menu item opens the Updates tab, because only that tab shows
+    // the check and its result.
+    openUpdateSettings: event<undefined>()("app:open-update-settings"),
     openExternal: request<ExternalDestination, void>()("app:open-external"),
     openUrl: request<string, void>()("app:open-url"),
     getExternalLinkPreference: request<undefined, ExternalLinkPreference>()("app:get-external-link-preference"),
@@ -842,6 +866,12 @@ export const IPC_ENDPOINTS = {
      */
     keepRecording: request<VoiceTranscriptionInput, DraftAttachment>()("voice:keep-recording"),
     speechModelStatus: event<SpeechModelStatus>()("voice:speech-model-status"),
+    /** The user's own voice server, or null. While a route is on, `transcribe` or `speak` uses it. */
+    getServer: request<undefined, VoiceServerSettings | null>()("voice:get-server"),
+    /** Lists the models and voices of a server, before the user saves it. */
+    probeServer: request<VoiceServerConnection, VoiceServerProbe>()("voice:probe-server"),
+    setServer: request<VoiceServerSave, VoiceServerSettings | null>()("voice:set-server"),
+    serverSettings: event<VoiceServerSettings | null>()("voice:server-settings"),
   },
   dynamicIsland: {
     getPreference: request<undefined, DynamicIslandPreference>()("dynamic-island:get-preference"),
@@ -887,6 +917,12 @@ export const IPC_ENDPOINTS = {
   macAutomation: {
     /** Sends one harmless Apple Event to each app, so macOS shows its Automation prompts now. */
     request: request<readonly MacAutomationTarget[], MacAutomationResult[]>()("mac-automation:request"),
+  },
+  // The programs that agents left running on this computer. `list` answers null where OpenBot cannot
+  // find them (Windows). `stop` takes the id of one, and ends it with its children.
+  backgroundProcesses: {
+    list: request<undefined, BackgroundProcess[] | null>()("background-processes:list"),
+    stop: request<string, void>()("background-processes:stop"),
   },
   skills: {
     localList: request<undefined, MarketplaceSkillDetail[]>()("skills:local-list"),
@@ -989,8 +1025,8 @@ export const IPC_ENDPOINTS = {
     // `openRelaySignIn` opens the page when the user asks, and `pasteRelaySignIn` takes the address
     // the browser shows when the callback cannot reach this computer.
     startRelaySignIn: scopedRequest<AgentProviderId, void, "required">()("provider-admin:start-relay-sign-in"),
-    // The relayed sign-in of an account after the first (`provider-account-relay-v1`). The other relay
-    // requests run it, by its provider, as they run `startRelaySignIn`'s.
+    // The relayed sign-in of an account after the first (`provider-account-relay-v1` or `-v2`). The
+    // other relay requests run it, by its provider, as they run `startRelaySignIn`'s.
     startAccountRelaySignIn: scopedRequest<ConnectProviderAccountInput, void, "required">()(
       "provider-admin:start-account-relay-sign-in",
     ),
@@ -1101,6 +1137,10 @@ export const IPC_ENDPOINTS = {
     // How many memories each agent of the server can keep, and the values its host permits.
     getAgentMemoryLimit: scopedQuery<HostAgentMemoryLimit, "required">()("host-admin:get-agent-memory-limit"),
     setAgentMemoryLimit: scopedRequest<number, HostAgentMemoryLimit, "required">()("host-admin:set-agent-memory-limit"),
+    // How many completed turns of one conversation pass between two background memory reviews of the
+    // server's agents (`0` is off), and the values its host permits.
+    getMemoryReview: scopedQuery<HostMemoryReview, "required">()("host-admin:get-memory-review"),
+    setMemoryReview: scopedRequest<number, HostMemoryReview, "required">()("host-admin:set-memory-review"),
     // The machine alert levels and the member who gets the alert (`machine-resources-v1`).
     getMachineAlerts: scopedQuery<MachineAlertSettings, "required">()("host-admin:get-machine-alerts"),
     setMachineAlerts: scopedRequest<MachineAlertSettings, MachineAlertSettings, "required">()(
@@ -1216,6 +1256,7 @@ export const IPC_ENDPOINTS = {
     getState: request<undefined, LicenseState>()("license:get-state"),
     openCheckout: request<LicenseCheckoutRequest, void>()("license:open-checkout"),
     setUsers: request<LicenseUsersRequest, LicenseState>()("license:set-users"),
+    changePlan: request<LicensePlanRequest, LicenseState>()("license:change-plan"),
     setRenewal: request<LicenseRenewalRequest, LicenseState>()("license:set-renewal"),
   },
   // OpenBot servers that the account server runs for this account. `wake` also works for a server
@@ -1231,6 +1272,14 @@ export const IPC_ENDPOINTS = {
     wake: request<string, HostedServerSummary>()("hosted-servers:wake"),
     // Owner only. Stops a running server and starts it again; a server that does not run starts.
     restart: request<string, HostedServerSummary>()("hosted-servers:restart"),
+  },
+  // Servers that the desktop app starts on this computer, each with its own data. Each one is in the
+  // server list as a joined server with `thisComputer`. `create` takes the name; the others take the
+  // server id. A server, in server mode or hosted, has none and refuses these.
+  localServers: {
+    create: request<string, ServerSummary>()("local-servers:create"),
+    restart: request<string, void>()("local-servers:restart"),
+    delete: request<string, void>()("local-servers:delete"),
   },
   marketplaceAgents: {
     list: request<MarketplaceAgentQuery | undefined, MarketplaceAgentPage>()("marketplace-agents:list"),
@@ -1374,6 +1423,8 @@ export const IPC_ENDPOINTS = {
     // A joined server takes these through `agent-threads-v1`.
     renameTask: scopedRequest<RenameAgentTaskInput, void>()("agent:tasks:rename"),
     deleteTask: scopedRequest<AgentTaskInput, void>()("agent:tasks:delete"),
+    // A joined server takes this through `agent-thread-reads-v1`.
+    markTaskRead: scopedRequest<MarkAgentTaskReadInput, AgentTaskReadState>()("agent:tasks:mark-read"),
     acknowledgeFailedTurn: scopedRequest<AcknowledgeFailedTurnInput, void>()("agent:acknowledge-failed-turn"),
     cancelQueuedMessage: scopedRequest<CancelQueuedMessageInput, void>()("agent:cancel-queued-message"),
     steerQueuedMessage: scopedRequest<SteerQueuedMessageInput, void>()("agent:steer-queued-message"),
@@ -1383,6 +1434,7 @@ export const IPC_ENDPOINTS = {
     interrupt: scopedRequest<InterruptTurnInput, void>()("agent:interrupt"),
     clearContext: scopedRequest<string, void>()("agent:clear-context"),
     compactContext: scopedRequest<string, void>()("agent:compact-context"),
+    compactTaskContext: scopedRequest<AgentTaskInput, void>()("agent:tasks:compact-context"),
     respondToPrompt: scopedRequest<RespondToPromptInput, void>()("agent:respond-to-prompt"),
     respondToApproval: scopedRequest<RespondToApprovalInput, void>()("agent:respond-to-approval"),
     respondToBrowserSecret: scopedRequest<LocalBrowserSecretResponse, void>()("agent:respond-to-browser-secret"),
@@ -1506,6 +1558,20 @@ export const IPC_ENDPOINTS = {
     listWorkspaceDirectory: scopedRequest<OpenWorkspaceFileInput, WorkspaceDirectory>()(
       "agent:list-workspace-directory",
     ),
+  },
+  // The folders a local agent can change besides its workspace. A joined server has no route for them:
+  // the Team API does not carry them, as it does not carry `access`.
+  agentFolders: {
+    listAgentFolders: request<string, AgentFolderList>()("agent:folders:list"),
+    // Opens the folder picker in main.
+    chooseAgentFolder: request<ChooseAgentFolderInput, AgentFolderChange>()("agent:folders:choose"),
+    // A dropped folder, or the Undo of a removal. Main checks each path as it checks a picked one.
+    addAgentFolder: request<AgentFolderInput, AgentFolderChange>()("agent:folders:add"),
+    removeAgentFolder: request<AgentFolderInput, AgentFolderChange>()("agent:folders:remove"),
+    // Folders in those that the agent must not change. The picker opens in main; add is the Undo.
+    chooseAgentExclusion: request<string, AgentExclusionChange>()("agent:folders:exclusions:choose"),
+    addAgentExclusion: request<AgentFolderInput, AgentExclusionChange>()("agent:folders:exclusions:add"),
+    removeAgentExclusion: request<AgentFolderInput, AgentExclusionChange>()("agent:folders:exclusions:remove"),
   },
   // Not part of `agentAttachments`: the preload sends the paths of dropped and pasted files, and the
   // renderer must never name a path to import. So this group is never bridged to the renderer.
@@ -1800,6 +1866,7 @@ export const IPC_GROUP_PATHS = {
   browserDock: "browserDock",
   computerUse: "computerUse",
   macAutomation: "macAutomation",
+  backgroundProcesses: "backgroundProcesses",
   skills: "skills",
   customProviders: "customProviders",
   providerDetection: "providerDetection",
@@ -1820,6 +1887,7 @@ export const IPC_GROUP_PATHS = {
   billing: "billing",
   license: "license",
   hostedServers: "hostedServers",
+  localServers: "localServers",
   marketplaceAgents: "marketplaceAgents",
   agentTemplates: "agentTemplates",
   auth: "auth",
@@ -1832,6 +1900,7 @@ export const IPC_GROUP_PATHS = {
   channelMemories: "agent",
   channelRoutines: "agent",
   agentAttachments: "agent",
+  agentFolders: "agent",
   // The preload calls it from its own drop, paste, and file input handlers.
   attachmentImports: null,
   browser: "browser",

@@ -39,6 +39,7 @@ import {
   isRoutineSchedule,
   type ListChannelRoutineRunsInput,
   type ListRoutineRunsInput,
+  type MarkAgentTaskReadInput,
   type MarkConversationReadInput,
   type OpenAttachmentInput,
   type OpenMessageLinkInput,
@@ -588,6 +589,12 @@ export function parseRenameAgentTask(value: unknown): RenameAgentTaskInput {
   const title = agentThreadTitle(value.title);
   if (title === null) throw new Error("Invalid title.");
   return { ...task, title };
+}
+
+export function parseMarkAgentTaskRead(value: unknown): MarkAgentTaskReadInput {
+  const task = parseAgentTask(value);
+  if (!isObject(value)) throw new Error("Invalid task request.");
+  return { ...task, throughMessageId: requireString(value.throughMessageId, "throughMessageId") };
 }
 
 export function parseMessageReaction(value: unknown): SetMessageReactionInput {

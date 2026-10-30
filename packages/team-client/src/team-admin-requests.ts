@@ -24,12 +24,13 @@ import { DISCORD_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/discord-
 import { HOST_MEMBER_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host-member-update-v1";
 import { HOST_RELEASE_ROUTES } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TIMEZONE_ROUTES } from "@openbot/contracts/team-protocol/host-timezone-v1";
+import { MEMORY_REVIEW_ROUTES } from "@openbot/contracts/team-protocol/memory-review-v1";
 import { PROMPT_CACHE_TTL_ROUTES } from "@openbot/contracts/team-protocol/prompt-cache-ttl-v1";
 import { PROVIDER_DEFAULT_ROUTES } from "@openbot/contracts/team-protocol/provider-default-v1";
 import type { PROVIDERS_V5_ROUTES } from "@openbot/contracts/team-protocol/providers-v5";
 import { PROVIDERS_V8_ROUTES } from "@openbot/contracts/team-protocol/providers-v8";
 // Admin requests to one host: agent settings and skills, shared tables, agent share links, the server name and logo,
-// the server timezone, the agent memory limit, the prompt cache time, the default provider, the Discord roles that can use OpenBot, the app update, MCP servers, storage, hosted sites and providers.
+// the server timezone, the agent memory limit, the memory review, the prompt cache time, the default provider, the Discord roles that can use OpenBot, the app update, MCP servers, storage, hosted sites and providers.
 //
 // The desktop sends the same routes from the main process. The web client and the mobile app send
 // them through their own transport, so the path, body and decoding of each request are here once.
@@ -67,6 +68,7 @@ import {
   decodeHostBitwardenConnectorStatus,
   decodeHostGitHubConnectorRepositories,
   decodeHostGitHubConnectorStatus,
+  decodeHostMemoryReview,
   decodeHostMessagingOverview,
   decodeHostOnePasswordConnectorStatus,
   decodeHostProviderAccounts,
@@ -101,6 +103,7 @@ import {
   type HostAgentMemoryLimit,
   type HostedSiteList,
   type HostGitHubConnectorStatus,
+  type HostMemoryReview,
   type HostMessagingConnectInput,
   type HostMessagingPlatformInput,
   type HostMessagingWorkspaceInput,
@@ -200,10 +203,10 @@ import { MCP_SIGN_IN_APP_ROUTES } from "@openbot/contracts/team-protocol/mcp-sig
 import { MCP_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
 import { MCP_ROUTES } from "@openbot/contracts/team-protocol/mcp-v1";
 import { ONEPASSWORD_CONNECTOR_ROUTES } from "@openbot/contracts/team-protocol/onepassword-connector-v1";
-import {
-  type PROVIDER_ACCOUNT_RELAY_PROVIDERS,
-  PROVIDER_ACCOUNT_RELAY_ROUTES,
-} from "@openbot/contracts/team-protocol/provider-account-relay-v1";
+import type {
+  ProviderAccountRelay,
+  ProviderAccountRelayProvider,
+} from "@openbot/contracts/team-protocol/provider-account-relays";
 import { PROVIDER_ACCOUNTS_ROUTES } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { PROVIDER_HOST_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/provider-host-sign-in-v1";
 import { PROVIDER_SIGN_OUT_ROUTES } from "@openbot/contracts/team-protocol/provider-sign-out-v1";
@@ -581,6 +584,18 @@ export function setHostAgentMemoryLimit(
   return adminCall(() => request("POST", AGENT_MEMORY_LIMIT_ROUTES.update, decodeHostAgentMemoryLimit, { limit }));
 }
 
+export function getHostMemoryReview(request: TeamApiRequest): Effect.Effect<HostMemoryReview, TeamAdminRequestError> {
+  return adminCall(() => request("POST", MEMORY_REVIEW_ROUTES.settings, decodeHostMemoryReview, {}));
+}
+
+/** `0` turns the review off. The host refuses a value that its snapshot does not list in `choices`. */
+export function setHostMemoryReview(
+  request: TeamApiRequest,
+  interval: number,
+): Effect.Effect<HostMemoryReview, TeamAdminRequestError> {
+  return adminCall(() => request("POST", MEMORY_REVIEW_ROUTES.update, decodeHostMemoryReview, { interval }));
+}
+
 /** The roles of the host (`agent-access-v1`). A member reads only `mine`. */
 export function getHostAgentAccess(request: TeamApiRequest): Effect.Effect<AgentAccessSnapshot, TeamAdminRequestError> {
   return adminCall(() => request("POST", AGENT_ACCESS_ROUTES.read, decodeAgentAccessSnapshot, {}));
@@ -726,12 +741,13 @@ export function startProviderSignInRelay(
   return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.providerStart, decodeSignInRelayFlow, { provider }));
 }
 
-/** A relayed sign-in of an account after the first (`provider-account-relay-v1`). */
+/** A relayed sign-in of an account after the first, on the route of the host's account relay. */
 export function startProviderAccountSignInRelay(
   request: TeamApiRequest,
-  input: { provider: (typeof PROVIDER_ACCOUNT_RELAY_PROVIDERS)[number]; accountId: string | null },
+  relay: ProviderAccountRelay,
+  input: { provider: ProviderAccountRelayProvider; accountId: string | null },
 ): Effect.Effect<{ flowId: string }, TeamAdminRequestError> {
-  return adminCall(() => request("POST", PROVIDER_ACCOUNT_RELAY_ROUTES.start, decodeSignInRelayFlow, { ...input }));
+  return adminCall(() => request("POST", relay.start, decodeSignInRelayFlow, { ...input }));
 }
 
 /** A relayed sign-in of a link that an agent of the host printed (`sign-in-relay-v1`). */

@@ -73,6 +73,8 @@ export const messages = {
   "error.backend.channelRoutingTooLong":
     "Dit verzoek overschrijdt de contextlimiet voor routering. Kies een lid of stuur een korter verzoek.",
   "error.backend.channelTaskMemberRequired": "Kies een lid voor deze taak.",
+  "error.backend.channelTaskStopped": "Gestopt. Ga verder of wijs deze taak opnieuw toe.",
+  "error.backend.channelRoutingUnreadable": "De leider kon dit bericht niet toewijzen. Wijs het toe aan een lid.",
   "error.backend.channelRoutingFailed": "Routering is mislukt. Kies een lid of probeer het opnieuw.",
   "error.backend.channelLeadTimedOut": "De kanaalleider reageerde niet op tijd. Kies een lid of probeer het opnieuw.",
   "error.backend.channelLeadFailed":
@@ -81,6 +83,8 @@ export const messages = {
   "error.backend.channelDeliveryNotCreated": "De bezorging in het kanaal is niet gemaakt.",
   "error.backend.channelAssignmentStopped": "Deze kanaalopdracht is gestopt of vervangen.",
   "error.backend.channelAssigneeUnavailable": "De toegewezen agent is niet beschikbaar.",
+  "error.backend.channelAssigneeRemoved": "Het toegewezen lid is verwijderd.",
+  "error.backend.channelAssigneeReassign": "Het toegewezen lid is niet beschikbaar. Wijs deze taak opnieuw toe.",
   "error.backend.channelAssignmentChanged": "Deze kanaalopdracht is gewijzigd.",
   "error.backend.channelMemberRequired": "Kies een beschikbaar lid van dit kanaal.",
   "error.backend.memoryEssentialBudget":
@@ -199,6 +203,7 @@ export const messages = {
   "error.backend.routineFlowHandoffFailed": "De routine kon het werk niet aan deze agent doorgeven.",
   "error.backend.mcpServerLimit": "OpenBot bewaart maximaal {limit} MCP-servers.",
   "error.backend.mcpServerNameTaken": "Er bestaat al een MCP-server met de naam {name}.",
+  "error.backend.mcpServerInvalid": "OpenBot kan deze MCP-serverconfiguratie niet opslaan.",
   "error.backend.mcpServerNoAnswer": "De server reageerde niet binnen {seconds} seconden.",
   "error.backend.mcpSignInNotAccepted": "De server heeft die inlog niet geaccepteerd.",
   "error.backend.mcpSignInClientRefused":
@@ -223,6 +228,7 @@ export const messages = {
     "OpenBot kon de inloggegevens van deze server niet lezen. Controleer het serveradres en probeer het opnieuw.",
   "error.backend.mcpServerExited":
     "De server is gestopt voordat hij antwoordde. Voer de opdracht uit in een terminal om de fout te zien.",
+  "error.backend.mcpServerFailedToStart": "De server is niet gestart: {reason}",
   "error.backend.mcpOAuthProxyUnavailable":
     "OpenBot kon de lokale inlogverbinding voor deze server niet starten. Start OpenBot opnieuw en probeer het nog eens.",
   "error.backend.mcpOAuthSignInNeeded":

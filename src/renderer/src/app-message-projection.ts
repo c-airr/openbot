@@ -8,6 +8,7 @@ import {
   isAgentReasoningCommentary,
   isChannelChangeMarker,
   isContextResetMarker,
+  isPlanContinuationMarker,
   isSessionImportMarker,
   isVaultChangeMarker,
   marketplaceSuggestionEvent,
@@ -55,6 +56,8 @@ export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
     ...(stored.busyMessageMode === undefined ? {} : { busyMessageMode: stored.busyMessageMode }),
     ...(stored.taskLimit === undefined ? {} : { taskLimit: stored.taskLimit }),
     ...(stored.backupModels === undefined ? {} : { backupModels: stored.backupModels }),
+    ...(stored.additionalFolders === undefined ? {} : { additionalFolders: stored.additionalFolders }),
+    ...(stored.excludedFolders === undefined ? {} : { excludedFolders: stored.excludedFolders }),
     ...(stored.usageLimitReturn === undefined ? {} : { usageLimitReturn: stored.usageLimitReturn }),
     ...(stored.pendingRuntime === undefined ? {} : { pendingRuntime: stored.pendingRuntime }),
     threadId: stored.threadId,
@@ -233,6 +236,8 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.reasoningEffort === right.reasoningEffort &&
     left.providerAccountId === right.providerAccountId &&
     JSON.stringify(left.backupModels) === JSON.stringify(right.backupModels) &&
+    (left.additionalFolders ?? []).join("\n") === (right.additionalFolders ?? []).join("\n") &&
+    (left.excludedFolders ?? []).join("\n") === (right.excludedFolders ?? []).join("\n") &&
     JSON.stringify(left.usageLimitReturn) === JSON.stringify(right.usageLimitReturn) &&
     JSON.stringify(left.pendingRuntime) === JSON.stringify(right.pendingRuntime) &&
     left.access === right.access &&
@@ -341,6 +346,8 @@ function chatActionMarker(
   if (isVaultChangeMarker(message)) return { kind: "vault-change", text: message.text, timestamp: message.createdAt };
   if (isSessionImportMarker(message))
     return { kind: "session-import", text: message.text, timestamp: message.createdAt };
+  if (isPlanContinuationMarker(message))
+    return { kind: "plan-continuation", text: message.text, timestamp: message.createdAt };
   const skillEvent = skillConversationEvent(message);
   if (skillEvent) return { ...skillEvent, kind: "skill-lifecycle", timestamp: message.createdAt };
   const suggestion = marketplaceSuggestionEvent(message);

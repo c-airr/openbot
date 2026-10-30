@@ -306,6 +306,8 @@ function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
           draft={editDraft()}
           providerIdLocked={Boolean(editing())}
           apiKeyKept={Boolean(editing()?.hasApiKey)}
+          // Edit and the context window are both of this computer: the Team API has neither.
+          contextWindows={Boolean(props.onUpdateCustomProvider)}
           busy={host.state.saving}
           submitError={host.state.submitError}
           takenProviderIds={customProviders().map((provider) => provider.id)}
@@ -389,9 +391,9 @@ function createProviderKeyState(props: { readonly open: boolean; readonly provid
     openCodeKeyStatus,
     claudeKeyStatus,
     /**
-     * Only the providers whose sign-in can be a pasted key are served: OpenCode, Muse, Gemini and
-     * Claude. Claude's Sign in also lands here on an older host, which would store the key and never
-     * read it.
+     * Only the providers whose sign-in can be a pasted key are served: OpenCode, Muse, Gemini, Claude
+     * and, on this computer, Codex. Claude's Sign in also lands here on an older host, which would
+     * store the key and never read it.
      */
     openKeyDialog(provider: AgentProviderId): void {
       if (isKeyDialogProvider(provider) && (provider !== "claude" || props.providerKeys?.readsClaudeKey)) {
