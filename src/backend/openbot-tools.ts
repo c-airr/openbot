@@ -569,7 +569,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "apply_compact",
     description:
-      "Only in a /compact helper chat (its description is parent:<id>): hand over the finished briefing. The parent chat then continues from it, in the same chat, and the user does not see the briefing. Call it once, after you read the parent chat.",
+      "Only in a /compact helper chat (its description is compact:<time> parent:<id>): hand over the finished briefing. The parent chat then continues from it, in the same chat, and the user does not see the briefing. Call it once, after you read the parent chat.",
     shape: { summary: z.string().min(1).max(24_000) },
   },
   {

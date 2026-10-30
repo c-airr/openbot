@@ -19,6 +19,7 @@ import {
   deliveryPromptInput,
 } from "./delivery-content";
 import type { DuplicationGate } from "./duplication-gate";
+import { COMPACT_HELPER } from "./history-tools";
 import type { MailboxSync } from "./mailbox-sync";
 import type { MemoryHold } from "./memory-hold";
 import type { ProfileSave } from "./profile-save";
@@ -313,7 +314,8 @@ export class DrainScheduler {
     )
       return "agent-client-changing";
     // A hidden agent finishes the turn that runs. Its queued messages wait until the user restores it.
-    if (agent?.hiddenAt !== undefined) return "hidden";
+    // Fork: a /compact helper is hidden from its start and must still run its one task.
+    if (agent?.hiddenAt !== undefined && !COMPACT_HELPER.test(agent.description)) return "hidden";
     // Channel work holds only the agent's own chat. Its tasks run beside a channel turn.
     if (taskId === null && !(this.#channels?.mayDrain(agentId) ?? true)) return "channel";
     if (!this.#profileSave.mayDrain(agentId)) return "profile-save";

@@ -71,7 +71,7 @@ import type { ConversationRuntime } from "./conversation-runtime";
 import { handleDataTool } from "./data-tools";
 import { responseAttachmentMessageId, visualReplyFileName, visualReplyMessageId } from "./delivery-content";
 import type { DrainScheduler } from "./drain-scheduler";
-import { HistoryTools } from "./history-tools";
+import { COMPACT_HELPER, COMPACT_HELPER_MAX_AGE_MS, HistoryTools } from "./history-tools";
 import type { HostedSiteCoordinator } from "./hosted-site-coordinator";
 import { isHostedSiteMutationTool } from "./hosted-site-events";
 import type { MailboxSync } from "./mailbox-sync";
@@ -947,10 +947,13 @@ export class OpenBotToolRouter {
     // Fork: the helper of /compact hands over its briefing.
     if (params.tool === "apply_compact") {
       const own = this.#store.list().find((candidate) => candidate.id === senderAgentId);
-      const parentId = /parent:([\w-]+)/u.exec(own?.description ?? "")?.[1];
+      const helper = COMPACT_HELPER.exec(own?.description ?? "");
+      const parentId = helper?.[2];
       const summary = isRecord(params.arguments) && isString(params.arguments.summary) ? params.arguments.summary : "";
       if (!parentId || !this.#store.list().some((candidate) => candidate.id === parentId))
         return openBotToolFailure("Only the helper of a /compact has a chat to compact.");
+      if (Date.now() - Number(helper?.[1]) > COMPACT_HELPER_MAX_AGE_MS)
+        return openBotToolFailure("This /compact started too long ago. The chat was not compacted. Stop now.");
       if (!summary.trim()) return openBotToolFailure("summary is required.");
       yield* this.#hooks.applyCompact(parentId, summary);
       return openBotToolResult({

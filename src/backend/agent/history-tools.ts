@@ -41,6 +41,12 @@ const cursorSchema = z.strictObject({
   query: z.string().nullable(),
 });
 
+/** Fork: the description of a /compact helper: when it started (ms) and the chat it compacts. */
+export const COMPACT_HELPER = /^compact:(\d+) parent:([\w-]+)/u;
+
+/** Fork: a briefing that comes later than this is refused, so a stuck helper never compacts a chat by surprise. */
+export const COMPACT_HELPER_MAX_AGE_MS = 20 * 60_000;
+
 export const HISTORY_TOOL_DEFINITIONS = [
   {
     name: "history_search",

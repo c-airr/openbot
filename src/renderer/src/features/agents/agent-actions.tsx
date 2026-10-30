@@ -281,7 +281,8 @@ const AgentActions = createSimpleContext({
                   ...(cheap.reasoningEffort ? { reasoningEffort: cheap.reasoningEffort } : {}),
                 }
               : {}),
-            description: `parent:${agentId}`,
+            // "compact:<start>" lets the hidden helper run its queue and makes a late briefing refused.
+            description: `compact:${Date.now()} parent:${agentId}`,
             initialMessage:
               "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. Do not write the briefing in this chat: pass it to openbot.apply_compact as summary, once. Then answer with one short line.",
           }),
