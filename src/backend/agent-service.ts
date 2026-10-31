@@ -419,6 +419,18 @@ export type AgentUpdate = UpdateAgentInput & {
   excludedFolders?: string[];
 };
 
+/** Fork: the names a chat gets before its first message (`sidebar.new.chat` in English and Polish). */
+const DEFAULT_CHAT_NAMES = new Set(["New chat", "Nowy czat"]);
+
+/** Fork: the first line of a message, at most 48 characters, cut at a word. Empty for a message with no text. */
+export function chatNameFrom(text: string): string {
+  const line = (text.split("\n").find((candidate) => candidate.trim()) ?? "").replace(/\s+/gu, " ").trim();
+  if (line.length <= 48) return line;
+  const cut = line.slice(0, 48);
+  const word = cut.lastIndexOf(" ");
+  return `${(word > 24 ? cut.slice(0, word) : cut).trimEnd()}…`;
+}
+
 export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly channels: ChannelService;
   readonly messaging: MessagingThreads;
@@ -4779,6 +4791,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             Effect.sync(() => this.#emitError("message_preview_failed", failure.cause, agent.id)),
           ),
         );
+    // Fork: a chat still called "New chat" takes its name from the user's first message, so the list
+    // never shows a row of "New chat"; the model can rename it later with name_chat.
+    const chatName = !task && DEFAULT_CHAT_NAMES.has(agent.name) ? chatNameFrom(input.text) : "";
+    if (chatName)
+      yield* this.#store.updateAgent({ agentId: agent.id, name: chatName }).pipe(Effect.catch(() => Effect.void));
     yield* this.#steerWhenBusy(agent, task, snapshot, delivery.delivery.id, true);
     if (!task) {
       this.#emit({ type: "agents-changed", agents: this.listAgents() });

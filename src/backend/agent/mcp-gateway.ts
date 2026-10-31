@@ -32,7 +32,6 @@ import {
 import { mcpSecretValues, redactMcpValues } from "../mcp-redaction";
 import { McpServerError, type McpServerStore } from "../mcp-server-store";
 import type { ProviderClientContext } from "../provider-drivers";
-import { providerLabel } from "./thread-items";
 
 /**
  * Whether a person is in front of this test.
@@ -548,10 +547,7 @@ export class McpGateway {
         reason: drop.reason,
         detail: this.redact(drop.detail),
       });
-      this.#hooks.emitError(
-        "mcp_server_not_started",
-        `${providerLabel(provider)} did not get the MCP server "${drop.name}". ${drop.detail}`,
-      );
+      // Fork: the log only. The user found the toast for a closed local server (Unreal) a nuisance.
     }
   }
 

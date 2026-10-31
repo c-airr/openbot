@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.6] - 2026-10-31
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- A chat called "New chat" takes its name from your first message.
+- An MCP server that a provider did not get, such as a closed local server, is logged and no longer
+  shows a notice.
+
 ## [0.54.5] - 2026-10-30
 
 Fork release (c-airr/openbot).
