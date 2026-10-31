@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.9] - 2026-10-31
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- The usage limit notification says that a click lets you pick another model. A click opens the
+  agent's chat, where the message box offers a model to continue on. Before, it said only that
+  OpenBot would try again later.
+
 ## [0.54.8] - 2026-10-31
 
 Fork release (c-airr/openbot).

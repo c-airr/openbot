@@ -19,12 +19,12 @@ export const messages = defineMessages("notification", {
   "notification.channelMessage": "Sent a message.",
   "notification.usageLimit.title": "{provider} account reached its limit",
   "notification.usageLimit.body": {
-    one: "{count} agent waits. OpenBot will try again later.",
-    other: "{count} agents wait. OpenBot will try again later.",
+    one: "{count} agent waits. Click to pick another model.",
+    other: "{count} agents wait. Click to pick another model.",
   },
   "notification.usageLimit.bodyResets": {
-    one: "{count} agent waits. Resets {reset}.",
-    other: "{count} agents wait. Resets {reset}.",
+    one: "{count} agent waits. Resets {reset}. Click to pick another model.",
+    other: "{count} agents wait. Resets {reset}. Click to pick another model.",
   },
   // A metric of a server machine passed its alert level. {percent} and {level} are formatted percents.
   "notification.machineAlert.disk": "{server}: disk {percent} full",
