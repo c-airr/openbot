@@ -12,7 +12,7 @@ import type {
   ProviderRuntimeStatus,
 } from "@openbot/contracts/ipc";
 import type { AppTextKey, AppTranslate } from "@openbot/i18n";
-import { Button, Field, Input, Textarea } from "@openbot/ui";
+import { ArrowUp, Button, Field, IconButton, Input, Textarea } from "@openbot/ui";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import { AVATAR_HUE_CHOICES, avatarCandidateSeeds, avatarHeadColor, avatarHueSwatch } from "../../bloub-avatar";
 import { ProviderModelPicker } from "../../components/ProviderModelPicker";
@@ -191,7 +191,7 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
     Boolean((chat() ? props.value.purpose : props.value.name).trim()) &&
     !instructionsTooLong(props.value.purpose) &&
     !props.submitting;
-  const displayName = () => (chat() ? t("agent.chat.title") : props.value.name.trim() || t("agent.setup.nameFallback"));
+  const displayName = () => props.value.name.trim() || t("agent.setup.nameFallback");
 
   function updateSuggestionFades(): void {
     if (!suggestionList) return;
@@ -340,15 +340,20 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
   }
 
   return (
-    <main class="conversation-panel first-agent-setup-panel" aria-labelledby="first-agent-setup-title">
+    <main
+      class={`conversation-panel first-agent-setup-panel${chat() ? " first-agent-chat-start" : ""}`}
+      aria-labelledby="first-agent-setup-title"
+    >
       <header class="window-drag first-agent-setup-header">
         <div
           class="first-agent-header-identity"
           data-avatar-seed={props.value.avatarSeed}
           data-avatar-hue={props.value.avatarHue ?? "automatic"}
         >
-          <AgentAvatar seed={props.value.avatarSeed} hue={props.value.avatarHue} motion="idle" />
-          <h1 aria-live="polite">{displayName()}</h1>
+          <Show when={!chat()}>
+            <AgentAvatar seed={props.value.avatarSeed} hue={props.value.avatarHue} motion="idle" />
+            <h1 aria-live="polite">{displayName()}</h1>
+          </Show>
         </div>
         <Show when={props.mode !== "first" && props.onCancel}>
           <Button
@@ -372,9 +377,9 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
             if (canSubmit()) void props.onSubmit(props.value);
           }}
         >
-          <h2 id="first-agent-setup-title" class="sr-only">
+          <h2 id="first-agent-setup-title" class={chat() ? "first-agent-chat-greeting" : "sr-only"}>
             {chat()
-              ? t("agent.chat.title")
+              ? t("agent.chat.greeting")
               : props.mode === "additional"
                 ? t("agent.setup.titleAdditional")
                 : t("agent.setup.titleFirst")}
@@ -459,7 +464,25 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
             </fieldset>
           </Show>
 
-          <div class="first-agent-fields">
+          <div class={chat() ? "first-agent-chat-box" : "first-agent-fields"}>
+            <Show when={chat()}>
+              {/* Fork: the start screen, as on claude.ai. Enter sends, Shift+Enter starts a new line. */}
+              <Textarea
+                value={props.value.purpose}
+                rows={3}
+                autofocus
+                aria-label={t("agent.chat.message")}
+                invalid={instructionsTooLong(props.value.purpose)}
+                placeholder={t("agent.chat.messagePlaceholder")}
+                disabled={props.submitting}
+                onValueChange={(purpose) => updateDraft({ purpose })}
+                onKeyDown={(event: KeyboardEvent) => {
+                  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+                  event.preventDefault();
+                  if (canSubmit()) void props.onSubmit(props.value);
+                }}
+              />
+            </Show>
             <Show when={!chat()}>
               <Field label={t("agent.setup.name")} required>
                 <Input
@@ -471,23 +494,25 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
                 />
               </Field>
             </Show>
-            <Field label={chat() ? t("agent.chat.message") : t("agent.setup.purpose")} required={chat()}>
-              <Textarea
-                value={props.value.purpose}
-                rows={chat() ? 4 : 2}
-                invalid={instructionsTooLong(props.value.purpose)}
-                placeholder={chat() ? t("agent.chat.messagePlaceholder") : t("agent.setup.purposePlaceholder")}
-                disabled={props.submitting}
-                onValueChange={(purpose) => updateDraft({ purpose })}
-              />
-              <InstructionsLimit text={props.value.purpose} />
-            </Field>
+            <Show when={!chat()}>
+              <Field label={t("agent.setup.purpose")}>
+                <Textarea
+                  value={props.value.purpose}
+                  rows={2}
+                  invalid={instructionsTooLong(props.value.purpose)}
+                  placeholder={t("agent.setup.purposePlaceholder")}
+                  disabled={props.submitting}
+                  onValueChange={(purpose) => updateDraft({ purpose })}
+                />
+                <InstructionsLimit text={props.value.purpose} />
+              </Field>
+            </Show>
             <Show when={props.modelOptions}>
               {(options) => (
                 <Show when={props.agentStatus}>
                   {(status) => (
                     <ProviderModelPicker
-                      variant="field"
+                      variant={chat() ? "pill" : "field"}
                       ariaLabel={t("agent.setup.model")}
                       provider={props.value.provider}
                       value={props.value.model}
@@ -510,6 +535,18 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
                 </Show>
               )}
             </Show>
+            <Show when={chat()}>
+              <IconButton
+                type="submit"
+                variant="default"
+                class="first-agent-chat-send"
+                label={t("agent.chat.start")}
+                disabled={!canSubmit()}
+                loading={props.submitting}
+              >
+                <ArrowUp />
+              </IconButton>
+            </Show>
           </div>
 
           <Show when={props.error}>
@@ -520,19 +557,21 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
             )}
           </Show>
 
-          <div class="first-agent-submit-actions">
-            <Button
-              type="submit"
-              variant="default"
-              size="default"
-              class="first-agent-submit"
-              disabled={!canSubmit()}
-              loading={props.submitting}
-              loadingLabel={t("agent.setup.creating")}
-            >
-              {chat() ? t("agent.chat.start") : t("agent.setup.create")}
-            </Button>
-          </div>
+          <Show when={!chat()}>
+            <div class="first-agent-submit-actions">
+              <Button
+                type="submit"
+                variant="default"
+                size="default"
+                class="first-agent-submit"
+                disabled={!canSubmit()}
+                loading={props.submitting}
+                loadingLabel={t("agent.setup.creating")}
+              >
+                {chat() ? t("agent.chat.start") : t("agent.setup.create")}
+              </Button>
+            </div>
+          </Show>
         </form>
 
         <Show when={!chat()}>

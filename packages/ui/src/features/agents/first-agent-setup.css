@@ -376,3 +376,57 @@
     transition: none;
   }
 }
+
+/* Fork: the start screen of a new chat, as on claude.ai: a greeting and one wide message box. */
+.first-agent-chat-start .first-agent-setup-header {
+  border-bottom: 0;
+}
+
+.first-agent-chat-start .first-agent-editor {
+  width: min(720px, calc(100% - 48px));
+  gap: var(--openbot-space-6);
+}
+
+.first-agent-chat-greeting {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-display);
+  font-weight: var(--openbot-weight-regular);
+  text-align: center;
+}
+
+.first-agent-chat-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-control);
+  padding: var(--openbot-space-3);
+}
+
+.first-agent-chat-box:focus-within {
+  border-color: var(--openbot-border-focus);
+}
+
+.first-agent-chat-box .ui-textarea {
+  grid-column: 1 / -1;
+  field-sizing: content;
+  min-height: 72px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  resize: none;
+}
+
+.first-agent-chat-box .ui-textarea:focus-visible {
+  outline: none;
+}
+
+.first-agent-chat-box .provider-model-trigger {
+  justify-self: start;
+}

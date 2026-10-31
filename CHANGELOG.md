@@ -6,6 +6,15 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.7] - 2026-10-31
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- "New chat" opens a start screen with a greeting and one message box. The chat shows in the
+  sidebar only after you send the first message. Enter sends, Shift+Enter starts a new line.
+
 ## [0.54.6] - 2026-10-31
 
 Fork release (c-airr/openbot).

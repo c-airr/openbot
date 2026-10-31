@@ -30,7 +30,7 @@ export function WorkspaceAgentSetup() {
     serverSetupChoice,
     developmentCreation,
   } = useAgents();
-  const { createAgent, createChat } = useAgentActions();
+  const { createAgent, startChat } = useAgentActions();
   const { setupState } = useSetup();
   // Not gated on the server: the picker needs these IDs to label a model it is already showing,
   // and a remote server's OpenCode has its own catalogue. Only the write paths are local-only.
@@ -127,7 +127,7 @@ export function WorkspaceAgentSetup() {
           setModelTouched(true);
         setAgentSetupDraft(next);
       }}
-      onSubmit={agentSetupKind() === "chat" ? createChat : createAgent}
+      onSubmit={agentSetupKind() === "chat" ? startChat : createAgent}
       onCancel={agentList().length > 0 || agentSetupKind() === "chat" ? cancelAgentSetup : undefined}
     />
   );

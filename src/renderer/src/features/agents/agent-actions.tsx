@@ -65,6 +65,7 @@ const AgentActions = createSimpleContext({
       setAgentList,
       agentSetupOpen,
       setAgentSetupOpen,
+      openAgentSetup,
       agentSetupDraft,
       setAgentSetupError,
       creatingAgent,
@@ -196,9 +197,9 @@ const AgentActions = createSimpleContext({
       }
     }
 
-    /** Fork: an empty chat at once, in the default folder when one is set. */
-    function startChat() {
-      return createChat({ ...agentSetupDraft(), purpose: "" }, defaultChatFolder());
+    /** Fork: the chat from the start screen, made on its first message, in the default folder when one is set. */
+    function startChat(draft: FirstAgentDraft = agentSetupDraft()) {
+      return createChat(draft, defaultChatFolder());
     }
 
     /**
@@ -396,9 +397,10 @@ const AgentActions = createSimpleContext({
       try {
         localStorage.setItem(CHAT_FOLDER_KEY, folder);
       } catch {
-        // The chat still starts in the folder; only the default is not kept.
+        // Without storage the start screen cannot pass the folder on.
+        return createChat({ ...agentSetupDraft(), purpose: "" }, folder);
       }
-      return createChat({ ...agentSetupDraft(), purpose: "" }, folder);
+      openAgentSetup("chat");
     }
 
     /**
