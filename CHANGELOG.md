@@ -6,6 +6,15 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.8] - 2026-10-31
+
+Fork release (c-airr/openbot).
+
+### Fixed
+
+- The search in Import sessions also finds a session by its id, such as an Antigravity CLI
+  conversation id.
+
 ## [0.54.7] - 2026-10-31
 
 Fork release (c-airr/openbot).

@@ -66,7 +66,8 @@ export function SessionImportDialog(props: SessionImportDialogProps) {
     const text = query().trim().toLowerCase();
     return (props.sessions ?? []).filter((session) => {
       if (hidden().has(logoOf(session.source))) return false;
-      return !text || `${session.title} ${session.cwd ?? ""}`.toLowerCase().includes(text);
+      // The key holds the session id, so a pasted id finds its session.
+      return !text || `${session.title} ${session.cwd ?? ""} ${session.key}`.toLowerCase().includes(text);
     });
   });
   const chosen = createMemo(() => (props.sessions ?? []).filter((session) => selected().has(session.key)));
