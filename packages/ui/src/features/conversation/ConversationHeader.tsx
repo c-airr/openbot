@@ -1,4 +1,4 @@
-import { Badge, Button, Clock3, Lock } from "@openbot/ui";
+import { Badge, Button, Clock3, Leaf, Lock } from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
@@ -21,6 +21,8 @@ export interface ConversationHeaderProps {
   /** Set while a side thread is open: the agent's name then opens the agent's own chat, not its settings. */
   onOpenChat?: (() => void) | undefined;
   remoteControl?: ConversationHeaderRemoteControl | undefined;
+  /** Fork: the lean mode switch. Missing where it cannot change, such as a remote server. */
+  leanMode?: { active: boolean; onToggle: () => void } | undefined;
   /** Missing when the chat has no side panel, such as a deleted channel. */
   sidePanel?: SidePanelToggleProps | undefined;
   /** The thread tabs of the agent, after its name. */
@@ -96,6 +98,21 @@ export function ConversationHeader(props: ConversationHeaderProps) {
         </Show>
         <Show when={props.agent}>
           <ProviderModelPicker {...props.modelPicker} />
+        </Show>
+        <Show when={props.agent && props.leanMode}>
+          {(lean) => (
+            <Button
+              variant="ghost"
+              type="button"
+              class="header-panel-toggle lean-mode-toggle"
+              aria-pressed={lean().active ? "true" : "false"}
+              aria-label={t(lean().active ? "conversation.header.leanModeOn" : "conversation.header.leanModeOff")}
+              title={t(lean().active ? "conversation.header.leanModeOn" : "conversation.header.leanModeOff")}
+              onClick={() => lean().onToggle()}
+            >
+              <Leaf aria-hidden="true" />
+            </Button>
+          )}
         </Show>
         <Show when={props.remoteControl}>
           {(control) => (

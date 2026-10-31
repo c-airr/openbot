@@ -75,20 +75,52 @@ export const VISIBLE_TOOL_DEFINITIONS = [
   },
 ];
 
-export const VISIBLE_DYNAMIC_TOOLS = [
+function dynamicTools(definitions: typeof VISIBLE_TOOL_DEFINITIONS) {
+  return [
+    {
+      type: "namespace" as const,
+      name: "openbot",
+      description:
+        "OpenBot tools. Search, then call other built-in and browser capabilities. Describe a result that has no inputSchema.",
+      tools: definitions.map((definition) => ({
+        type: "function" as const,
+        name: definition.name,
+        description: definition.description,
+        inputSchema: advertisedJsonSchema(z.strictObject(definition.shape)),
+      })),
+    },
+  ];
+}
+
+export const VISIBLE_DYNAMIC_TOOLS = dynamicTools(VISIBLE_TOOL_DEFINITIONS);
+
+// Fork: lean mode keeps the tools of a one-person chat direct; the rest stay reachable through tool_search.
+const LEAN_DIRECT_NAMES = new Set([
+  "ask_user",
+  "attach_files_to_response",
+  "search_memories",
+  "remember",
+  "forget_memory",
+  "name_chat",
+  "apply_compact",
+  "tool_describe",
+  "tool_call",
+]);
+
+export const LEAN_VISIBLE_DYNAMIC_TOOLS = dynamicTools([
+  ...VISIBLE_TOOL_DEFINITIONS.filter((tool) => LEAN_DIRECT_NAMES.has(tool.name)),
   {
-    type: "namespace" as const,
-    name: "openbot",
+    name: "tool_search",
     description:
-      "OpenBot tools. Search, then call other built-in and browser capabilities. Describe a result that has no inputSchema.",
-    tools: VISIBLE_TOOL_DEFINITIONS.map((definition) => ({
-      type: "function" as const,
-      name: definition.name,
-      description: definition.description,
-      inputSchema: advertisedJsonSchema(z.strictObject(definition.shape)),
-    })),
+      "Find built-in tools by keywords or qualified name, such as browser, routine, teammate message, reaction, or API key. Pass queries (an array) or query (one string). Returns names and short descriptions, default 5, maximum 10. The strongest matches also include inputSchema and guidance, ready for tool_call.",
+    shape: searchShape,
   },
-];
+]);
+
+/** The tools that a session of the agent is given directly. */
+export function visibleDynamicTools(agent: { leanMode?: boolean | undefined }) {
+  return agent.leanMode === true ? LEAN_VISIBLE_DYNAMIC_TOOLS : VISIBLE_DYNAMIC_TOOLS;
+}
 
 /**
  * Claude names a bridge call `mcp__openbot__tool_call`. Readers of its items get the name of the tool it

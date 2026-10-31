@@ -1026,6 +1026,26 @@ export function createConversationViewScope(props: ConversationProps) {
     }
   }
 
+  // Fork: lean mode, saved the same way as fast mode.
+  const [leanModeDraft, setLeanModeDraft] = createSignal<{ agentId: string; leanMode: boolean }>();
+  const leanMode = () => {
+    const draft = leanModeDraft();
+    return draft && draft.agentId === props.agent?.id ? draft.leanMode : props.agent?.leanMode === true;
+  };
+  async function changeLeanMode(next: boolean): Promise<void> {
+    const agentId = props.agent?.id;
+    if (!agentId) return;
+    const draft = { agentId, leanMode: next };
+    setLeanModeDraft(draft);
+    setScopedComposerError(null);
+    const saved = await saveAgentPatch({ leanMode: next }, agentId);
+    if (leanModeDraft() !== draft) return;
+    setLeanModeDraft(undefined);
+    if (!saved && props.agent?.id === agentId) {
+      setScopedComposerError(currentText().t("composer.error.changeLeanMode"));
+    }
+  }
+
   onSettled(() => {
     const importSounds = createAttachmentImportSounds();
     const unsubscribeImport = conversationRuntime(props).agent.onAttachmentImport((event) => {
@@ -2081,6 +2101,8 @@ export function createConversationViewScope(props: ConversationProps) {
     setComposerError: setScopedComposerError,
     changeFastMode,
     fastMode,
+    changeLeanMode,
+    leanMode,
     setComposerFocusRequest,
     setDropActive,
     setExpandedEmojiMessageId,

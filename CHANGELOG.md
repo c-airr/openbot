@@ -6,6 +6,18 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.10] - 2026-10-31
+
+Fork release (c-airr/openbot).
+
+### Added
+
+- Lean mode for each chat, from the leaf button at the top right of the chat. OpenBot then sends
+  about 3,700 tokens of its own instructions and tools with each step instead of about 7,900: it
+  leaves out the guidance for teammates, the browser, the vault, routines and group chats, and
+  gives fewer tools directly. The other tools stay reachable through tool search. The next turn
+  uses the new setting; a Codex chat starts a new provider session for it.
+
 ## [0.54.9] - 2026-10-31
 
 Fork release (c-airr/openbot).

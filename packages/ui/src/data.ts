@@ -259,6 +259,8 @@ export interface AgentProfile {
   browserProfileId?: string | undefined;
   /** Absent means off. Absent for an agent on a remote host too, which does not share it. */
   fastMode?: boolean | undefined;
+  /** Fork: shorter instructions and fewer tools. Absent means off. */
+  leanMode?: boolean | undefined;
   /** Absent means the app default. Absent for an agent on a remote host too, which does not share it. */
   busyMessageMode?: ClientAgentSummary["busyMessageMode"];
   /** Absent means the default task limit. Absent for an agent on a remote host too, which runs no tasks. */

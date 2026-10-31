@@ -116,6 +116,7 @@ export const messages = defineMessages("composer", {
   "composer.error.changeModel": "Could not change model. Try again.",
   "composer.error.changeEffort": "Could not change effort. Try again.",
   "composer.error.changeFastMode": "Could not change fast mode. Try again.",
+  "composer.error.changeLeanMode": "Could not change lean mode. Try again.",
   "composer.context.label": "Context {percent} full",
   "composer.context.labelEstimated": "Context about {percent} full",
   "composer.context.labelCompacting": "Compacting context",

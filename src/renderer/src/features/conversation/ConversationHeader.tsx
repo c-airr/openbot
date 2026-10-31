@@ -35,8 +35,10 @@ export function ConversationHeader() {
     agentActivity,
     browserControlAgent,
     changeFastMode,
+    changeLeanMode,
     channel,
     fastMode,
+    leanMode,
     props,
     runningTurnRuntime,
     selectAndConfirmModel,
@@ -136,6 +138,11 @@ export function ConversationHeader() {
             ? (next) => void changeFastMode(next)
             : undefined,
       }}
+      leanMode={
+        props.server?.kind === "local" && !channel
+          ? { active: leanMode(), onToggle: () => void changeLeanMode(!leanMode()) }
+          : undefined
+      }
       remoteControl={
         props.remoteDesktopEnabled !== false && props.server?.kind === "remote"
           ? {

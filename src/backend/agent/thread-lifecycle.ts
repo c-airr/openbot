@@ -66,7 +66,7 @@ import { decodeCapturedSteps, readCapturedSteps } from "./handoff-tool-steps";
 import { isProviderTimeout } from "./provider-status";
 import { sessionSettingsIdentity } from "./session-settings";
 import { isArchivedThreadError, isMissingProviderSessionError, providerLabel } from "./thread-items";
-import { VISIBLE_DYNAMIC_TOOLS } from "./tool-catalog";
+import { VISIBLE_DYNAMIC_TOOLS, visibleDynamicTools } from "./tool-catalog";
 import {
   checkAgentFolders,
   codexSandboxConfig,
@@ -601,7 +601,7 @@ export class ThreadLifecycle {
         mcpServers,
       ),
       serviceName: "openbot",
-      dynamicTools: VISIBLE_DYNAMIC_TOOLS,
+      dynamicTools: visibleDynamicTools(agent),
     };
     return { agent, mcpServers, toolRuntimes, own, environment, section, proxy, params };
   });
@@ -904,7 +904,7 @@ export class ThreadLifecycle {
     return createHash("sha256")
       .update(
         JSON.stringify([
-          VISIBLE_DYNAMIC_TOOLS,
+          visibleDynamicTools(agent),
           mcpFingerprintValues(configs),
           Object.keys(disabled).sort(),
           // A revoked approval must also replace a loaded session with the old tool policy.
@@ -1062,6 +1062,8 @@ export class ThreadLifecycle {
     mcpServers: readonly McpServerConfig[],
   ): DynamicRecord {
     const memories = this.#memories.promptMemoriesFor(agent.id);
+    // Fork: a lean session gets no section-mates, in the instructions or with the turns.
+    if (agent.leanMode === true) section = null;
     const options = {
       computerUseInOwnChat,
       sideThread,
@@ -1145,7 +1147,7 @@ export class ThreadLifecycle {
         this.#conversation.isTaskThread(publicThreadId),
         configs,
       ),
-      ...(client.provider === "codex" ? {} : { dynamicTools: VISIBLE_DYNAMIC_TOOLS }),
+      ...(client.provider === "codex" ? {} : { dynamicTools: visibleDynamicTools(agent) }),
       ...(yield* this.codexConfigEffect(
         agent,
         client,

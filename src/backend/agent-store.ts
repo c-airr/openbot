@@ -104,6 +104,8 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   browserProfileId?: string;
   // Absent on every agent stored before the setting existed, which leaves the service tier to Codex.
   fastMode?: boolean;
+  // Fork: absent means off.
+  leanMode?: boolean;
   // Absent means the app default, as for every agent stored before the setting existed.
   busyMessageMode?: BusyMessageMode;
   // Absent means the default task limit, as for every agent stored before tasks existed.
@@ -792,6 +794,10 @@ export class AgentStore {
       if (input.fastMode !== undefined) {
         if (!isBoolean(input.fastMode)) throw new Error("Invalid fast mode value.");
         next.fastMode = input.fastMode;
+      }
+      if (input.leanMode !== undefined) {
+        if (!isBoolean(input.leanMode)) throw new Error("Invalid lean mode value.");
+        next.leanMode = input.leanMode;
       }
       // A provider change without an account returns the agent to the new provider's own sign-in.
       if (
@@ -1950,6 +1956,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.ownBrowserSession === undefined || isBoolean(record.ownBrowserSession)) &&
     (record.browserProfileId === undefined || isBrowserProfileId(record.browserProfileId)) &&
     (record.fastMode === undefined || isBoolean(record.fastMode)) &&
+    (record.leanMode === undefined || isBoolean(record.leanMode)) &&
     (record.busyMessageMode === undefined || isBusyMessageMode(record.busyMessageMode)) &&
     (record.taskLimit === undefined || isAgentTaskLimit(record.taskLimit)) &&
     (record.providerAccountId === undefined || isProviderAccountId(record.providerAccountId)) &&
@@ -2045,6 +2052,8 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
       : reset("browserProfileId", undefined);
   const fastMode =
     value.fastMode === undefined || isBoolean(value.fastMode) ? value.fastMode : reset("fastMode", undefined);
+  const leanMode =
+    value.leanMode === undefined || isBoolean(value.leanMode) ? value.leanMode : reset("leanMode", undefined);
   const busyMessageMode =
     value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)
       ? value.busyMessageMode
@@ -2122,6 +2131,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(ownBrowserSession === undefined ? {} : { ownBrowserSession }),
     ...(browserProfileId === undefined ? {} : { browserProfileId }),
     ...(fastMode === undefined ? {} : { fastMode }),
+    ...(leanMode === undefined ? {} : { leanMode }),
     ...(busyMessageMode === undefined ? {} : { busyMessageMode }),
     ...(taskLimit === undefined ? {} : { taskLimit }),
     ...(providerAccountId === undefined ? {} : { providerAccountId }),

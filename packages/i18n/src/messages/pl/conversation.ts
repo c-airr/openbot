@@ -45,6 +45,10 @@ export const messages = {
   "conversation.header.mainChat": "Otwórz główny czat",
   "conversation.header.resumeRemote": "Wznów zdalne sterowanie",
   "conversation.header.openRemote": "Otwórz zdalne sterowanie",
+  "conversation.header.leanModeOn":
+    "Tryb oszczędny włączony: OpenBot wysyła krótsze instrukcje i mniej narzędzi, więc każdy krok zużywa mniej tokenów. Bez wskazówek o innych agentach, przeglądarce i rutynach. Kliknij, aby wyłączyć.",
+  "conversation.header.leanModeOff":
+    "Tryb oszczędny: krótsze instrukcje i mniej narzędzi, więc każdy krok zużywa mniej tokenów. Kliknij, aby włączyć.",
   "conversation.header.publish": "Opublikuj agenta",
   "conversation.header.browserActing": "{name} steruje przeglądarką",
   "conversation.header.agentFallback": "Agent",

@@ -1294,6 +1294,17 @@ textarea {
   color: var(--openbot-text-primary);
 }
 
+/* Fork: lean mode switch. */
+.lean-mode-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.lean-mode-toggle[aria-pressed="true"],
+.lean-mode-toggle[aria-pressed="true"]:hover {
+  color: var(--openbot-success);
+}
+
 .header-panel-toggle:active {
   transform: scale(0.92);
   transition-duration: var(--openbot-duration-fast);

@@ -686,6 +686,10 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
     if (!isBoolean(value.fastMode)) throw new Error("Invalid fast mode value.");
     result.fastMode = value.fastMode;
   }
+  if (value.leanMode !== undefined) {
+    if (!isBoolean(value.leanMode)) throw new Error("Invalid lean mode value.");
+    result.leanMode = value.leanMode;
+  }
   if (value.providerAccountId !== undefined) {
     if (value.providerAccountId !== null && !isProviderAccountId(value.providerAccountId))
       throw new Error("Invalid provider account.");

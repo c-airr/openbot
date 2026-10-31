@@ -265,6 +265,8 @@ export interface AgentSummary {
    * Absent means that OpenBot leaves the tier to Codex.
    */
   fastMode?: boolean;
+  /** Fork: OpenBot sends shorter instructions and fewer tools. Local-only. Absent means off. */
+  leanMode?: boolean;
   /**
    * What a message sent while the agent is busy does. Local-only, like `access`. Absent means the
    * app default.
@@ -349,6 +351,7 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.ownBrowserSession === undefined || isBoolean(value.ownBrowserSession)) &&
     (value.browserProfileId === undefined || isBrowserProfileId(value.browserProfileId)) &&
     (value.fastMode === undefined || isBoolean(value.fastMode)) &&
+    (value.leanMode === undefined || isBoolean(value.leanMode)) &&
     (value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)) &&
     (value.taskLimit === undefined || isAgentTaskLimit(value.taskLimit)) &&
     (value.providerAccountId === undefined || isProviderAccountId(value.providerAccountId)) &&
@@ -404,6 +407,7 @@ export interface UpdateAgentInput {
   allowNewChat?: boolean | null;
   quickAcknowledgement?: boolean | null;
   fastMode?: boolean;
+  leanMode?: boolean;
   /** `null` returns the agent to the app default. */
   busyMessageMode?: BusyMessageMode | null;
   /** `null` returns the agent to the default task limit. */

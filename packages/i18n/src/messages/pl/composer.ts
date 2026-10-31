@@ -119,6 +119,7 @@ export const messages = {
   "composer.error.changeModel": "Nie udało się zmienić modelu. Spróbuj ponownie.",
   "composer.error.changeEffort": "Nie udało się zmienić poziomu wysiłku. Spróbuj ponownie.",
   "composer.error.changeFastMode": "Nie udało się zmienić trybu szybkiego. Spróbuj ponownie.",
+  "composer.error.changeLeanMode": "Nie udało się zmienić trybu oszczędnego. Spróbuj ponownie.",
   "composer.context.label": "Kontekst zapełniony w {percent}",
   "composer.context.labelEstimated": "Kontekst zapełniony w około {percent}",
   "composer.context.labelCompacting": "Kompaktowanie kontekstu",
