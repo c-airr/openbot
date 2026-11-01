@@ -38,6 +38,7 @@ import {
 import { CloseIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { type OpenWaitItem, OpenWaits } from "@openbot/ui/features/conversation/OpenWaits";
 import { ReplyQuote } from "@openbot/ui/features/conversation/ReplyQuote";
+import { RunningSubagents } from "@openbot/ui/features/conversation/RunningSubagents";
 import { SpeakingBar } from "@openbot/ui/features/conversation/SpeakingBar";
 import { ComposerVoiceControls } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
 import { useText } from "@openbot/ui/text";
@@ -123,6 +124,7 @@ export function ConversationComposer() {
     providerOffline,
     agentProviderName,
     sideThreadOpen,
+    props: conversation,
   } = useConversationViewScope();
   const { t, format, sourceText: localizeSourceText } = useText();
   const messageLabel = () =>
@@ -168,7 +170,16 @@ export function ConversationComposer() {
   const awaitingVisible = () => awaitingReplies().length > 0 && !pickerOpen();
   const waitItems = createMemo(() => openWaitItems(props.waits ?? [], props.queue));
   const waitsVisible = () => waitItems().length > 0 && Boolean(props.onCancelWait) && !pickerOpen();
-  const slotOpen = () => queueVisible() || awaitingVisible() || waitsVisible();
+  // Fork: the subagents that work now, from the newest messages of the chat.
+  const runningSubagents = createMemo(() => {
+    const seen = new Set<string>();
+    return conversation.messages
+      .slice(-40)
+      .flatMap((message) => message.subagents ?? [])
+      .filter((subagent) => subagent.status === "running" && !seen.has(subagent.id) && seen.add(subagent.id));
+  });
+  const subagentsVisible = () => runningSubagents().length > 0 && !channel && !pickerOpen();
+  const slotOpen = () => queueVisible() || awaitingVisible() || waitsVisible() || subagentsVisible();
   // A channel has many speakers, so it has no voice input.
   const voiceAvailable = () => !channel && !props.runtime;
   /** The reply of this agent that is read aloud. The voice pane shows its own. */
@@ -403,6 +414,9 @@ export function ConversationComposer() {
             inert={slotOpen() ? undefined : true}
           >
             <div class="agent-queue-slot-inner">
+              <Show when={subagentsVisible()}>
+                <RunningSubagents items={runningSubagents()} />
+              </Show>
               <Show when={awaitingVisible()}>
                 <AwaitingReplies
                   items={awaitingReplies()}

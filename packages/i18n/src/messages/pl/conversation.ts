@@ -47,6 +47,8 @@ export const messages = {
   "conversation.header.openRemote": "Otwórz zdalne sterowanie",
   "conversation.header.leanModeOn":
     "Tryb oszczędny włączony: OpenBot wysyła krótsze instrukcje i mniej narzędzi, więc każdy krok zużywa mniej tokenów. Bez wskazówek o innych agentach, przeglądarce i rutynach. Kliknij, aby wyłączyć.",
+  "conversation.leanMode.enabled": "Tryb oszczędny włączony. Działa od następnej wiadomości.",
+  "conversation.leanMode.disabled": "Tryb oszczędny wyłączony. Działa od następnej wiadomości.",
   "conversation.header.leanModeOff":
     "Tryb oszczędny: krótsze instrukcje i mniej narzędzi, więc każdy krok zużywa mniej tokenów. Kliknij, aby włączyć.",
   "conversation.header.publish": "Opublikuj agenta",

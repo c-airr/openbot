@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import {
   type ClientSideConnection,
   type ContentBlock,
@@ -40,7 +41,9 @@ import { AcpConnection, type AcpConnectionOptions } from "./acp-connection";
 import type { AcpCustomEndpoint, AcpFlavor } from "./acp-flavor";
 import { acpPlanSteps, PLAN_UPDATED_METHOD } from "./agent/plan-updates";
 import { elicitationOptions, elicitationValue, secretElicitationField } from "./agent/prompts";
+import { SUBAGENTS_UPDATED_METHOD } from "./agent/subagent-updates";
 import { type AgentProvider, type DiagnosticOrigin, ProviderTurnActiveError } from "./agent-client";
+import { AntigravitySubagents } from "./antigravity-subagents";
 import type { AgentCliInfo } from "./cli";
 import { runCauseEffect } from "./effect-boundary";
 import { IdleThreadPool } from "./idle-thread-pool";
@@ -58,7 +61,7 @@ import {
   usableMcpServers,
 } from "./mcp-provider-shapes";
 import { PendingServerRequests } from "./pending-server-requests";
-import type { SpawnTarget } from "./process-confinement";
+import { antigravityStatePaths, type SpawnTarget } from "./process-confinement";
 import {
   type AccountRateLimitsReadResult,
   type AppServerNotification,
@@ -510,6 +513,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
   #signedIn = false;
   /** Settles when the server asks for an interactive sign-in while `initialize` checks the account. */
   #signInPrompt: Deferred.Deferred<void> | null = null;
+  /** Fork: the subagents that the agent runs in conversations of their own (`transcriptSubagents`). */
+  readonly #subagents: AntigravitySubagents | null;
 
   constructor(
     cli: AgentCliInfo,
@@ -518,6 +523,12 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
   ) {
     super();
     this.#flavor = options.flavor;
+    this.#subagents = options.flavor.transcriptSubagents
+      ? new AntigravitySubagents({
+          brainDirectory: join(antigravityStatePaths().writable[0] ?? "", "brain"),
+          emit: (params) => this.emit("notification", { method: SUBAGENTS_UPDATED_METHOD, params }),
+        })
+      : null;
     this.#cli = cli;
     this.#transport = this.#newTransport((error) => this.emit("exit", error));
     this.#requestTimeoutMs = requestTimeoutMs;
@@ -732,6 +743,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       .stop(
         Effect.gen({ self: this }, function* () {
           this.#initialized = null;
+          this.#subagents?.dispose();
           for (const replay of this.#historyReplays.values()) this.#abortHistoryReplay(replay);
           this.#historyReplays.clear();
           const threads = this.#threads.clear();
@@ -2395,6 +2407,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         result: update.rawOutput ?? turn.toolItems.get(update.toolCallId)?.result,
       };
       turn.toolItems.set(update.toolCallId, item);
+      this.#subagents?.invoked(thread.id, turn.id, update.toolCallId, update.rawInput);
       this.emit("notification", {
         method: update.status === "completed" || update.status === "failed" ? "item/completed" : "item/started",
         params: {

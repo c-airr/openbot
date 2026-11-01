@@ -1059,7 +1059,11 @@ export function createConversationViewScope(props: ConversationProps) {
     setLeanModeDraft(undefined);
     if (!saved && props.agent?.id === agentId) {
       setScopedComposerError(currentText().t("composer.error.changeLeanMode"));
+      return;
     }
+    // The switch is a small icon, so say what changed.
+    if (saved)
+      actionToast.success(currentText().t(next ? "conversation.leanMode.enabled" : "conversation.leanMode.disabled"));
   }
 
   onSettled(() => {

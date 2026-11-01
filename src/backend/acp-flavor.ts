@@ -97,6 +97,11 @@ export interface AcpFlavor {
    * with `rawOutput.metadata.status` "running" and the task's `sessionID`.
    */
   unsentBackgroundTurns?: true;
+  /**
+   * Fork: the agent runs its subagents in conversations of their own and writes their steps to
+   * transcript files. A tool call with a `Subagents` argument starts them; see `antigravity-subagents.ts`.
+   */
+  transcriptSubagents?: true;
   /** Each answer message has its own `messageId`, so text of a new ID is a new message, not more text. */
   messagePerId?: true;
   /**

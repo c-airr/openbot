@@ -243,6 +243,13 @@
     color: var(--openbot-text-primary);
   }
 
+  /* Fork: the lean mode switch keeps its success fill when it is on. */
+  .app-window > .app-frame-edge .conversation-header .lean-mode-toggle[aria-pressed="true"],
+  .app-window > .app-frame-edge .conversation-header .lean-mode-toggle[aria-pressed="true"]:hover {
+    background: var(--openbot-success-soft);
+    color: var(--openbot-success);
+  }
+
   /* A short line between the model and the side panel button */
   .app-window > .app-frame-edge .conversation-header-actions > .side-panel-toggle {
     position: relative;

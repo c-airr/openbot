@@ -149,6 +149,13 @@ export const messages = {
   "chat.subagents.state.completed": "Gotowe",
   "chat.subagents.state.failed": "Błąd",
   "chat.subagents.state.stopped": "Zatrzymano",
+  "chat.subagents.running.label": "Subagenci, którzy teraz pracują",
+  "chat.subagents.running.title": {
+    one: "Pracuje {count} subagent",
+    few: "Pracują {count} subagenci",
+    many: "Pracuje {count} subagentów",
+    other: "Pracuje {count} subagenta",
+  },
   "chat.subagents.taskFrom": "Zadanie od {name}",
   "chat.subagents.steps": "Kroki „{title}”",
   "chat.subagents.stepCount": {

@@ -128,6 +128,7 @@
     "./features/conversation/TraceWaterfall": "./src/features/conversation/TraceWaterfall.tsx",
     "./features/conversation/AwaitingReplies": "./src/features/conversation/AwaitingReplies.tsx",
     "./features/conversation/OpenWaits": "./src/features/conversation/OpenWaits.tsx",
+    "./features/conversation/RunningSubagents": "./src/features/conversation/RunningSubagents.tsx",
     "./features/conversation/CodeBlock": "./src/features/conversation/CodeBlock.tsx",
     "./features/conversation/ComparisonTable": "./src/features/conversation/ComparisonTable.tsx",
     "./features/conversation/ComposerAddMenu": "./src/features/conversation/ComposerAddMenu.tsx",

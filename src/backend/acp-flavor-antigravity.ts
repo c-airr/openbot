@@ -84,6 +84,7 @@ const SESSION_PROCESSES: Pick<AcpFlavor, "sessionProcesses"> =
   process.platform === "win32" ? {} : { sessionProcesses: true };
 
 export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
+  transcriptSubagents: true,
   // Antigravity 1.4.3 offers its Claude and GPT models only to a client named `zed`, `xcode`,
   // `jetbrains.*` or `android studio*` (`supports_third_party_models`). Any other client gets the
   // Gemini models only, also when the plan includes the others. The server also sends the name and

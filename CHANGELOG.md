@@ -6,6 +6,24 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.58.1] - 2026-11-01
+
+Fork release (c-airr/openbot). It includes upstream 0.58.0.
+
+### Added
+
+- Antigravity subagents show in the chat while they work. OpenBot reads the transcript that each
+  subagent writes, so the chat lists the subagents with their newest steps and marks them done when
+  they report back. Before, the chat showed only one line until the final answer.
+- A list of the subagents that work now, above the message box, with the newest step of each.
+- A project button on the start screen of a new chat. It shows the folder the chat works in, opens
+  the folder dialog, and an x returns to a new workspace. The last folder stays selected.
+
+### Fixed
+
+- The lean mode button shows when it is on (green fill) and says so in a message after you click it.
+  In the window frame its colour lost to the frame style, so a click showed no change.
+
 ## [0.58.0] - 2026-11-01
 
 ### Added
