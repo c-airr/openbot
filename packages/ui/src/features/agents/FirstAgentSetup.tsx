@@ -12,7 +12,7 @@ import type {
   ProviderRuntimeStatus,
 } from "@openbot/contracts/ipc";
 import type { AppTextKey, AppTranslate } from "@openbot/i18n";
-import { ArrowUp, Button, Field, IconButton, Input, Textarea } from "@openbot/ui";
+import { ArrowUp, Button, Field, Folder, IconButton, Input, Textarea, X } from "@openbot/ui";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import { AVATAR_HUE_CHOICES, avatarCandidateSeeds, avatarHeadColor, avatarHueSwatch } from "../../bloub-avatar";
 import { ProviderModelPicker } from "../../components/ProviderModelPicker";
@@ -54,6 +54,8 @@ export interface FirstAgentSetupProps {
   suggestions: FirstAgentSuggestion[];
   /** Fork: `chat` asks only for a model and a first message. */
   mode?: "first" | "additional" | "chat";
+  /** Fork, `chat` only: the project folder the chat works in. Absent where a folder cannot be chosen. */
+  folder?: { path: string | undefined; onChoose: () => void; onClear: () => void } | undefined;
   submitting?: boolean;
   error?: string | null;
   /** The live catalog behind the model picker. Absent, the form keeps no model choice. */
@@ -533,6 +535,40 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
                     />
                   )}
                 </Show>
+              )}
+            </Show>
+            <Show when={chat() && props.folder}>
+              {(folder) => (
+                <div class="first-agent-chat-folder">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    class="first-agent-chat-folder-pick"
+                    title={folder().path ?? t("agent.chat.folder.choose")}
+                    disabled={props.submitting}
+                    onClick={() => folder().onChoose()}
+                  >
+                    <Folder aria-hidden="true" />
+                    <span>
+                      {folder().path
+                        ? (folder().path?.split(/[\\/]/u).filter(Boolean).pop() ?? folder().path)
+                        : t("agent.chat.folder.choose")}
+                    </span>
+                  </Button>
+                  <Show when={folder().path}>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-xs"
+                      type="button"
+                      label={t("agent.chat.folder.clear")}
+                      disabled={props.submitting}
+                      onClick={() => folder().onClear()}
+                    >
+                      <X aria-hidden="true" />
+                    </IconButton>
+                  </Show>
+                </div>
               )}
             </Show>
             <Show when={chat()}>

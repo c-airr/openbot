@@ -197,9 +197,25 @@ const AgentActions = createSimpleContext({
       }
     }
 
-    /** Fork: the chat from the start screen, made on its first message, in the default folder when one is set. */
+    // The folder shows on the start screen, so the user sees where the next chat will work.
+    const [chatFolder, setChatFolder] = createSignal<string | undefined>(defaultChatFolder());
+    function rememberChatFolder(folder: string | undefined) {
+      setChatFolder(folder);
+      try {
+        if (folder) localStorage.setItem(CHAT_FOLDER_KEY, folder);
+        else localStorage.removeItem(CHAT_FOLDER_KEY);
+      } catch {
+        // Without storage the choice lasts until the app closes.
+      }
+    }
+    async function chooseChatFolder() {
+      const folder = await agentsPort().chooseFolder();
+      if (folder) rememberChatFolder(folder);
+    }
+
+    /** Fork: the chat from the start screen, made on its first message, in the chosen folder when one is set. */
     function startChat(draft: FirstAgentDraft = agentSetupDraft()) {
-      return createChat(draft, defaultChatFolder());
+      return createChat(draft, chatFolder());
     }
 
     /**
@@ -394,12 +410,7 @@ const AgentActions = createSimpleContext({
     async function startChatInFolder() {
       const folder = await agentsPort().chooseFolder();
       if (!folder) return;
-      try {
-        localStorage.setItem(CHAT_FOLDER_KEY, folder);
-      } catch {
-        // Without storage the start screen cannot pass the folder on.
-        return createChat({ ...agentSetupDraft(), purpose: "" }, folder);
-      }
+      rememberChatFolder(folder);
       openAgentSetup("chat");
     }
 
@@ -711,6 +722,9 @@ const AgentActions = createSimpleContext({
       createAgent,
       createChat,
       startChat,
+      chatFolder,
+      chooseChatFolder,
+      clearChatFolder: () => rememberChatFolder(undefined),
       startChatInFolder,
       startSubagent,
       compactChat,

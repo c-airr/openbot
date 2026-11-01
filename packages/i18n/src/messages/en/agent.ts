@@ -10,6 +10,8 @@ export const messages = defineMessages("agent", {
   "agent.chat.message": "Message",
   "agent.chat.messagePlaceholder": "Ask anything",
   "agent.chat.start": "Send",
+  "agent.chat.folder.choose": "Choose project",
+  "agent.chat.folder.clear": "Work in a new workspace instead",
   "agent.chat.section": "Chats",
   "agent.subagent.section": "Subagents",
   "agent.setup.color": "Agent color",

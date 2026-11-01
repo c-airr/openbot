@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.54.11] - 2026-11-01
+
+Fork release (c-airr/openbot).
+
+### Added
+
+- The start screen of a new chat has a project button next to the model. It shows the folder the
+  chat will work in, opens the folder dialog, and an x returns to a new workspace. The last
+  folder you chose stays selected for the next chat.
+
 ## [0.54.10] - 2026-10-31
 
 Fork release (c-airr/openbot).

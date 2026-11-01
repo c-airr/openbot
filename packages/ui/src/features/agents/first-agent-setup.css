@@ -397,7 +397,7 @@
 
 .first-agent-chat-box {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--openbot-space-2);
   border: 1px solid var(--openbot-border-strong);
@@ -429,4 +429,24 @@
 
 .first-agent-chat-box .provider-model-trigger {
   justify-self: start;
+}
+
+/* Fork: the project folder of a new chat, next to the model. */
+.first-agent-chat-folder {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-self: start;
+  gap: var(--openbot-space-1);
+}
+
+.first-agent-chat-folder-pick {
+  max-width: 220px;
+  gap: var(--openbot-space-1);
+}
+
+.first-agent-chat-folder-pick span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

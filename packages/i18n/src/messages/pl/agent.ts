@@ -11,6 +11,8 @@ export const messages = {
   "agent.chat.message": "Wiadomość",
   "agent.chat.messagePlaceholder": "Napisz cokolwiek",
   "agent.chat.start": "Wyślij",
+  "agent.chat.folder.choose": "Wybierz projekt",
+  "agent.chat.folder.clear": "Pracuj w nowym obszarze roboczym",
   "agent.chat.section": "Czaty",
   "agent.subagent.section": "Subagenci",
   "agent.setup.color": "Kolor agenta",
