@@ -8,6 +8,8 @@ export const messages = {
     "OpenBot non è riuscito a registrare il Controllo del computer nella configurazione di Codex. Controlla che il config.toml di Codex sia valido e scrivibile, poi riavvia OpenBot. Puoi disattivare il Controllo del computer nelle impostazioni dell'agente per continuare senza.",
   "error.provider.codexUnresponsive": "Codex ha smesso di rispondere, quindi OpenBot ha terminato il suo processo.",
   "error.provider.acpUnresponsive": "{provider} non ha risposto in tempo, quindi OpenBot ha terminato il suo processo.",
+  "error.provider.acpMcpNotLoaded":
+    "{provider} non ha caricato gli strumenti di OpenBot, quindi questo agente non può usarli né contattare i suoi compagni. Una policy del team {provider} può bloccare i server MCP locali. Chiedi all’amministratore del team di consentirli, poi riprova.",
   "error.provider.endpointsReadOnly":
     "Gli endpoint salvati sono stati scritti da una versione più recente di OpenBot, oppure il file non è leggibile. Aggiorna OpenBot per modificarli.",
   "error.provider.endpointNoSecureStorage":
@@ -61,6 +63,7 @@ export const messages = {
   "error.provider.removeWhileOn": "Disattiva il provider prima di rimuoverne il download.",
   "error.provider.removeWhileDownloading": "Attendi la fine del download, poi rimuovilo.",
   "error.provider.removeIncomplete": "Un programma usa alcuni file di questa CLI. Chiudilo e riprova.",
+  "error.provider.removeDownloadsFailed": "Impossibile rimuovere i download della CLI di {providers}.",
   "error.provider.cliOverride": "Rimuovi l'override esplicito del percorso della CLI prima di aggiornare da OpenBot.",
   "error.provider.runtimeUpdateIncomplete": "L'aggiornamento del runtime non è stato completato.",
   "error.provider.downloadHttp": "Download del runtime non riuscito con HTTP {status}.",
@@ -126,16 +129,6 @@ export const messages = {
   "error.provider.codexManagedNotStarted":
     "ChatGPT è stato scaricato ma non è stato possibile avviarlo. Scaricalo di nuovo in OpenBot.",
   "error.provider.codexMissing": "ChatGPT non è scaricato. Scaricalo in OpenBot per continuare.",
-  "error.provider.codexConfigIgnored": {
-    one: "Codex ha ignorato {count} impostazione nella sua configurazione: {settings}. Correggila o rimuovila, oppure aggiorna Codex.",
-    other:
-      "Codex ha ignorato {count} impostazioni nella sua configurazione: {settings}. Correggile o rimuovile, oppure aggiorna Codex.",
-  },
-  "error.provider.codexConfigIgnoredUnnamed": {
-    one: "Codex ha ignorato {count} impostazione nella sua configurazione. Correggila o rimuovila, oppure aggiorna Codex.",
-    other:
-      "Codex ha ignorato {count} impostazioni nella sua configurazione. Correggile o rimuovile, oppure aggiorna Codex.",
-  },
   "error.provider.claudeOutdated": "Claude Code {version} è troppo vecchio. OpenBot richiede la 2.1.232 o successiva.",
   "error.provider.claudeNotStarted": "La CLI di Claude è stata trovata ma non è stato possibile avviarla.",
   "error.provider.claudeNotStartedHint":
@@ -194,6 +187,10 @@ export const messages = {
     'OpenCode non ha un accesso per il provider del modello "{provider}". Scegli un modello con l\'etichetta Gratuito, oppure collega il provider: incolla una chiave OpenCode Go nelle impostazioni di OpenCode, oppure esegui `opencode auth login` in un terminale. Poi riprova.',
   "error.provider.opencodeAuthRequiredUnknown":
     "OpenCode non ha un accesso per il provider di questo modello. Scegli un modello con l'etichetta Gratuito, oppure collega il provider: incolla una chiave OpenCode Go nelle impostazioni di OpenCode, oppure esegui `opencode auth login` in un terminale. Poi riprova.",
+  "error.provider.customEndpointKeyRefused":
+    'L\'endpoint "{provider}" ha rifiutato la sua chiave API o le sue intestazioni. Inseriscile di nuovo in Impostazioni server → Provider, poi riprova.',
+  "error.provider.customEndpointKeyMissing":
+    'L\'endpoint "{provider}" ha bisogno di una chiave API. Aggiungi la chiave in Impostazioni server → Provider, poi riprova.',
   "error.provider.opencodeKeyExpired":
     "La tua chiave API di OpenCode è scaduta. Crea una nuova chiave in OpenCode Console, incollala nelle impostazioni di OpenCode, poi riprova.",
   "error.provider.opencodeServiceFailure":

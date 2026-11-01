@@ -8,6 +8,7 @@ export const messages = defineMessages("status.agent", {
   "status.agent.sessionImported.resume": "Session taken from {source} by continuing its session.",
   "status.agent.sessionImported.paste": "Session taken from {source} by pasting the conversation.",
   "status.agent.sessionImported.compact": "Session taken from {source} by compacting it.",
+  "status.agent.instructionsChanged": "Updated its instructions",
   "status.agent.modelSwitchedForLimit": "Usage limit reached. Switched to {model}.",
   "status.agent.modelReturnedAfterLimit": "Usage limit ended. Switched back to {model}.",
   "status.agent.modelSwitchedForError": "Provider error. Switched to {model}.",
@@ -65,4 +66,5 @@ export const messages = defineMessages("status.agent", {
   "status.agent.vaultUpdated": "Changed in Vault: {name}",
   "status.agent.vaultDeleted": "Deleted from Vault: {name}",
   "status.agent.planContinues": "The plan has open steps. The agent continues ({current} of {limit}).",
+  "status.agent.branchTitle": "Branched chat",
 });

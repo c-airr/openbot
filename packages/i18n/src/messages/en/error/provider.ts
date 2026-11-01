@@ -8,6 +8,8 @@ export const messages = defineMessages("error.provider", {
     "OpenBot could not register Computer Use in the Codex configuration. Check that your Codex config.toml is valid and writable, then restart OpenBot. You can turn off Computer Use in the teammate settings to continue without it.",
   "error.provider.codexUnresponsive": "Codex stopped answering, so OpenBot ended its process.",
   "error.provider.acpUnresponsive": "{provider} did not answer in time, so OpenBot ended its process.",
+  "error.provider.acpMcpNotLoaded":
+    "{provider} did not load OpenBot's tools, so this agent cannot use them or reach its teammates. A {provider} team policy can block local MCP servers. Ask your team admin to allow them, then try again.",
   "error.provider.endpointsReadOnly":
     "The saved endpoints were written by a newer version of OpenBot, or the file cannot be read. Update OpenBot to change them.",
   "error.provider.endpointNoSecureStorage":
@@ -61,6 +63,7 @@ export const messages = defineMessages("error.provider", {
   "error.provider.removeWhileOn": "Turn the provider off before you remove its download.",
   "error.provider.removeWhileDownloading": "Wait for the download to end, then remove it.",
   "error.provider.removeIncomplete": "A program uses some files of this CLI. Close it, then try again.",
+  "error.provider.removeDownloadsFailed": "Could not remove the CLI downloads of {providers}.",
   "error.provider.cliOverride": "Remove the explicit CLI path override before updating in OpenBot.",
   "error.provider.runtimeUpdateIncomplete": "The runtime update did not complete.",
   "error.provider.downloadHttp": "Runtime download failed with HTTP {status}.",
@@ -122,14 +125,6 @@ export const messages = defineMessages("error.provider", {
   "error.provider.codexManagedNotStarted":
     "ChatGPT was downloaded but could not be started. Download it again in OpenBot.",
   "error.provider.codexMissing": "ChatGPT is not downloaded. Download it in OpenBot to continue.",
-  "error.provider.codexConfigIgnored": {
-    one: "Codex ignored {count} setting in its configuration: {settings}. Correct or remove it, or update Codex.",
-    other: "Codex ignored {count} settings in its configuration: {settings}. Correct or remove them, or update Codex.",
-  },
-  "error.provider.codexConfigIgnoredUnnamed": {
-    one: "Codex ignored {count} setting in its configuration. Correct or remove it, or update Codex.",
-    other: "Codex ignored {count} settings in its configuration. Correct or remove them, or update Codex.",
-  },
   "error.provider.claudeOutdated": "Claude Code {version} is too old. OpenBot requires 2.1.232 or newer.",
   "error.provider.claudeNotStarted": "Claude CLI was found but could not be started.",
   "error.provider.claudeNotStartedHint":
@@ -184,6 +179,10 @@ export const messages = defineMessages("error.provider", {
     'OpenCode has no sign-in for the model provider "{provider}". Choose a model with the Free label, or connect the provider: paste an OpenCode Go key in the OpenCode settings, or run `opencode auth login` in a terminal. Then try again.',
   "error.provider.opencodeAuthRequiredUnknown":
     "OpenCode has no sign-in for the provider of this model. Choose a model with the Free label, or connect the provider: paste an OpenCode Go key in the OpenCode settings, or run `opencode auth login` in a terminal. Then try again.",
+  "error.provider.customEndpointKeyRefused":
+    'The endpoint "{provider}" refused its API key or headers. Enter them again in Server settings → Providers, then try again.',
+  "error.provider.customEndpointKeyMissing":
+    'The endpoint "{provider}" needs an API key. Add the key in Server settings → Providers, then try again.',
   "error.provider.opencodeKeyExpired":
     "Your OpenCode API key expired. Create a new key in OpenCode Console, paste it in the OpenCode settings, then try again.",
   "error.provider.opencodeServiceFailure":
@@ -292,6 +291,7 @@ export const messages = defineMessages("error.provider", {
   "error.provider.customAgentRemoveBusy":
     "Wait for the active turn and queue to finish before you remove this custom agent.",
   "error.provider.customAgentNone": "No custom agent is saved.",
+  "error.provider.customAgentsUnavailable": "This server cannot change its custom agents. Update OpenBot on it.",
   "error.provider.customAgentMissing": "This custom agent is not saved now. Choose another model.",
   "error.provider.customAgentSignIn": "Sign in with the agent's own command, then try again.",
   "error.provider.customAgentsReadOnly":

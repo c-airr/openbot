@@ -362,7 +362,7 @@ function connectSignal(state: PeerState, prepared: WebSocket | null = null): voi
 }
 
 async function handleSignal(state: PeerState, message: SignalServerMessage): Promise<void> {
-  // Signal sends Slack, Discord, webhook and Telegram messages only to the main process's `ingress`
+  // Signal sends Slack, Discord, webhook, GitHub and Telegram messages only to the main process's `ingress`
   // socket, never to this peer. `host-waiting` answers only a hello with `waitForHost`, which this
   // peer does not send.
   if (
@@ -372,6 +372,8 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
     message.type === "discord-delivery" ||
     message.type === "webhook-ready" ||
     message.type === "webhook-delivery" ||
+    message.type === "github-ready" ||
+    message.type === "github-delivery" ||
     message.type === "telegram-delivery" ||
     message.type === "telegram-call-result" ||
     message.type === "queued-delivery"
@@ -911,10 +913,12 @@ function replaceSignal(state: PeerState): void {
 
 function scheduleSignalReconnect(state: PeerState): void {
   if (state.reconnectTimer !== null) return;
-  // The jitter spreads the hosts that a Signal restart disconnects at the same time.
+  // A Signal restart disconnects all hosts at the same time, and each resume asks the account service.
+  // The first retry is spread over 0.5–4 s (before: 0.25–0.5 s). Later retries double up to 30 s.
+  const attempt = state.reconnectAttempt++;
   const delay = Math.max(
     signalRetryAt - Date.now(),
-    Math.min(30_000, 500 * 2 ** state.reconnectAttempt++) * (0.5 + Math.random() / 2),
+    attempt === 0 ? 500 + Math.random() * 3_500 : Math.min(30_000, 500 * 2 ** attempt) * (0.5 + Math.random() / 2),
   );
   state.reconnectTimer = window.setTimeout(() => {
     state.reconnectTimer = null;

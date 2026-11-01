@@ -28,6 +28,7 @@ import {
   decodeMobileConnectTicket,
   decodeNotificationOpenedEvent,
   decodeNotificationPreference,
+  decodePendingMarketplaceListing,
   decodeProviderDetectionSettings,
   decodeUpdatePreference,
   decodeUpdateStatus,
@@ -134,6 +135,14 @@ const valid: [string, (value: unknown) => unknown, unknown][] = [
     {
       status: "signed_in",
       user: { id: "user-1", email: "user@example.com", name: null, avatarUrl: null },
+    } satisfies CentralAuthState,
+  ],
+  [
+    "signed in with an analytics answer",
+    decodeCentralAuthState,
+    {
+      status: "signed_in",
+      user: { id: "user-1", email: "user@example.com", name: null, avatarUrl: null, analyticsEnabled: true },
     } satisfies CentralAuthState,
   ],
   [
@@ -258,6 +267,14 @@ const malformed: [string, (value: unknown) => unknown, unknown][] = [
   ["a custom agent with a two-line usage prompt", decodeCustomAgents, [{ ...customAgent, usagePrompt: "/usage\nrm" }]],
   ["custom agent usage of an invalid id", decodeCustomAgentUsage, [{ id: "Not An Id", text: "42%" }]],
   ["custom agent usage with no text", decodeCustomAgentUsage, [{ id: "devin", text: null }]],
+  [
+    "an account analytics answer that is not a yes or a no",
+    decodeCentralAuthState,
+    {
+      status: "signed_in",
+      user: { id: "user-1", email: "user@example.com", name: null, avatarUrl: null, analyticsEnabled: "yes" },
+    },
+  ],
   ["a model list with an empty id", decodeDiscoverModelsResult, { models: [{ id: "" }] }],
   [
     "detection settings without a switch",
@@ -273,5 +290,40 @@ describe("app decoding", () => {
 
   it.each(malformed)("rejects %s", (_name, decode, value) => {
     expect(() => decode(value)).toThrow(/^Invalid /);
+  });
+});
+
+const AGENT_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+// A Marketplace link began in a URL a web page chose. Only an agent id or a skill slug of the right
+// form reaches the renderer, with no other field; anything else is no link at all.
+describe("pending Marketplace listing", () => {
+  it.each([
+    ["an agent", { kind: "agent", id: AGENT_ID }],
+    ["a skill", { kind: "skill", id: "release-notes" }],
+  ])("keeps %s", (_name, value) => {
+    expect(decodePendingMarketplaceListing(value)).toEqual(value);
+  });
+
+  it("drops a field main did not name", () => {
+    expect(decodePendingMarketplaceListing({ kind: "skill", id: "release-notes", install: true })).toEqual({
+      kind: "skill",
+      id: "release-notes",
+    });
+  });
+
+  it.each([
+    ["no link", null],
+    ["a bare slug", "release-notes"],
+    ["an unknown kind", { kind: "plugin", id: "release-notes" }],
+    ["an agent with a slug", { kind: "agent", id: "release-notes" }],
+    ["an agent id in upper case", { kind: "agent", id: AGENT_ID.toUpperCase() }],
+    ["a skill with a path", { kind: "skill", id: "../account" }],
+    ["a skill with a dot", { kind: "skill", id: "notes.md" }],
+    ["a skill slug over 64 characters", { kind: "skill", id: "a".repeat(65) }],
+    ["an empty id", { kind: "skill", id: "" }],
+    ["an id that is not text", { kind: "agent", id: 42 }],
+  ])("refuses %s", (_name, value) => {
+    expect(decodePendingMarketplaceListing(value)).toBeNull();
   });
 });

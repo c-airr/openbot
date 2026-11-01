@@ -8,6 +8,8 @@ export const messages = {
     "OpenBot не смог зарегистрировать управление компьютером в конфигурации Codex. Убедитесь, что ваш config.toml для Codex корректен и доступен для записи, затем перезапустите OpenBot. Чтобы продолжить без него, отключите управление компьютером в настройках агента.",
   "error.provider.codexUnresponsive": "Codex перестал отвечать, поэтому OpenBot завершил его процесс.",
   "error.provider.acpUnresponsive": "{provider} не ответил вовремя, поэтому OpenBot завершил его процесс.",
+  "error.provider.acpMcpNotLoaded":
+    "{provider} не загрузил инструменты OpenBot, поэтому этот агент не может ими пользоваться и связываться с коллегами. Политика команды {provider} может блокировать локальные MCP-серверы. Попросите администратора команды разрешить их и повторите попытку.",
   "error.provider.endpointsReadOnly":
     "Сохранённые эндпоинты записаны более новой версией OpenBot, либо файл не читается. Чтобы изменить их, обновите OpenBot.",
   "error.provider.endpointNoSecureStorage":
@@ -61,6 +63,7 @@ export const messages = {
   "error.provider.removeWhileOn": "Выключите провайдера, прежде чем удалять его загрузку.",
   "error.provider.removeWhileDownloading": "Дождитесь окончания загрузки, затем удалите её.",
   "error.provider.removeIncomplete": "Программа использует файлы этого CLI. Закройте её и повторите попытку.",
+  "error.provider.removeDownloadsFailed": "Не удалось удалить загруженные CLI: {providers}.",
   "error.provider.cliOverride": "Удалите явно заданный путь к CLI, прежде чем обновлять в OpenBot.",
   "error.provider.runtimeUpdateIncomplete": "Обновление среды выполнения не завершено.",
   "error.provider.downloadHttp": "Загрузка среды выполнения не удалась: HTTP {status}.",
@@ -123,19 +126,6 @@ export const messages = {
   "error.provider.codexManagedNotStarted":
     "ChatGPT загружен, но запустить его не удалось. Загрузите его заново в OpenBot.",
   "error.provider.codexMissing": "ChatGPT не загружен. Загрузите его в OpenBot, чтобы продолжить.",
-  "error.provider.codexConfigIgnored": {
-    one: "Codex проигнорировал {count} настройку в своей конфигурации: {settings}. Исправьте или удалите её либо обновите Codex.",
-    few: "Codex проигнорировал {count} настройки в своей конфигурации: {settings}. Исправьте или удалите их либо обновите Codex.",
-    many: "Codex проигнорировал {count} настроек в своей конфигурации: {settings}. Исправьте или удалите их либо обновите Codex.",
-    other:
-      "Codex проигнорировал {count} настройки в своей конфигурации: {settings}. Исправьте или удалите их либо обновите Codex.",
-  },
-  "error.provider.codexConfigIgnoredUnnamed": {
-    one: "Codex проигнорировал {count} настройку в своей конфигурации. Исправьте или удалите её либо обновите Codex.",
-    few: "Codex проигнорировал {count} настройки в своей конфигурации. Исправьте или удалите их либо обновите Codex.",
-    many: "Codex проигнорировал {count} настроек в своей конфигурации. Исправьте или удалите их либо обновите Codex.",
-    other: "Codex проигнорировал {count} настройки в своей конфигурации. Исправьте или удалите их либо обновите Codex.",
-  },
   "error.provider.claudeOutdated": "Claude Code {version} слишком старый. OpenBot требует версию 2.1.232 или новее.",
   "error.provider.claudeNotStarted": "Claude CLI найден, но запустить его не удалось.",
   "error.provider.claudeNotStartedHint":
@@ -190,6 +180,10 @@ export const messages = {
     "OpenCode не выполнил вход у провайдера модели «{provider}». Выберите модель с меткой «Бесплатно» или подключите провайдера: вставьте ключ OpenCode Go в настройках OpenCode или выполните `opencode auth login` в терминале. Затем повторите попытку.",
   "error.provider.opencodeAuthRequiredUnknown":
     "OpenCode не выполнил вход у провайдера этой модели. Выберите модель с меткой «Бесплатно» или подключите провайдера: вставьте ключ OpenCode Go в настройках OpenCode или выполните `opencode auth login` в терминале. Затем повторите попытку.",
+  "error.provider.customEndpointKeyRefused":
+    "Эндпоинт «{provider}» отклонил свой API-ключ или заголовки. Введите их снова в разделе «Настройки сервера → Провайдеры», затем повторите попытку.",
+  "error.provider.customEndpointKeyMissing":
+    "Эндпоинту «{provider}» нужен API-ключ. Добавьте ключ в разделе «Настройки сервера → Провайдеры», затем повторите попытку.",
   "error.provider.opencodeKeyExpired":
     "Срок действия API-ключа OpenCode истёк. Создайте новый ключ в OpenCode Console, вставьте его в настройках OpenCode, затем повторите попытку.",
   "error.provider.opencodeServiceFailure":

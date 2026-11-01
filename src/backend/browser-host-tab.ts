@@ -56,6 +56,10 @@ export interface BrowserHostTab {
   ownerThreadId: string | null;
   ownerAgentId: string | null;
   revision: number;
+  /** The number of the queued operation that runs now or ran last. */
+  operations?: number;
+  /** The last full-page image that the agent got, and the operation that last passed it on. */
+  image?: { operation: number; url: string; taken: number };
   queue: Deferred.Deferred<void>;
   scope: Scope.Closeable;
   /** Operations queued or running on `queue`, so a preview can tell the agent is working on the tab. */
@@ -77,7 +81,7 @@ export interface BrowserHostTab {
    */
   pendingRestore?: (() => Effect.Effect<void, BrowserOperationError>) | undefined;
   /**
-   * An idle agent tab whose page was unloaded to free its renderer's memory. The title and the last
+   * An idle agent tab whose page and renderer process were closed to free memory. The title and the last
    * preview frame stand in for the page until `pendingRestore` loads it again.
    */
   sleeping?: { title: string; preview: BrowserPreview | null } | undefined;

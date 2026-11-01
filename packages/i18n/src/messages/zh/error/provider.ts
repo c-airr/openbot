@@ -9,6 +9,8 @@ export const messages = {
     "OpenBot 无法在 Codex 配置中注册 Computer Use。请确认 Codex 的 config.toml 有效且可写，然后重启 OpenBot。你可以在助手设置中关闭 Computer Use 以便继续。",
   "error.provider.codexUnresponsive": "Codex 停止响应，OpenBot 已结束其进程。",
   "error.provider.acpUnresponsive": "{provider} 未及时响应，OpenBot 已结束其进程。",
+  "error.provider.acpMcpNotLoaded":
+    "{provider} 没有加载 OpenBot 的工具，因此此智能体无法使用这些工具，也无法联系队友。{provider} 的团队策略可能会阻止本地 MCP 服务器。请让团队管理员允许它们，然后重试。",
   "error.provider.endpointsReadOnly":
     "已保存的端点由更新版本的 OpenBot 写入，或文件无法读取。请更新 OpenBot 后再修改。",
   "error.provider.endpointNoSecureStorage":
@@ -58,6 +60,7 @@ export const messages = {
   "error.provider.removeWhileOn": "请先关闭服务商，再移除其下载。",
   "error.provider.removeWhileDownloading": "请等待下载完成，然后再移除。",
   "error.provider.removeIncomplete": "有程序正在使用此 CLI 的文件。请关闭该程序，然后重试。",
+  "error.provider.removeDownloadsFailed": "无法移除 {providers} 的 CLI 下载。",
   "error.provider.cliOverride": "请在 OpenBot 中更新之前，先移除显式指定的 CLI 路径。",
   "error.provider.runtimeUpdateIncomplete": "运行时更新未完成。",
   "error.provider.downloadHttp": "运行时下载失败，HTTP {status}。",
@@ -114,14 +117,6 @@ export const messages = {
   "error.provider.codexNotStartedHint": "找到了 Codex CLI，但无法启动。请在新终端中运行 `codex --version`。",
   "error.provider.codexManagedNotStarted": "ChatGPT 已下载，但无法启动。请在 OpenBot 中重新下载。",
   "error.provider.codexMissing": "ChatGPT 尚未下载。请在 OpenBot 中下载后继续。",
-  "error.provider.codexConfigIgnored": {
-    one: "Codex 忽略了配置中的 {count} 项设置：{settings}。请修正或移除它，或更新 Codex。",
-    other: "Codex 忽略了配置中的 {count} 项设置：{settings}。请修正或移除它们，或更新 Codex。",
-  },
-  "error.provider.codexConfigIgnoredUnnamed": {
-    one: "Codex 忽略了配置中的 {count} 项设置。请修正或移除它，或更新 Codex。",
-    other: "Codex 忽略了配置中的 {count} 项设置。请修正或移除它们，或更新 Codex。",
-  },
   "error.provider.claudeOutdated": "Claude Code {version} 版本过低。OpenBot 需要 2.1.232 或更高版本。",
   "error.provider.claudeNotStarted": "找到了 Claude CLI，但无法启动。",
   "error.provider.claudeNotStartedHint": "找到了 Claude CLI，但无法启动。请在新终端中运行 `claude --version`。",
@@ -168,6 +163,10 @@ export const messages = {
     "OpenCode 尚未登录模型服务商“{provider}”。请选择带“免费”标签的模型，或连接该服务商：在 OpenCode 设置中粘贴 OpenCode Go 密钥，或在终端中运行 `opencode auth login`。然后重试。",
   "error.provider.opencodeAuthRequiredUnknown":
     "OpenCode 尚未登录该模型的服务商。请选择带“免费”标签的模型，或连接该服务商：在 OpenCode 设置中粘贴 OpenCode Go 密钥，或在终端中运行 `opencode auth login`。然后重试。",
+  "error.provider.customEndpointKeyRefused":
+    "端点“{provider}”拒绝了它的 API 密钥或请求头。请在“服务器设置 → 服务商”中重新输入，然后重试。",
+  "error.provider.customEndpointKeyMissing":
+    "端点“{provider}”需要 API 密钥。请在“服务器设置 → 服务商”中添加密钥，然后重试。",
   "error.provider.opencodeKeyExpired":
     "你的 OpenCode API 密钥已过期。请在 OpenCode Console 中创建新密钥，粘贴到 OpenCode 设置中，然后重试。",
   "error.provider.opencodeServiceFailure":

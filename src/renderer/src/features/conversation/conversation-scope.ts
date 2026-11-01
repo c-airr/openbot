@@ -7,6 +7,7 @@ import {
 } from "@openbot/contracts/chat-tag-references";
 import {
   customProviderOfModel,
+  isCustomProviderHarness,
   type McpSignInRelayPage,
   relayableSignInLink,
   type UpdateAgentInput,
@@ -260,6 +261,8 @@ export function createConversationViewScope(props: ConversationProps) {
   const {
     skillSettingsRequest,
     openSkillSettings,
+    instructionsSettingsRequest,
+    openInstructionsSettings,
     routineSettingsRequest,
     activeRightPanel,
     settingsOpen,
@@ -288,6 +291,7 @@ export function createConversationViewScope(props: ConversationProps) {
     openWorkspaceFolder,
     openWorkspaceFolderEntry,
     previewQuoteId,
+    previewFileKey,
     previewWorkspaceAgentId,
     sidebarFileBack,
     openSidebarFileBack,
@@ -399,12 +403,13 @@ export function createConversationViewScope(props: ConversationProps) {
     providerSilentMinutes,
     providerOffline,
   } = activity;
-  /** The name of what the agent's turns wait for. OpenCode serves a custom endpoint, so it names the endpoint (#3234). */
+  /** The name of what the agent's turns wait for. OpenCode or Pi serves a custom endpoint, so it names the endpoint (#3234). */
   const agentProviderName = () => {
     const agent = props.agent;
     if (!agent) return undefined;
-    const endpoint =
-      agent.provider === "opencode" ? customProviderOfModel(agent.model, props.customProviders ?? []) : undefined;
+    const endpoint = isCustomProviderHarness(agent.provider)
+      ? customProviderOfModel(agent.model, props.customProviders ?? [])
+      : undefined;
     return endpoint?.name ?? providerDisplayName(agent.provider);
   };
   const browser = createBrowserStore({
@@ -749,6 +754,17 @@ export function createConversationViewScope(props: ConversationProps) {
     },
   });
   const { startVoiceRecording, stopVoiceRecording, stopVoiceRecordingAndSend, cancelVoiceRecording } = voice;
+  /**
+   * Copies a conversation through an answer into a new thread. The branch opens in the chat, and its
+   * composer takes the focus, so the user can type the new direction at once.
+   */
+  const branchThread = async (sourceTaskId: string | null, messageId: string) => {
+    const onBranch = props.threads?.onBranch;
+    if (!onBranch || !(await onBranch(sourceTaskId, messageId))) return;
+    // The branch shows first, so that its editor takes the request.
+    flush();
+    setThreadFocusRequest((current) => current + 1);
+  };
   /** Dictates into the open side thread's draft. */
   const startThreadVoiceRecording = () => {
     const key = threadComposer.openDraftKey();
@@ -1870,6 +1886,18 @@ export function createConversationViewScope(props: ConversationProps) {
   const setUnreadMessagesDividerElement = (element: HTMLDivElement) => {
     unreadMessagesDivider = element;
   };
+  // The NEW line animates in when it shows a place that the last line did not mark: a chat that
+  // opens at its unread messages, or Mark unread. The virtualizer draws a row again when it scrolls
+  // back into view, and that draw shows the line at once.
+  let animatedUnreadBoundary: string | undefined;
+  const unreadDividerArrives = (): boolean => {
+    const boundary = untrack(
+      () => `${props.server?.id ?? "local"}:${conversationOwnerId(props) ?? ""}:${unreadBoundaryMessageId() ?? ""}`,
+    );
+    if (boundary === animatedUnreadBoundary) return false;
+    animatedUnreadBoundary = boundary;
+    return true;
+  };
   const setAgentActivitySlotElement = (element: HTMLDivElement) => {
     agentActivitySlot = element;
     scrollResizeObserver?.observe(element);
@@ -1912,6 +1940,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setThreadScrollElement,
     threadComposer,
     threadFocusRequest,
+    branchThread,
     threadVoiceLiveText,
     threadVoiceOwned,
     replyJump,
@@ -1932,6 +1961,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setStickToLatest,
     followReaderScroll,
     setUnreadMessagesDividerElement,
+    unreadDividerArrives,
     setVirtualRootElement,
     activeBrowserControl,
     actingBrowserControl,
@@ -2054,6 +2084,7 @@ export function createConversationViewScope(props: ConversationProps) {
     openWorkspaceFolder,
     openWorkspaceFolderEntry,
     previewQuoteId,
+    previewFileKey,
     previewWorkspaceAgentId,
     sidebarFileBack,
     openSidebarFileBack,
@@ -2083,6 +2114,8 @@ export function createConversationViewScope(props: ConversationProps) {
     setPageContext,
     skillSettingsRequest,
     openSkillSettings,
+    instructionsSettingsRequest,
+    openInstructionsSettings,
     routineSettingsRequest,
     updateRuntimeSettings,
     scheduleUnreadDividerVisibilityUpdate,

@@ -132,7 +132,8 @@ function usageRow(
       resetsAtLabel: formatUsageReset(window.resetsAt, text),
     };
   };
-  const ownWindows = (limit ? reportedUsageWindows(limit) : []).map((window) =>
+  const reported = limit ? reportedUsageWindows(limit) : [];
+  const ownWindows = reported.map((window) =>
     windowRow(
       window,
       // Cursor's two windows share one billing cycle and differ by the models they cover. One
@@ -187,9 +188,12 @@ function usageRow(
             : [];
         })
       : [];
-  const ringWindows = groupFiveHourWindows.length > 1 ? groupFiveHourWindows : ownWindows;
+  const ringWindows =
+    groupFiveHourWindows.length > 1
+      ? groupFiveHourWindows
+      : ownWindows.filter((_, index) => reported[index] !== limit?.tertiary);
   // The shortest window comes first, so on a tie the shorter window stops work first.
-  const binding = ownWindows.reduce<AccountUsageWindowRow | null>(
+  const binding = ringWindows.reduce<AccountUsageWindowRow | null>(
     (lowest, window) => (lowest === null || window.remainingPercent < lowest.remainingPercent ? window : lowest),
     null,
   );

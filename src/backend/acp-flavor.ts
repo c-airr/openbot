@@ -1,6 +1,14 @@
 import { win32 } from "node:path";
-import type { RequestError } from "@agentclientprotocol/sdk";
+import type { NewSessionRequest, RequestError } from "@agentclientprotocol/sdk";
+import { enableCursorMcpServers } from "./cursor-mcp-disabled";
 import { isRecord } from "./protocol";
+
+/** The custom endpoint that serves a model, as a turn's error names it. Never a credential itself. */
+export interface AcpCustomEndpoint {
+  readonly name: string;
+  /** Whether the endpoint has a saved API key or header. */
+  readonly hasCredentials: boolean;
+}
 
 /**
  * What one ACP agent does differently from the protocol. `AcpAgentClient` reads each hook at the
@@ -17,7 +25,8 @@ export interface AcpFlavor {
   sessionNotFound?(error: RequestError, sessionId: string): boolean | null;
   /**
    * The message of a failed turn, from the redacted failure text. `redact` masks more text, `log`
-   * writes a diagnostic that it redacts first, and `model` is the session's model.
+   * writes a diagnostic that it redacts first, and `model` is the session's model. `endpoint` is the
+   * custom endpoint that serves that model, or null.
    */
   turnFailure?(
     error: unknown,
@@ -25,6 +34,7 @@ export interface AcpFlavor {
     redact: (text: string) => string,
     log: (text: string) => void,
     model: string | null,
+    endpoint: AcpCustomEndpoint | null,
   ): string;
   /** The message of a turn that ended with no answer text. Absent: such a turn succeeds. */
   emptyAnswerFailure?(reasoned: boolean): string;
@@ -94,10 +104,20 @@ export interface AcpFlavor {
    * replaces the server that the others in it use. Their OpenBot servers then share one token.
    */
   mcpServersPerDirectory?: true;
+  /**
+   * The agent connects to each MCP server of a session before it answers `session/new` or
+   * `session/load`, and leaves out a server that did not load with no error. A session that OpenBot's
+   * servers did not reach then fails, as the agent cannot use OpenBot's tools.
+   */
+  mcpServersLoadWithSession?: true;
+  /** Turns OpenBot's servers back on where the agent's own settings for `cwd` turned them off. */
+  enableMcpServers?(cwd: string, names: readonly string[]): void;
   /** OpenBot compacts by replacing the session, for an agent that reports `usage_update` and has no compact request. */
   contextCompaction?: "handoff";
   /** A whole answer chunk that is the agent's own transport error, not answer text. OpenBot drops it. */
   noiseChunk?: RegExp;
+  /** The `_meta` of each `session/new`, `session/load` and `session/resume` request. */
+  sessionMeta?: NewSessionRequest["_meta"];
 }
 
 /** The protocol's own behavior: Grok and Cline. */
@@ -117,6 +137,10 @@ export const CURSOR_ACP_FLAVOR: AcpFlavor = {
   // Cursor 2026.10.22-27dcf5f asks its server for the model list on each model set, and reports a
   // failed request as "Invalid model value" (#3800). One set per change, not one per turn.
   processWideModel: true,
+  // Cursor 2026.10.22-27dcf5f leaves out a disabled or blocked server, and the agent turn then
+  // finds no OpenBot tools (#3058).
+  mcpServersLoadWithSession: true,
+  enableMcpServers: enableCursorMcpServers,
 };
 
 /**

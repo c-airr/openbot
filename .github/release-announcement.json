@@ -1,10 +1,10 @@
 {
-  "version": "0.54.0",
+  "version": "0.58.0",
   "highlights": [
-    "Buy a commercial license for work from Billing or from Add server: Starter for 1 user, or Team for 2 to 10 users. A new license is free until 1 December 2026.",
-    "A Workspace only agent can now change files in folders that you add, from the agent's settings or by dropping a folder on the chat.",
-    "openbot.run has a Pricing page with the hosted servers and the licenses in EUR, USD or PLN.",
-    "Set the context window of each model of a custom provider, so OpenCode compacts at the correct size.",
-    "Remote desktop pairing on macOS 27 works again, and Gemini continues when one MCP server does not start."
+    "Start a workflow from a GitHub issue, comment, pull request or failed check, and let it comment, label or review on GitHub.",
+    "A joined server opens much faster: the agents and sidebar from your last visit show at once while the app connects.",
+    "On the web, a switch to another server takes about 1 second.",
+    "Marketplace has 17 new OpenBot agents, such as QA Tester, PR Shepherd and Chief of Staff.",
+    "You can move queued messages in a queue of more than 32 messages."
   ]
 }

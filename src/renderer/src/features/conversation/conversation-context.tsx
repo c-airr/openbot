@@ -170,6 +170,8 @@ const Conversation = createSimpleContext({
     const agentChatsRetriedOnOpen = new Set<string>();
     const conversationPageRequests = new Map<string, number>();
     const conversationReadOperations = new Map<string, Promise<void>>();
+    /** The chats that the user marked unread. They stay unread until the user opens them again. */
+    const heldUnreadAgentChats = new Set<string>();
 
     let conversationFrame: number | undefined;
 
@@ -317,6 +319,9 @@ const Conversation = createSimpleContext({
 
     function requestConversationRead(agentId: string, explicit = false): void {
       const trackingKey = agentConversationKey(activeServerId(), agentId);
+      // Only an open of the chat ends Mark unread: focus does not, and neither does a new message.
+      if (explicit) heldUnreadAgentChats.delete(trackingKey);
+      else if (heldUnreadAgentChats.has(trackingKey)) return;
       if (explicit) autoReadAgentMessages.delete(trackingKey);
       agentChatsToMarkRead.add(trackingKey);
       agentChatsRetriedOnOpen.delete(agentId);
@@ -369,7 +374,11 @@ const Conversation = createSimpleContext({
     }
 
     function isAgentChatReadable(agentId: string): boolean {
-      return appFocused() && isAgentChatOpen(agentId);
+      return (
+        appFocused() &&
+        isAgentChatOpen(agentId) &&
+        !heldUnreadAgentChats.has(agentConversationKey(activeServerId(), agentId))
+      );
     }
 
     /**
@@ -428,6 +437,7 @@ const Conversation = createSimpleContext({
     function autoMarkAgentMessageRead(agentId: string, messageId: string, optimisticallyClearUnread = false): void {
       const serverId = activeServerId();
       const trackingKey = agentConversationKey(serverId, agentId);
+      if (heldUnreadAgentChats.has(trackingKey)) return;
       const decision = decideAgentAutoRead({
         messageId,
         current: conversations[agentId]?.read,
@@ -872,6 +882,8 @@ const Conversation = createSimpleContext({
     ): Promise<void> {
       if (!agentId || !scopeIsCurrent()) return;
       const requestKey = agentConversationKey(serverId, agentId);
+      // Automatic reads stop before this for a chat marked unread, so this read is the user's.
+      heldUnreadAgentChats.delete(requestKey);
       const conversationAtStart = conversations[agentId];
       const visibleMessageIdAtStart = latestVisibleAgentMessageId(conversations[agentId]?.messages);
       const boundary =
@@ -930,6 +942,36 @@ const Conversation = createSimpleContext({
       conversationReadOperations.set(requestKey, operation);
       try {
         await operation;
+      } finally {
+        if (conversationReadOperations.get(requestKey) === operation) conversationReadOperations.delete(requestKey);
+      }
+    }
+
+    /**
+     * Marks an agent message and the messages after it unread. The open chat stays open and moves its
+     * NEW line to that message; the next open of the chat marks it read again.
+     */
+    async function markAgentMessagesUnread(
+      agentId: string,
+      fromMessageId: string,
+      serverId = activeServerId(),
+    ): Promise<void> {
+      const requestKey = agentConversationKey(serverId, agentId);
+      heldUnreadAgentChats.add(requestKey);
+      const operation: Promise<void> = (conversationReadOperations.get(requestKey) ?? Promise.resolve())
+        .catch(() => undefined)
+        .then(async () => {
+          const state = await conversationPort().agent.markConversationUnread({ agentId, fromMessageId }, serverId);
+          // A finished automatic read would otherwise apply its read state again.
+          autoReadAgentMessages.delete(requestKey);
+          if (scopeIsCurrent()) applyConversationReadState(agentId, state);
+        });
+      conversationReadOperations.set(requestKey, operation);
+      try {
+        await operation;
+      } catch (error) {
+        heldUnreadAgentChats.delete(requestKey);
+        appendUiError(agentId, error, currentText().t("chat.errorStatus.readState"), serverId);
       } finally {
         if (conversationReadOperations.get(requestKey) === operation) conversationReadOperations.delete(requestKey);
       }
@@ -1015,6 +1057,7 @@ const Conversation = createSimpleContext({
       searchAgentMessages,
       sendMessage,
       markAgentMessagesRead,
+      markAgentMessagesUnread,
       markAllAgentMessagesRead,
       presentPromptResolution,
       // See `AppProviders`: a chat window sends no typing state.

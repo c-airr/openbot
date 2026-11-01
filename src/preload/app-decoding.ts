@@ -130,8 +130,20 @@ import {
   requiredString,
 } from "@openbot/contracts/ipc-decoding";
 import { type LicenseState, parseLicenseState } from "@openbot/contracts/license";
+import {
+  isMarketplaceAgentId,
+  isMarketplaceSkillSlug,
+  type MarketplaceListingLink,
+} from "@openbot/contracts/marketplace-links";
 import { isPluginSlug } from "@openbot/contracts/plugin-links";
-import { isBoolean, isNumber, isOneOf, isString } from "@openbot/contracts/runtime-values";
+import {
+  type DynamicRecord,
+  isBoolean,
+  isDynamicRecord,
+  isNumber,
+  isOneOf,
+  isString,
+} from "@openbot/contracts/runtime-values";
 
 export function decodeAppInfo(value: unknown): AppInfo {
   const info = decodeRecord(value, "app info");
@@ -255,7 +267,15 @@ function decodeCentralAuthUser(value: unknown): CentralAuthUser {
     email: requiredString(user, "email"),
     name: nullableString(user, "name"),
     avatarUrl: nullableString(user, "avatarUrl"),
+    ...optionalAnalyticsEnabled(user),
   };
+}
+
+function optionalAnalyticsEnabled(user: DynamicRecord): Pick<CentralAuthUser, "analyticsEnabled"> {
+  const { analyticsEnabled } = user;
+  if (analyticsEnabled === undefined) return {};
+  if (analyticsEnabled !== null && !isBoolean(analyticsEnabled)) throw new Error("Invalid analyticsEnabled.");
+  return { analyticsEnabled };
 }
 
 function decodeCentralAuthIssue(value: unknown): CentralAuthIssue {
@@ -530,6 +550,15 @@ export function decodePendingListing(value: unknown): string | null {
 // The same check for an agent link: the id began in a URL a web page chose.
 export function decodePendingAgentTemplate(value: unknown): string | null {
   return typeof value === "string" && isAgentTemplateId(value) ? value : null;
+}
+
+// The same check for a Marketplace link: the agent id or skill slug began in a URL a web page chose.
+// Only the two fields come through, so nothing else main could add reaches the renderer.
+export function decodePendingMarketplaceListing(value: unknown): MarketplaceListingLink | null {
+  if (!isDynamicRecord(value) || !isString(value.id)) return null;
+  if (value.kind === "agent" && isMarketplaceAgentId(value.id)) return { kind: "agent", id: value.id };
+  if (value.kind === "skill" && isMarketplaceSkillSlug(value.id)) return { kind: "skill", id: value.id };
+  return null;
 }
 
 /** The export skill's text, shown for the user to copy. It is Markdown, never markup. */

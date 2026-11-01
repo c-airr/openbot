@@ -98,7 +98,8 @@ export function parseProviderId(input: unknown): AgentProviderId {
 
 export function parseAnalyticsPreference(input: unknown): SetAnalyticsPreferenceInput {
   if (!isDynamicRecord(input) || !isBoolean(input.enabled)) throw new Error("Analytics preference is required.");
-  return { enabled: input.enabled };
+  if (input.chosen !== undefined && !isBoolean(input.chosen)) throw new Error("Analytics choice is not valid.");
+  return { enabled: input.enabled, ...(input.chosen ? { chosen: true } : {}) };
 }
 
 export function parseBusyMessageModePreference(input: unknown): BusyMessageModePreference {
@@ -351,10 +352,13 @@ export function parseMarketplaceAgentQuery(input: unknown): MarketplaceAgentQuer
   if (!isObject(input)) throw new Error("Invalid agent marketplace query.");
   const category = input.category;
   if (category !== undefined && !isSkillCategory(category)) throw new Error("Unknown agent category.");
+  const verified = input.verified;
+  if (verified !== undefined && !isBoolean(verified)) throw new Error("Invalid agent source filter.");
   return {
     ...parseMarketplaceQueryFields(input),
     ...parseMarketplaceSort(input.sort, ["installs"] as const, "Unknown agent sort order."),
     ...(category ? { category } : {}),
+    ...(verified === undefined ? {} : { verified }),
   };
 }
 

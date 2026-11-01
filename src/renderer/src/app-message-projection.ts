@@ -1,4 +1,5 @@
 import {
+  AGENT_INSTRUCTIONS_CHANGE_ITEM_TYPE,
   type ClientAgentSummary,
   CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
   CONVERSATION_PLAN_ITEM_TYPE,
@@ -350,6 +351,14 @@ function chatActionMarker(
     return { kind: "session-import", text: message.text, timestamp: message.createdAt };
   if (isPlanContinuationMarker(message))
     return { kind: "plan-continuation", text: message.text, timestamp: message.createdAt };
+  if (message.author === "system" && message.itemType === AGENT_INSTRUCTIONS_CHANGE_ITEM_TYPE)
+    return {
+      kind: "instructions-change",
+      agentId: ownerAgentId ?? null,
+      change: message.instructionsChange ?? null,
+      text: message.text,
+      timestamp: message.createdAt,
+    };
   const skillEvent = skillConversationEvent(message);
   if (skillEvent) return { ...skillEvent, kind: "skill-lifecycle", timestamp: message.createdAt };
   const suggestion = marketplaceSuggestionEvent(message);

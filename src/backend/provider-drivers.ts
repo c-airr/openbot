@@ -53,6 +53,8 @@ import type { McpDropReporter, McpEndpointSource, McpServerSource, McpToolRuntim
 import { MuseAgentClient } from "./muse-client";
 import {
   type CustomProviderSource,
+  customProvidersOn,
+  OPENCODE_AGENT_CONFIG,
   OPENCODE_PROFILE_CONFIG,
   openCodeConfigEnv,
   openCodeModelName,
@@ -476,6 +478,11 @@ export interface BuiltInProviderDriver {
   codeSignIn?: ProviderCodeSignIn;
   /** Absent for a provider that holds one account only. */
   accounts?: ProviderAccountSupport;
+  /**
+   * Signs the provider's own sign-in out, in the user's home folder, when its accounts have no
+   * `ProviderAccountSupport.signOut`. Absent for a CLI that has no sign-out command.
+   */
+  signOut?: ProviderCliCommand;
   /** The provider whose downloaded CLI this one runs. Absent when the provider has a CLI of its own. */
   cliProvider?: AgentProviderId;
   /** Absent for a provider whose `model/list` needs no special reading. */
@@ -536,8 +543,16 @@ function piClient(
   });
 }
 
+/** The main Pi client runs the custom endpoints saved on Pi. A key-only provider runs its key. */
 function piKeyProvider(provider: "pi" | KeyOnlyProviderId, context: ProviderClientContext) {
-  return provider === "pi" ? {} : { keyProvider: { id: provider, apiKey: () => context.apiKey(provider) } };
+  return provider === "pi"
+    ? { customEndpoints: customProvidersOn(context.customProviders, "pi") }
+    : { keyProvider: { id: provider, apiKey: () => context.apiKey(provider) } };
+}
+
+/** The custom endpoints that OpenCode runs. The others run on Pi. */
+function openCodeEndpoints(context: ProviderClientContext): CustomProviderSource {
+  return customProvidersOn(context.customProviders, "opencode");
 }
 
 function piProfileClient(
@@ -603,6 +618,8 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
     signIn: { kind: "muse-device", timeoutMs: CLI_LOGIN_TIMEOUT_MS },
     // On this computer only: no Team API protocol carries a Muse code sign-in.
     codeSignIn: { kind: "muse-device", timeoutMs: CLI_LOGIN_TIMEOUT_MS },
+    // Removes the saved Meta account or key. OpenBot's own key is in `META_API_KEY`, which stays.
+    signOut: { argv: ["logout"], env: () => ({ MUSE_NO_AUTO_UPDATE: "1" }), timeoutMs: 30_000 },
     resolveCli: resolveMuseCli,
     createClient: (cli, timeout, context, confinement) =>
       new MuseAgentClient(cli, {
@@ -731,6 +748,8 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
         timeoutMs: CLI_LOGIN_TIMEOUT_MS,
       },
     },
+    // Only for the own sign-in: an account folder is removed without it.
+    signOut: { argv: ["--no-auto-update", "logout"], env: () => ({}), timeoutMs: 30_000 },
     resolveCli: resolveGrokCli,
     createClient: (cli, requestTimeoutMs, context, confinement) =>
       new GrokAgentClient(
@@ -787,13 +806,18 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
         extraEnv: () => ({
           ...context.agentEnvironment?.(),
           ...opencodeEnv(cli, context),
-          ...openCodeConfigEnv({}, context.customProviders, context.apiKey("opencode")),
+          ...openCodeConfigEnv(OPENCODE_AGENT_CONFIG, openCodeEndpoints(context), context.apiKey("opencode")),
           ...(confinement ? OPENCODE_CONFINED_ENV : {}),
         }),
-        signInMessage: openCodeSignInMessage(context.customProviders().length),
-        modelName: (id, name) => openCodeModelName(id, name, context.customProviders),
-        // A stalled turn on a custom endpoint names the endpoint, not OpenCode (#3234).
-        providerName: (modelId) => customProviderOfModel(modelId, context.customProviders())?.name ?? null,
+        signInMessage: openCodeSignInMessage(openCodeEndpoints(context)().length),
+        modelName: (id, name) => openCodeModelName(id, name, openCodeEndpoints(context)),
+        // A stalled or refused turn on a custom endpoint names the endpoint, not OpenCode (#3234).
+        customEndpoint: (modelId) => {
+          const endpoint = customProviderOfModel(modelId, openCodeEndpoints(context)());
+          return endpoint
+            ? { name: endpoint.name, hasCredentials: Boolean(endpoint.apiKey) || endpoint.headers.length > 0 }
+            : null;
+        },
         servesModel: context.servesModel,
         mcpServers: context.mcpServers,
         reportMcpDrops: context.reportMcpDrops,
@@ -814,10 +838,10 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
         env: {},
         extraEnv: () => ({
           ...opencodeEnv(cli, context),
-          ...openCodeConfigEnv(OPENCODE_PROFILE_CONFIG, context.customProviders, context.apiKey("opencode")),
+          ...openCodeConfigEnv(OPENCODE_PROFILE_CONFIG, openCodeEndpoints(context), context.apiKey("opencode")),
         }),
-        signInMessage: openCodeSignInMessage(context.customProviders().length),
-        modelName: (id, name) => openCodeModelName(id, name, context.customProviders),
+        signInMessage: openCodeSignInMessage(openCodeEndpoints(context)().length),
+        modelName: (id, name) => openCodeModelName(id, name, openCodeEndpoints(context)),
         servesModel: context.servesModel,
       }),
     authState: (account) => ({ kind: "opencode", email: account?.email ?? null }),
@@ -892,6 +916,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
       flow: "link",
       command: { argv: ["login"], env: () => ({ NO_OPEN_BROWSER: "1" }), timeoutMs: CLI_LOGIN_TIMEOUT_MS },
     },
+    signOut: { argv: ["logout"], env: () => ({}), timeoutMs: 30_000 },
     resolveCli: resolveCursorCli,
     createClient: (cli, timeout, context, confinement) =>
       new AcpAgentClient(cli, timeout, {

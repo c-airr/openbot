@@ -9,6 +9,8 @@ export const messages = {
   "error.provider.codexUnresponsive": "Codex hat nicht mehr geantwortet, daher hat OpenBot den Prozess beendet.",
   "error.provider.acpUnresponsive":
     "{provider} hat nicht rechtzeitig geantwortet, daher hat OpenBot den Prozess beendet.",
+  "error.provider.acpMcpNotLoaded":
+    "{provider} hat die OpenBot-Tools nicht geladen, daher kann dieser Agent sie nicht nutzen und seine Teammitglieder nicht erreichen. Eine Team-Richtlinie von {provider} kann lokale MCP-Server blockieren. Bitte deinen Team-Admin, sie zu erlauben, und versuche es dann erneut.",
   "error.provider.endpointsReadOnly":
     "Die gespeicherten Endpunkte wurden mit einer neueren OpenBot-Version geschrieben oder die Datei kann nicht gelesen werden. Aktualisiere OpenBot, um sie zu ändern.",
   "error.provider.endpointNoSecureStorage":
@@ -63,6 +65,7 @@ export const messages = {
   "error.provider.removeWhileOn": "Schalte den Anbieter aus, bevor du seinen Download entfernst.",
   "error.provider.removeWhileDownloading": "Warte, bis der Download fertig ist, und entferne ihn dann.",
   "error.provider.removeIncomplete": "Ein Programm verwendet Dateien dieser CLI. Schließe es und versuche es erneut.",
+  "error.provider.removeDownloadsFailed": "Die CLI-Downloads von {providers} konnten nicht entfernt werden.",
   "error.provider.cliOverride": "Entferne den ausdrücklich festgelegten CLI-Pfad, bevor du in OpenBot aktualisierst.",
   "error.provider.runtimeUpdateIncomplete": "Die Laufzeitaktualisierung wurde nicht abgeschlossen.",
   "error.provider.downloadHttp": "Der Laufzeitdownload ist mit HTTP {status} fehlgeschlagen.",
@@ -127,16 +130,6 @@ export const messages = {
   "error.provider.codexManagedNotStarted":
     "ChatGPT wurde heruntergeladen, konnte aber nicht gestartet werden. Lade es in OpenBot erneut herunter.",
   "error.provider.codexMissing": "ChatGPT wurde nicht heruntergeladen. Lade es in OpenBot herunter, um fortzufahren.",
-  "error.provider.codexConfigIgnored": {
-    one: "Codex hat {count} Einstellung in seiner Konfiguration ignoriert: {settings}. Korrigiere oder entferne sie oder aktualisiere Codex.",
-    other:
-      "Codex hat {count} Einstellungen in seiner Konfiguration ignoriert: {settings}. Korrigiere oder entferne sie oder aktualisiere Codex.",
-  },
-  "error.provider.codexConfigIgnoredUnnamed": {
-    one: "Codex hat {count} Einstellung in seiner Konfiguration ignoriert. Korrigiere oder entferne sie oder aktualisiere Codex.",
-    other:
-      "Codex hat {count} Einstellungen in seiner Konfiguration ignoriert. Korrigiere oder entferne sie oder aktualisiere Codex.",
-  },
   "error.provider.claudeOutdated": "Claude Code {version} ist zu alt. OpenBot benötigt 2.1.232 oder neuer.",
   "error.provider.claudeNotStarted": "Claude CLI wurde gefunden, konnte aber nicht gestartet werden.",
   "error.provider.claudeNotStartedHint":
@@ -201,6 +194,10 @@ export const messages = {
     "OpenCode hat keine Anmeldung für den Modellanbieter „{provider}“. Wähle ein Modell mit der Markierung „Kostenlos“ oder verbinde den Anbieter: Füge einen OpenCode-Go-Schlüssel in den OpenCode-Einstellungen ein oder führe `opencode auth login` in einem Terminal aus. Versuche es dann erneut.",
   "error.provider.opencodeAuthRequiredUnknown":
     "OpenCode hat keine Anmeldung für den Anbieter dieses Modells. Wähle ein Modell mit der Markierung „Kostenlos“ oder verbinde den Anbieter: Füge einen OpenCode-Go-Schlüssel in den OpenCode-Einstellungen ein oder führe `opencode auth login` in einem Terminal aus. Versuche es dann erneut.",
+  "error.provider.customEndpointKeyRefused":
+    "Der Endpunkt „{provider}“ hat seinen API-Schlüssel oder seine Header abgelehnt. Gib sie in Servereinstellungen → Anbieter erneut ein und versuche es dann erneut.",
+  "error.provider.customEndpointKeyMissing":
+    "Der Endpunkt „{provider}“ braucht einen API-Schlüssel. Füge den Schlüssel in Servereinstellungen → Anbieter hinzu und versuche es dann erneut.",
   "error.provider.opencodeKeyExpired":
     "Dein OpenCode-API-Schlüssel ist abgelaufen. Erstelle in der OpenCode Console einen neuen Schlüssel, füge ihn in den OpenCode-Einstellungen ein und versuche es dann erneut.",
   "error.provider.opencodeServiceFailure":
