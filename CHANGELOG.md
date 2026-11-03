@@ -7,6 +7,15 @@ All notable changes to OpenBot will be documented here. The project follows
 ## [Unreleased]
 ## [0.60.0] - 2026-11-03
 
+### Added (fork c-airr)
+
+- Merge upstream OpenBot 0.59–0.60 (audit log, WhatsApp, Slack workflows, channel pictures, and other upstream notes below).
+- Live Antigravity subagents in the agent queue and a running-subagents list above the composer.
+- Lean mode per chat (leaf toggle) to cut prompt size on long threads.
+- New-chat screen can pick a project folder; the choice is remembered locally.
+- Slash commands `/compact` and `/claude` in agent chats.
+- OpenRouter free-tier usage chip; FreeLLMAPI budget bar reads `GET /v1/budzet` when `%APPDATA%\\OpenBot\\openbot-freellmapi-v1.json` is present.
+
 ### Added
 
 - Server settings has an Audit log. Owners and admins see who joined or left, who changed a member's role or a custom role, and who changed the access of each agent, with a filter and a search.
