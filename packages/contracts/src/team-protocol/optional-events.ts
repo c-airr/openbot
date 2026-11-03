@@ -1,4 +1,5 @@
 import { type AgentAccessEvent, agentAccessEvent } from "./agent-access-v1";
+import { type AgentColorsEvent, agentColorsEvent } from "./agent-colors-v1";
 import { type AgentHiddenEvent, agentHiddenEvent } from "./agent-hidden-v1";
 import { type AgentNotificationLevelsEvent, agentNotificationLevelsEvent } from "./agent-notification-levels-v1";
 import { type AgentSessionSettingsEvent, agentSessionSettingsEvent } from "./agent-session-settings-v1";
@@ -14,12 +15,15 @@ import { type HostRestartEvent, hostRestartEvent } from "./host-update-v1";
 import { type MachineAlertEvent, machineAlertEvent } from "./machine-resources-v1";
 import { type QuietTurnCompletedEvent, quietTurnEvent } from "./quiet-turn-v1";
 import { type RoutineFlowsEvent, routineFlowsEvent } from "./routine-flows-v1";
+import { type SidebarFoldersEvent, sidebarFoldersEvent } from "./sidebar-folders-v1";
+import { type SidebarPinsEvent, sidebarPinsEvent } from "./sidebar-pins-v1";
 import { type SkillsEvent, skillsEvent } from "./skills-events-v1";
 import { type VaultEvent, vaultEvent } from "./vault-v1";
 import { type WorkflowsEvent, workflowsEvent } from "./workflows-v1";
 
 export type OptionalTeamEvent =
   | AgentAccessEvent
+  | AgentColorsEvent
   | AgentHiddenEvent
   | AgentNotificationLevelsEvent
   | AgentSessionSettingsEvent
@@ -30,6 +34,8 @@ export type OptionalTeamEvent =
   | ChannelEvent
   | HostRestartEvent
   | MachineAlertEvent
+  | SidebarPinsEvent
+  | SidebarFoldersEvent
   | SkillsEvent
   | QuietTurnCompletedEvent
   | RoutineFlowsEvent
@@ -48,6 +54,7 @@ export interface OptionalTeamEventOptions {
 export function optionalTeamEvent(value: unknown, options?: OptionalTeamEventOptions): OptionalTeamEvent | null {
   const event =
     agentAccessEvent(value) ??
+    agentColorsEvent(value) ??
     agentHiddenEvent(value) ??
     agentNotificationLevelsEvent(value) ??
     agentSessionSettingsEvent(value) ??
@@ -58,6 +65,8 @@ export function optionalTeamEvent(value: unknown, options?: OptionalTeamEventOpt
     channelEvent(value) ??
     hostRestartEvent(value) ??
     machineAlertEvent(value) ??
+    sidebarPinsEvent(value) ??
+    sidebarFoldersEvent(value) ??
     skillsEvent(value) ??
     quietTurnEvent(value) ??
     routineFlowsEvent(value) ??
@@ -68,6 +77,8 @@ export function optionalTeamEvent(value: unknown, options?: OptionalTeamEventOpt
 
 /** Translate the optional wire event at each native transport boundary. */
 export function optionalTeamEventToCurrent(event: OptionalTeamEvent) {
+  if (event.type === "sidebar-folders-changed")
+    return { type: "sidebar-layout-changed" as const, layout: event.layout };
   return event.type === "quiet-turn-completed"
     ? { ...event, type: "turn-completed" as const, quiet: true as const }
     : event;

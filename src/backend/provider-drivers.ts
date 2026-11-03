@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import type { ClientSideConnection, InitializeResponse } from "@agentclientprotocol/sdk";
+import { type ClientSideConnection, type InitializeResponse, RequestError } from "@agentclientprotocol/sdk";
 import {
   type AgentAuthState,
   type AgentModelOption,
@@ -14,7 +14,14 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { AcpAgentClient, type AcpHistoryPersistence } from "./acp-client";
-import { CURSOR_ACP_FLAVOR, customAgentFlavor, DEFAULT_ACP_FLAVOR } from "./acp-flavor";
+import {
+  CURSOR_ACP_FLAVOR,
+  customAgentFlavor,
+  DEFAULT_ACP_FLAVOR,
+  DEVIN_ACP_FLAVOR,
+  HERMES_ACP_FLAVOR,
+  KIMI_ACP_FLAVOR,
+} from "./acp-flavor";
 import { ANTIGRAVITY_ACP_FLAVOR } from "./acp-flavor-antigravity";
 import { OPENCODE_ACP_FLAVOR } from "./acp-flavor-opencode";
 import { readMuseAccount } from "./agent/muse-login";
@@ -33,12 +40,16 @@ import {
   antigravityAnswersUsageCommand,
   antigravityReadsGeminiHome,
   cliPathEnvironment,
+  kimiLoginArgs,
   resolveAntigravityCli,
   resolveClaudeCli,
   resolveClineCli,
   resolveCodexCli,
   resolveCursorCli,
+  resolveDevinCli,
   resolveGrokCli,
+  resolveHermesCli,
+  resolveKimiCli,
   resolveMuseCli,
   resolveOpencodeCli,
   resolvePiCli,
@@ -47,6 +58,8 @@ import { clineFreeModels } from "./cline-free-models";
 import { readCursorUsage } from "./cursor-usage";
 import { CustomAcpAgentsClient, type CustomAgentConfig, type CustomAgentSource } from "./custom-acp-agents-client";
 import { GrokAgentClient } from "./grok-client";
+import { isPythonKimiCli, kimiPythonLoginEnv, kimiPythonSavedRegionEnv, type SignInRegion } from "./kimi-region";
+import { readKimiUsage } from "./kimi-usage";
 import type { McpOAuthAuthority } from "./mcp-oauth-provider";
 import type { McpOAuthProxySettingsStore } from "./mcp-oauth-proxy";
 import type { McpDropReporter, McpEndpointSource, McpServerSource, McpToolRuntimeSource } from "./mcp-provider-shapes";
@@ -69,10 +82,16 @@ import {
   cursorConfinedEnv,
   cursorStatePaths,
   customAgentStatePaths,
+  devinDataDirectory,
+  devinStatePaths,
+  hermesHome,
+  hermesStatePaths,
+  kimiStatePaths,
   museStatePaths,
   OPENCODE_CONFINED_ENV,
   openCodeStatePaths,
   type ProcessConfinement,
+  type ProviderStatePaths,
   piAgentDirectory,
   piStatePaths,
   type SpawnTarget,
@@ -85,6 +104,22 @@ interface ProviderCliCommand {
   readonly argv: readonly string[];
   readonly env: (cli: AgentCliInfo) => Record<string, string>;
   readonly timeoutMs: number;
+  /**
+   * A code sign-in closes the CLI's input at once, so that a question the CLI asks first gets its
+   * default answer instead of waiting. Only for a `device` or `link` sign-in, which reads no code.
+   */
+  readonly closeInput?: true;
+}
+
+/**
+ * The command of a sign-in. Its arguments and variables can depend on the CLI and on the region of
+ * the account, which only Kimi has: another provider ignores it.
+ */
+interface ProviderSignInCommand extends Omit<ProviderCliCommand, "argv" | "env"> {
+  readonly argv:
+    | readonly string[]
+    | ((cli: AgentCliInfo, region: SignInRegion) => Effect.Effect<readonly string[], ProviderClientOperationError>);
+  readonly env: (cli: AgentCliInfo, region: SignInRegion) => Record<string, string>;
 }
 
 const CLI_LOGIN_TIMEOUT_MS = 10 * 60_000;
@@ -139,7 +174,7 @@ type ProviderSignIn =
   /** The provider's own protocol hands back a URL for OpenBot to open. */
   | { kind: "browser" }
   /** OpenBot spawns the provider's CLI and waits for the process to exit. */
-  | { kind: "cli-command"; command: ProviderCliCommand }
+  | { kind: "cli-command"; command: ProviderSignInCommand }
   /** The user signs in with the CLI themselves; OpenBot only re-probes the provider afterwards. */
   | { kind: "external" }
   /** The host opens an interactive terminal and refreshes the account when it closes. */
@@ -173,7 +208,7 @@ interface AcpAuthenticateSignIn {
 type ProviderCodeSignIn =
   | { kind: "codex-device" }
   | { kind: "muse-device"; timeoutMs: number }
-  | { kind: "cli"; flow: "device" | "paste" | "link"; command: ProviderCliCommand };
+  | { kind: "cli"; flow: "device" | "paste" | "link"; command: ProviderSignInCommand };
 
 /**
  * The Gemini API key sign-in, the other way in when Google's browser sign-in cannot reach this
@@ -289,6 +324,86 @@ function confineClineTarget(target: SpawnTarget, confinement: ProcessConfinement
   for (const folder of state.writable) mkdirSync(folder, { recursive: true, mode: 0o700 });
   return confineSpawnTarget(target, confinement, state);
 }
+
+/** `hermes acp` serves the Agent Client Protocol on stdio. */
+const HERMES_ARGV: readonly string[] = ["acp"];
+
+/** The Nous Portal sign-in, which `hermes auth add` keeps beside the user's other Hermes sign-ins. */
+const HERMES_NOUS_SIGN_IN: readonly string[] = ["auth", "add", "nous", "--type", "oauth"];
+
+/**
+ * Hermes Agent 0.21.5 lists its provider as an auth method only when the provider's credential
+ * resolves: a keyless local endpoint gets a placeholder key, so it counts. Without one, it lists only
+ * its terminal setup, and each new session fails with "Internal error". The real cause is only in
+ * its stderr, so the sign-in state comes from this list.
+ */
+const HERMES_SETUP_METHOD = "hermes-setup";
+function requireHermesProvider(_connection: ClientSideConnection, initialization: InitializeResponse) {
+  const methods = initialization.authMethods ?? [];
+  return methods.length > 0 && methods.every((method) => method.id === HERMES_SETUP_METHOD)
+    ? Effect.fail(providerFailure(RequestError.authRequired()))
+    : Effect.void;
+}
+
+/** The sandbox lets a Hermes process write in its folder, not create it, so OpenBot makes it. */
+function confineHermesTarget(
+  target: SpawnTarget,
+  confinement: ProcessConfinement,
+  env: NodeJS.ProcessEnv,
+): SpawnTarget {
+  mkdirSync(hermesHome(env), { recursive: true, mode: 0o700 });
+  return confineSpawnTarget(target, confinement, hermesStatePaths(env));
+}
+
+/** The managed Kimi CLI must not replace itself. */
+const KIMI_ENV: Readonly<Record<string, string>> = { KIMI_CLI_NO_AUTO_UPDATE: "1" };
+
+/**
+ * `kimi login` opens Kimi's page in a browser by itself. A device code that another computer
+ * confirms must not open a page on this one, so `BROWSER` names `true`, which Python's `webbrowser`
+ * runs instead of a browser. Windows has no `true`, so there the page opens.
+ */
+const KIMI_CODE_LOGIN_ENV: Readonly<Record<string, string>> =
+  process.platform === "win32" ? KIMI_ENV : { ...KIMI_ENV, BROWSER: "true" };
+
+/** The variables of `kimi login` for the region. Only the Python CLI takes its region from them. */
+function kimiLoginEnv(
+  base: Readonly<Record<string, string>>,
+  cli: AgentCliInfo,
+  region: SignInRegion,
+): Record<string, string> {
+  return isPythonKimiCli(cli) ? { ...base, ...kimiPythonLoginEnv(region) } : { ...base };
+}
+
+/**
+ * A Python CLI signed in on kimi.ai needs the global hosts in each process; Kimi Code 2.x keeps
+ * them with its sign-in. The agent's own variables come last, so that they can name other hosts.
+ */
+function kimiProcessEnv(
+  cli: AgentCliInfo,
+  agentEnvironment: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const region = isPythonKimiCli(cli) ? kimiPythonSavedRegionEnv({ ...process.env, ...agentEnvironment }) : {};
+  return { ...region, ...agentEnvironment };
+}
+
+/**
+ * The sandbox lets a process write in its state folders, not create them, so OpenBot makes them.
+ * The agent's own environment can move them: `KIMI_SHARE_DIR` for Kimi, the XDG variables for Devin.
+ */
+function confineWithState(
+  target: SpawnTarget,
+  confinement: ProcessConfinement,
+  statePaths: (env: NodeJS.ProcessEnv) => ProviderStatePaths,
+  agentEnvironment: Readonly<Record<string, string>> | undefined,
+): SpawnTarget {
+  const state = statePaths({ ...process.env, ...agentEnvironment });
+  for (const folder of state.writable) mkdirSync(folder, { recursive: true, mode: 0o700 });
+  return confineSpawnTarget(target, confinement, state);
+}
+
+/** `devin acp` serves the Agent Client Protocol on stdio. */
+const DEVIN_ARGV: readonly string[] = ["acp"];
 
 /**
  * What a client needs from the app at spawn, beyond its own CLI: the stored secrets, and the user's
@@ -469,11 +584,11 @@ export interface BuiltInProviderDriver {
   id: AgentProviderId;
   signIn: ProviderSignIn;
   /**
-   * The file the provider's CLI writes when the user signs in with it. The host checks the account
-   * again when this file changes, so a sign-in done outside OpenBot, such as over SSH, needs no
+   * The files the provider's CLI writes when the user signs in with it. The host checks the account
+   * again when one of them changes, so a sign-in done outside OpenBot, such as over SSH, needs no
    * restart. Absent for a provider that OpenBot always signs in itself.
    */
-  signInFile?(): string;
+  signInFiles?(): readonly string[];
   /** Absent for a provider that has no sign-in on another device. */
   codeSignIn?: ProviderCodeSignIn;
   /** Absent for a provider that holds one account only. */
@@ -573,7 +688,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
   {
     id: "pi",
     signIn: { kind: "terminal", timeoutMs: CLI_LOGIN_TIMEOUT_MS },
-    signInFile: () => join(piAgentDirectory(), "auth.json"),
+    signInFiles: () => [join(piAgentDirectory(), "auth.json")],
     resolveCli: resolvePiCli,
     createClient: (cli, timeout, context, confinement) => piClient("pi", cli, timeout, context, confinement),
     createProfileClient: (cli, timeout, context) => piProfileClient("pi", cli, timeout, context),
@@ -998,6 +1113,175 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
     validateAccount: () => undefined,
   },
   {
+    id: "kimi",
+    // Kimi's ACP `login` method only checks the sign-in that `kimi login` stored: the user signs in
+    // with the CLI. `login` prints a device code and its page, opens the page, and waits until the
+    // user confirms the code. A sign-in also writes the account's models into `~/.kimi/config.toml`.
+    // Probe the chosen CLI: Python emits JSON; Kimi Code 2.x emits text. Each takes the region in
+    // its own way (`kimiLoginArgs`).
+    signIn: {
+      kind: "cli-command",
+      command: {
+        argv: (cli, region) => kimiLoginArgs(cli, kimiLoginEnv(KIMI_ENV, cli, region), { code: false, region }),
+        env: (cli, region) => kimiLoginEnv(KIMI_ENV, cli, region),
+        timeoutMs: CLI_LOGIN_TIMEOUT_MS,
+      },
+    },
+    codeSignIn: {
+      kind: "cli",
+      flow: "device",
+      command: {
+        argv: (cli, region) =>
+          kimiLoginArgs(cli, kimiLoginEnv(KIMI_CODE_LOGIN_ENV, cli, region), { code: true, region }),
+        env: (cli, region) => kimiLoginEnv(KIMI_CODE_LOGIN_ENV, cli, region),
+        timeoutMs: CLI_LOGIN_TIMEOUT_MS,
+      },
+    },
+    signOut: { argv: ["logout"], env: () => ({ ...KIMI_ENV }), timeoutMs: 30_000 },
+    resolveCli: resolveKimiCli,
+    createClient: (cli, timeout, context, confinement) =>
+      new AcpAgentClient(cli, timeout, {
+        provider: "kimi",
+        flavor: KIMI_ACP_FLAVOR,
+        argv: ["acp"],
+        env: { ...KIMI_ENV },
+        ...(confinement
+          ? { confine: (target) => confineWithState(target, confinement, kimiStatePaths, context.agentEnvironment?.()) }
+          : {}),
+        extraEnv: () => kimiProcessEnv(cli, context.agentEnvironment?.()),
+        signInMessage: sourceText("error.provider.kimiSignIn"),
+        servesModel: context.servesModel,
+        mcpServers: context.mcpServers,
+        reportMcpDrops: context.reportMcpDrops,
+        mcpToolRuntimes: context.mcpToolRuntimes,
+        mcpEndpoint: context.mcpEndpoint,
+        history: context.history?.("kimi"),
+        readRateLimits: () =>
+          // Not `kimiProcessEnv`: its region variables repeat the `base_url` that the reader takes from `config.toml`.
+          readKimiUsage(isPythonKimiCli(cli), { ...process.env, ...context.agentEnvironment?.() }).pipe(
+            Effect.mapError((failure) => providerFailure(failure.cause)),
+          ),
+      }),
+    createProfileClient: (cli, timeout, context) =>
+      new AcpAgentClient(cli, timeout, {
+        provider: "kimi",
+        flavor: KIMI_ACP_FLAVOR,
+        argv: ["acp"],
+        profileGeneration: true,
+        env: { ...KIMI_ENV },
+        extraEnv: () => kimiProcessEnv(cli, undefined),
+        signInMessage: sourceText("error.provider.kimiSignIn"),
+        servesModel: context.servesModel,
+      }),
+    authState: (account) => ({ kind: "kimi", email: account?.email ?? null }),
+    validateAccount: () => undefined,
+  },
+  {
+    id: "devin",
+    // The ACP `devin-browser` method opens Devin's page in the system browser, and waits until the
+    // page sends the sign-in back to the CLI. `devin auth login` asks for a terminal.
+    signIn: { kind: "acp-authenticate", methodId: "devin-browser", argv: DEVIN_ARGV, timeoutMs: CLI_LOGIN_TIMEOUT_MS },
+    // Devin CLI 3000.11.234 writes its sign-in in `credentials.toml`.
+    signInFiles: () => [join(devinDataDirectory(), "credentials.toml")],
+    signOut: { argv: ["auth", "logout"], env: () => ({}), timeoutMs: 30_000 },
+    resolveCli: resolveDevinCli,
+    createClient: (cli, timeout, context, confinement) =>
+      new AcpAgentClient(cli, timeout, {
+        provider: "devin",
+        flavor: DEVIN_ACP_FLAVOR,
+        argv: DEVIN_ARGV,
+        env: {},
+        ...(confinement
+          ? {
+              confine: (target) => confineWithState(target, confinement, devinStatePaths, context.agentEnvironment?.()),
+            }
+          : {}),
+        extraEnv: () => ({ ...context.agentEnvironment?.() }),
+        signInMessage: sourceText("error.provider.devinSignIn"),
+        noModelsWhenSignedOut: true,
+        servesModel: context.servesModel,
+        mcpServers: context.mcpServers,
+        reportMcpDrops: context.reportMcpDrops,
+        mcpToolRuntimes: context.mcpToolRuntimes,
+        mcpEndpoint: context.mcpEndpoint,
+        history: context.history?.("devin"),
+      }),
+    createProfileClient: (cli, timeout, context) =>
+      new AcpAgentClient(cli, timeout, {
+        provider: "devin",
+        flavor: DEVIN_ACP_FLAVOR,
+        argv: DEVIN_ARGV,
+        profileGeneration: true,
+        env: {},
+        signInMessage: sourceText("error.provider.devinSignIn"),
+        noModelsWhenSignedOut: true,
+        servesModel: context.servesModel,
+      }),
+    authState: (account) => ({ kind: "devin", email: account?.email ?? null }),
+    validateAccount: () => undefined,
+  },
+  {
+    id: "hermes",
+    // `auth add nous --type oauth` signs in with a Nous Portal subscription: it opens the Nous Portal
+    // device page, and waits until the user approves it. Without a terminal, the CLI takes the
+    // Nous sign-in that another Hermes profile saved before it asks for a new one.
+    signIn: {
+      kind: "cli-command",
+      command: { argv: HERMES_NOUS_SIGN_IN, env: () => ({}), timeoutMs: CLI_LOGIN_TIMEOUT_MS },
+    },
+    // With `--no-browser`, the CLI prints the page and the code, and waits until the user approves it.
+    codeSignIn: {
+      kind: "cli",
+      flow: "device",
+      command: {
+        argv: [...HERMES_NOUS_SIGN_IN, "--no-browser"],
+        env: () => ({}),
+        timeoutMs: CLI_LOGIN_TIMEOUT_MS,
+        closeInput: true,
+      },
+    },
+    // `hermes auth` and an OAuth provider of `hermes setup` or `hermes model` write `auth.json`. An
+    // API key goes in `.env`, and the provider choice in `config.yaml`.
+    signInFiles: () => ["auth.json", ".env", "config.yaml"].map((name) => join(hermesHome(), name)),
+    resolveCli: () => resolveHermesCli(),
+    createClient: (cli, timeout, context, confinement) =>
+      new AcpAgentClient(cli, timeout, {
+        provider: "hermes",
+        flavor: HERMES_ACP_FLAVOR,
+        argv: HERMES_ARGV,
+        env: {},
+        // The agent environment can name another `HERMES_HOME`, and the process gets it.
+        ...(confinement
+          ? {
+              confine: (target) =>
+                confineHermesTarget(target, confinement, { ...process.env, ...context.agentEnvironment?.() }),
+            }
+          : {}),
+        extraEnv: () => ({ ...context.agentEnvironment?.() }),
+        signInMessage: sourceText("error.provider.hermesSignIn"),
+        authenticate: requireHermesProvider,
+        servesModel: context.servesModel,
+        mcpServers: context.mcpServers,
+        reportMcpDrops: context.reportMcpDrops,
+        mcpToolRuntimes: context.mcpToolRuntimes,
+        mcpEndpoint: context.mcpEndpoint,
+        history: context.history?.("hermes"),
+      }),
+    createProfileClient: (cli, timeout, context) =>
+      new AcpAgentClient(cli, timeout, {
+        provider: "hermes",
+        flavor: HERMES_ACP_FLAVOR,
+        argv: HERMES_ARGV,
+        profileGeneration: true,
+        env: {},
+        signInMessage: sourceText("error.provider.hermesSignIn"),
+        authenticate: requireHermesProvider,
+        servesModel: context.servesModel,
+      }),
+    authState: (account) => ({ kind: "hermes", email: account?.email ?? null }),
+    validateAccount: () => undefined,
+  },
+  {
     id: "acp",
     // Each custom agent signs in its own way, in its own CLI. OpenBot only checks it again.
     signIn: { kind: "external" },
@@ -1012,6 +1296,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
           customAgentChild(config, executable, folder, timeout, context, confinement, false, history, launchPath),
         undefined,
         context.history?.("acp"),
+        confinement !== undefined,
       ),
     createProfileClient: (_cli, timeout, context) =>
       new CustomAcpAgentsClient(

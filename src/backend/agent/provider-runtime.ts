@@ -33,7 +33,7 @@ import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { classifyUserError } from "@openbot/user-errors";
 import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope, Semaphore } from "effect";
 import { isOpenCodeInternalFailure } from "./../acp-flavor-opencode";
-import { startAcpAuthentication } from "./../acp-sign-in";
+import { googleSignInByOpenBot, startAcpAuthentication } from "./../acp-sign-in";
 import { type AgentClient, AgentProcessExitError, type AgentProvider } from "./../agent-client";
 import { CodexAppServerClient } from "./../app-server-client";
 import {
@@ -46,6 +46,8 @@ import {
 } from "./../cli";
 import { readCursorUsage } from "./../cursor-usage";
 import { causeHelpers } from "../effect-boundary";
+import { isPythonKimiCli, type SignInRegion } from "../kimi-region";
+import { readKimiUsage } from "../kimi-usage";
 import { McpHandoffLog } from "./../mcp-handoff-log";
 import { providerMcpServerName } from "./../mcp-provider-shapes";
 import { customProvidersOn, openCodeSignInMessage } from "./../opencode-config";
@@ -150,13 +152,17 @@ const SIGN_IN_FILE_POLL_MS = 2_000;
  * Identifies one write of a sign-in file. The time alone is not enough: a file system with 1 s
  * times shows two writes in the same second as one, such as an empty file and then the credentials.
  */
-function signInFileVersion(path: string): string {
-  try {
-    const stats = statSync(path, { throwIfNoEntry: false });
-    return stats ? `${stats.ino}:${stats.size}:${stats.mtimeMs}` : "missing";
-  } catch {
-    return "unreadable";
-  }
+function signInFileVersion(paths: readonly string[]): string {
+  return paths
+    .map((path) => {
+      try {
+        const stats = statSync(path, { throwIfNoEntry: false });
+        return stats ? `${stats.ino}:${stats.size}:${stats.mtimeMs}` : "missing";
+      } catch {
+        return "unreadable";
+      }
+    })
+    .join("|");
 }
 /**
  * Starts that fail in a row before OpenBot stops starting a provider by itself. A start that fails,
@@ -180,6 +186,9 @@ const SPAWN_ENVIRONMENT_PROVIDERS: readonly AgentProvider[] = [
   "antigravity",
   "cursor",
   "cline",
+  "kimi",
+  "devin",
+  "hermes",
   "acp",
 ];
 
@@ -285,7 +294,10 @@ export interface ProviderHooks {
   onAgentClientLost(agentId: string, client: AgentClient): Effect.Effect<void>;
   /** The shared folder, which every Workspace only agent may write besides its workspace. */
   sharedRoot(): string;
-  /** Runs after a CLI replacement, so deliveries held back during it are delivered. */
+  /**
+   * Runs after a CLI replacement, and when a provider that waited for a sign-in is signed in again,
+   * so deliveries held back during it are delivered.
+   */
   onProviderResumed(provider: AgentProvider): void;
   /**
    * Runs once a new client for this provider is the one the app uses, with the catalogue it reported
@@ -447,7 +459,7 @@ export class ProviderRuntime implements ProviderPort {
   readonly #customAgentUsageLock = Semaphore.makeUnsafe(1);
   #idleCheck: NodeJS.Timeout | null = null;
   /** Each provider's sign-in file, and the version of it that the last account check saw. */
-  readonly #signInFiles = new Map<AgentProvider, { path: string; seen: string }>();
+  readonly #signInFiles = new Map<AgentProvider, { paths: readonly string[]; seen: string }>();
   #signInCheck: NodeJS.Timeout | null = null;
   #status: AgentStatus = structuredClone(INITIAL_STATUS);
   #providerRefresh: Deferred.Deferred<AgentStatus, ProviderOperationFailed> | null = null;
@@ -553,7 +565,10 @@ export class ProviderRuntime implements ProviderPort {
           scope: () => this.#scope,
           cli: (provider) =>
             this.#clients.has(provider) || this.#released.has(provider) ? this.#cli.get(provider) : undefined,
-          defaultEmail: (provider) => this.#accounts.get(provider)?.email ?? null,
+          defaultLogin: (provider) => {
+            const account = this.#accounts.get(provider);
+            return account ? { email: account.email ?? null, organization: account.organization ?? null } : null;
+          },
           apiKey: (provider) => this.#credentials.apiKey(provider),
           defaultUsesApiKey: (provider) => this.ownSignInUsesKey(provider),
           signInTemp: (provider) => {
@@ -608,9 +623,7 @@ export class ProviderRuntime implements ProviderPort {
       : null;
     this.#modelCatalog = new ModelCatalog({
       client: (provider) => (this.#off.has(provider) ? undefined : this.#clients.get(provider)),
-      isSignedOut: (provider) =>
-        this.#status.providers?.some((status) => status.id === provider && status.state === "sign-in-required") ??
-        false,
+      isSignedOut: (provider) => this.signInRequired(provider),
       credentials: this.#credentials,
       requestTimeoutMs: this.#requestTimeoutMs,
       recordProviderError: (provider, error) => this.#recordProviderError(provider, error),
@@ -777,6 +790,13 @@ export class ProviderRuntime implements ProviderPort {
 
   isReady(): boolean {
     return this.#status.phase === "ready";
+  }
+
+  /** True while the provider waits for a sign-in: no turn can start on it until then. */
+  signInRequired(provider: AgentProvider): boolean {
+    return (
+      this.#status.providers?.some((status) => status.id === provider && status.state === "sign-in-required") ?? false
+    );
   }
 
   /**
@@ -965,6 +985,16 @@ export class ProviderRuntime implements ProviderPort {
             usage = yield* readOpenRouterUsage(this.#credentials.apiKey("openrouter")).pipe(
               toProviderOperationFailed,
               deadline,
+            );
+          } else if (provider === "kimi") {
+            // Kimi's usage is one HTTPS request with the CLI's token. Only a turn refreshes that token, so
+            // a started CLI adds nothing, and a poll that starts it keeps it from going idle. The CLI
+            // version selects the token's folder: with no client in this run, there is no reading yet.
+            const cli = this.#cli.get(provider);
+            if (!cli) return null;
+            const env = { ...process.env, ...this.#credentials.agentEnvironment?.() };
+            usage = normalizeAccountUsage(
+              yield* readKimiUsage(isPythonKimiCli(cli), env).pipe(toProviderOperationFailed, deadline),
             );
           } else {
             // Starting a provider that has no usage reading only to get nothing back cost a cold
@@ -1294,9 +1324,9 @@ export class ProviderRuntime implements ProviderPort {
    */
   #watchSignInFiles(): void {
     for (const driver of BUILT_IN_PROVIDER_DRIVERS) {
-      const path = driver.signInFile?.();
-      if (path && !this.#signInFiles.has(driver.id))
-        this.#signInFiles.set(driver.id, { path, seen: signInFileVersion(path) });
+      const paths = driver.signInFiles?.() ?? [];
+      if (paths.length > 0 && !this.#signInFiles.has(driver.id))
+        this.#signInFiles.set(driver.id, { paths, seen: signInFileVersion(paths) });
     }
     if (this.#signInFiles.size === 0) return;
     this.#signInCheck ??= setInterval(() => this.#checkSignInFiles(), SIGN_IN_FILE_POLL_MS);
@@ -1315,7 +1345,7 @@ export class ProviderRuntime implements ProviderPort {
       const row = this.#status.providers?.find((candidate) => candidate.id === provider);
       if (row?.state !== "sign-in-required") continue;
       if (this.#cliLogin.has(provider) || this.#providerConnectionCommands.has(provider)) continue;
-      const version = signInFileVersion(file.path);
+      const version = signInFileVersion(file.paths);
       if (version === file.seen) continue;
       file.seen = version;
       Effect.runFork(
@@ -1432,16 +1462,21 @@ export class ProviderRuntime implements ProviderPort {
     this: ProviderRuntime,
     provider: AgentProvider,
     openExternal: (url: string) => Promise<void>,
+    region: SignInRegion = "global",
   ) {
-    return yield* this.#connectProvider(provider, openExternal, false);
+    return yield* this.#connectProvider(provider, openExternal, false, region);
   }).bind(this);
 
-  /** `onHost`: the user is not at this computer, so the CLI's page goes to `openExternal`, never to a browser here. */
+  /**
+   * `onHost`: the user is not at this computer, so the CLI's page goes to `openExternal`, never to a
+   * browser here. `region`: the site of the account, for a provider that has more than one.
+   */
   readonly #connectProvider = Effect.fn("ProviderRuntime.connectProvider")(function* (
     this: ProviderRuntime,
     provider: AgentProvider,
     openExternal: (url: string) => Promise<void>,
     onHost: boolean,
+    region: SignInRegion = "global",
   ) {
     this.#startFailures.delete(provider);
     const start = this.#providerStarts.get(provider);
@@ -1452,7 +1487,7 @@ export class ProviderRuntime implements ProviderPort {
     }
     const signIn = requireProviderDriver(provider).signIn;
     return yield* this.#runProviderConnectionCommand(provider, () =>
-      this.#signIn(provider, signIn, openExternal, onHost),
+      this.#signIn(provider, signIn, openExternal, onHost, region),
     );
   });
 
@@ -1462,6 +1497,7 @@ export class ProviderRuntime implements ProviderPort {
     signIn: ReturnType<typeof requireProviderDriver>["signIn"],
     openExternal: (url: string) => Promise<void>,
     onHost: boolean,
+    region: SignInRegion,
   ) {
     switch (signIn.kind) {
       case "browser":
@@ -1474,13 +1510,17 @@ export class ProviderRuntime implements ProviderPort {
           .start(provider, (cli) =>
             Effect.gen(function* () {
               const browser = onHost ? yield* captureBrowser(openExternal) : {};
-              const target = cliSpawnTarget(cli.executable, signIn.command.argv);
+              const { argv } = signIn.command;
+              const target = cliSpawnTarget(
+                cli.executable,
+                typeof argv === "function" ? yield* argv(cli, region) : argv,
+              );
               const child = yield* Effect.acquireRelease(
                 Effect.try({
                   try: () =>
                     spawn(target.command, target.args, {
                       cwd: process.cwd(),
-                      env: { ...process.env, ...signIn.command.env(cli), ...browser },
+                      env: { ...process.env, ...signIn.command.env(cli, region), ...browser },
                       stdio: "ignore",
                       shell: false,
                       windowsHide: process.platform === "win32",
@@ -1530,7 +1570,9 @@ export class ProviderRuntime implements ProviderPort {
                   }
                 : {}),
               privateTemp: temp && { ...temp, provider: providerLabel(provider) },
-              ...(provider === "antigravity" ? { openGoogleSignIn: openExternal } : {}),
+              ...(provider === "antigravity" && googleSignInByOpenBot(onHost)
+                ? { openGoogleSignIn: openExternal }
+                : {}),
             }).pipe(
               // A sign-in that stops after the sign-out leaves no account behind it.
               Effect.map((login) => ({
@@ -1806,12 +1848,16 @@ export class ProviderRuntime implements ProviderPort {
       .startCode(
         provider,
         (cli) =>
-          startCliCodeLogin({
-            flow,
-            executable: cli.executable,
-            argv: command.argv,
-            env: { ...cliPathEnvironment(cli), ...command.env(cli) },
-            timeoutMs: command.timeoutMs,
+          Effect.gen(function* () {
+            const argv = typeof command.argv === "function" ? yield* command.argv(cli, "global") : command.argv;
+            return yield* startCliCodeLogin({
+              flow,
+              executable: cli.executable,
+              argv,
+              env: { ...cliPathEnvironment(cli), ...command.env(cli, "global") },
+              timeoutMs: command.timeoutMs,
+              ...(command.closeInput ? { closeInput: true } : {}),
+            });
           }),
         command.timeoutMs,
       )
@@ -1882,7 +1928,14 @@ export class ProviderRuntime implements ProviderPort {
     harness: CustomProviderHarness,
   ): Effect.fn.Return<CustomProviderRestart> {
     this.#environmentReloadPending.delete(harness);
-    if (!this.#clients.has(harness)) return "not-running";
+    if (!this.#clients.has(harness)) {
+      // A process stopped for idle keeps its old catalogue, and only an agent's turn starts it again.
+      // A new endpoint would then list no model, so no agent could be set to it (#4443). The start is
+      // not awaited, as a save does not wait for model discovery; a failure shows on the status.
+      if (this.#released.has(harness))
+        yield* this.ensureProvider(harness).pipe(Effect.ignore, Effect.forkIn(this.#scope));
+      return "not-running";
+    }
     if (this.#hooks.isProviderBusy(harness)) {
       this.#environmentReloadPending.add(harness);
       return "skipped-busy";
@@ -2755,11 +2808,23 @@ export class ProviderRuntime implements ProviderPort {
           });
           return;
         }
+        const version = this.#cli.get(provider)?.version ?? null;
         this.#clients.delete(provider);
         this.#cli.delete(provider);
         this.#accounts.delete(provider);
         // The next sign-in can be another login.
         this.#forgetUsage(provider);
+        // Before the stop ends the client's turns: the drain that each end schedules then holds the
+        // queued messages for the sign-in, and does not fail them on a provider it cannot start (#4326).
+        this.#setStatus({
+          providers: updateProviderStatus(this.#status.providers, provider, {
+            state: "sign-in-required",
+            version,
+            message: this.#signInRequiredMessage(provider),
+            email: null,
+            checkError: null,
+          }),
+        });
         yield* client.stop().pipe(toProviderOperationFailed).pipe(Effect.ignore);
         yield* this.#hooks.onClientStopped(client);
         yield* Effect.forEach(
@@ -2930,6 +2995,7 @@ export class ProviderRuntime implements ProviderPort {
           previousAccount &&
           (previousAccount.type !== account.type ||
             previousAccount.email !== account.email ||
+            previousAccount.organization !== account.organization ||
             previousAccount.planType !== account.planType)
         )
           this.#forgetUsage(provider);
@@ -3047,7 +3113,9 @@ export class ProviderRuntime implements ProviderPort {
               ? sourceText("error.provider.deepseekSignIn")
               : provider === "openrouter"
                 ? sourceText("error.provider.openrouterSignIn")
-                : agentProviderDescriptor(provider).signInMessage)
+                : provider === "hermes"
+                  ? sourceText("error.provider.hermesSignIn")
+                  : agentProviderDescriptor(provider).signInMessage)
     );
   }
 
@@ -3136,11 +3204,14 @@ export class ProviderRuntime implements ProviderPort {
         this.#startFailures.delete(provider);
         this.#slowStarts.delete(provider);
       });
-      // Other providers can have live turns. Replacement must not run start recovery.
+      // Other providers can have live turns. Replacement must not run start recovery. The start checks
+      // the copy just installed: a CLI the user installed that is as new ran in its place, and its
+      // version or its failure read as the copy's (#4375).
       yield* this.#connect("starting", [provider], {
         preserveCheckErrors: true,
         notifyReady: false,
         startTimeoutMs: learnedWaitMs ?? this.#longStartTimeoutMs,
+        preferInstalled: false,
       });
       const timedOut = this.#slowStarts.has(provider);
       if (!timedOut && learnedWaitMs !== undefined) this.#slowStarts.set(provider, learnedWaitMs);
@@ -3154,7 +3225,7 @@ export class ProviderRuntime implements ProviderPort {
           cause:
             message && matchingSourceKeys(message).length > 0
               ? new Error(message)
-              : new Error(sourceText("error.provider.cliActivateFailed"), { cause: message }),
+              : new Error(sourceText("error.provider.cliNewVersionNotStarted"), { cause: message }),
         });
       }
       return;
@@ -3268,6 +3339,7 @@ export class ProviderRuntime implements ProviderPort {
       refreshRuntimeInBackground?: boolean;
       notifyReady?: boolean;
       startTimeoutMs?: number;
+      preferInstalled?: boolean;
     } = {},
   ) {
     requestedProviders = requestedProviders.filter((provider) => !this.#off.has(provider));
@@ -3327,7 +3399,9 @@ export class ProviderRuntime implements ProviderPort {
         return Effect.gen({ self: this }, function* () {
           if (this.#clients.has(provider)) return null;
           const driver = requireProviderDriver(provider);
-          const resolvedCli = yield* this.#resolveProviderCli(provider);
+          const resolvedCli = yield* this.#resolveProviderCli(provider, {
+            preferInstalled: options.preferInstalled ?? true,
+          });
           cli = resolvedCli;
           logger.info("Resolved a provider CLI.", {
             provider,
@@ -3609,10 +3683,12 @@ export class ProviderRuntime implements ProviderPort {
       }
       // The usage notice reports the limit only for a provider with a usage reading. Another
       // provider's line goes on to the error below, or nothing on screen would name the limit.
-      // Cursor's line goes on too: its reading has no on-demand or team limit.
+      // Cursor's line goes on too: its reading has no on-demand or team limit. Kimi's line goes on
+      // because an account with no Kimi Code plan has no reading.
       if (
         isUsageLimitDiagnostic(message) &&
         client.provider !== "cursor" &&
+        client.provider !== "kimi" &&
         agentProviderDescriptor(client.provider).reportsUsage
       ) {
         stderrLogger.warn("A provider reported an exhausted usage limit.", { provider: client.provider, message });
@@ -3625,6 +3701,14 @@ export class ProviderRuntime implements ProviderPort {
         // a folder that is not trusted, one "ChatGPT error" toast per start (#4265). An exit keeps
         // the last error record in its message.
         stderrLogger.warn("Codex logged a diagnostic.", { provider: client.provider, message });
+        return;
+      }
+      if (client.provider === "hermes") {
+        // Hermes Agent 0.21.5 reports each failure in the protocol: a failed turn in its prompt error,
+        // a missing sign-in in the auth methods of `initialize`, and a crash as the process exit. Its
+        // stderr is the Python log, `2026-11-02 10:00:00 [WARNING] mcp: …`, which repeats them as
+        // records and tracebacks, one "Hermes error" toast per line at each start.
+        stderrLogger.warn("Hermes logged a diagnostic.", { provider: client.provider, message });
         return;
       }
       if (isGlogBelowErrorDiagnostic(message)) {
@@ -3904,11 +3988,16 @@ export class ProviderRuntime implements ProviderPort {
   });
 
   #setStatus(patch: Partial<AgentStatus>): void {
+    const available: AgentProvider[] = [];
     if (patch.providers) {
       logProviderStateChanges(this.#status.providers ?? [], patch.providers, this.#redactMcp);
       // A provider with no CLI has nothing left to diagnose, and its row already says why: an error
       // from a removed custom agent must not stay under an empty list.
       for (const row of patch.providers) if (row.state === "not-installed") this.#lastErrors.delete(row.id);
+      for (const row of patch.providers) {
+        const current = this.#status.providers?.find((candidate) => candidate.id === row.id);
+        if (row.state === "available" && current?.state !== "available") available.push(row.id);
+      }
     }
     this.#status = {
       ...this.#status,
@@ -3916,6 +4005,9 @@ export class ProviderRuntime implements ProviderPort {
       capabilities: patch.capabilities ?? this.#status.capabilities,
     };
     this.#emit({ type: "status", status: this.status() });
+    // The drain holds the messages of a provider that waits for a sign-in, and no other event wakes
+    // them. A provider that becomes available again can start them.
+    for (const provider of available) this.#hooks.onProviderResumed(provider);
   }
 }
 

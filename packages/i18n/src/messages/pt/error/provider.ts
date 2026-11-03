@@ -8,6 +8,8 @@ export const messages = {
     "O OpenBot não conseguiu registrar o Uso do computador na configuração do Codex. Verifique se seu config.toml do Codex é válido e gravável, depois reinicie o OpenBot. Você pode desativar o Uso do computador nas configurações do agente para continuar sem ele.",
   "error.provider.codexUnresponsive": "O Codex parou de responder, então o OpenBot encerrou o processo dele.",
   "error.provider.acpUnresponsive": "O {provider} não respondeu a tempo, então o OpenBot encerrou o processo dele.",
+  "error.provider.acpSignInLost":
+    "O {provider} perdeu o login, então o OpenBot encerrou o processo dele. Envie sua mensagem de novo.",
   "error.provider.acpMcpNotLoaded":
     "O {provider} não carregou as ferramentas do OpenBot, então este agente não pode usá-las nem falar com os colegas. Uma política de equipe do {provider} pode bloquear servidores MCP locais. Peça ao administrador da sua equipe para permiti-los e tente de novo.",
   "error.provider.endpointsReadOnly":
@@ -107,6 +109,8 @@ export const messages = {
   "error.provider.modelIdDuplicate": "Dois modelos têm o mesmo ID.",
   "error.provider.contextWindowInvalid":
     "A janela de contexto de um modelo deve ser um número inteiro de tokens entre {min} e {max}.",
+  "error.provider.maxOutputInvalid":
+    "A saída máxima de um modelo deve ser um número inteiro de tokens entre {min} e {max}.",
   "error.provider.headersTooMany": "Há cabeçalhos demais.",
   "error.provider.headerNameCharacter": "O nome de um cabeçalho contém um caractere não permitido pelo HTTP.",
   "error.provider.headerNameTooLong": "O nome de um cabeçalho é muito longo.",
@@ -179,6 +183,8 @@ export const messages = {
   "error.provider.noAuthenticatedAccount": "{provider} não retornou uma conta autenticada.",
   "error.provider.signInExpired": "Seu login em {provider} expirou. Entre novamente para continuar.",
   "error.provider.cliActivateFailed": "O OpenBot não conseguiu ativar a CLI gerenciada.",
+  "error.provider.noMainlandChinaSignIn": "{provider} não tem login para a China continental.",
+  "error.provider.cliNewVersionNotStarted": "A nova versão não foi iniciada.",
   "error.provider.cliBusyReconnect": "A CLI de {provider} está executando um turno. Aguarde o término e reconecte.",
   "error.provider.cliBusySignOut":
     "A CLI do {provider} está processando um turno. Aguarde terminar e depois desconecte.",
@@ -257,6 +263,20 @@ export const messages = {
   "error.provider.clineNotStarted": "Não foi possível iniciar o Cline. Execute `cline --version` em um terminal.",
   "error.provider.clineVersionUnreadable": "Não foi possível ler a versão da CLI do Cline.",
   "error.provider.clineSignIn": "Entre com o Cline ou defina CLINE_API_KEY para usar o Cline.",
+  "error.provider.kimiArchivePath": "O arquivo compactado do Kimi tem um caminho inesperado.",
+  "error.provider.kimiChecksum": "A soma de verificação do ambiente de execução do Kimi não corresponde.",
+  "error.provider.kimiLicenseChecksum": "A soma de verificação da licença do Kimi não corresponde.",
+  "error.provider.kimiMissing": "O Kimi não foi baixado. Baixe-o no OpenBot para continuar.",
+  "error.provider.kimiOutdated": "A CLI do Kimi {version} é muito antiga. O OpenBot exige 1.52.0 ou posterior.",
+  "error.provider.kimiNotStarted": "Não foi possível iniciar o Kimi. Execute `kimi --version` em um terminal.",
+  "error.provider.kimiVersionUnreadable": "Não foi possível ler a versão da CLI do Kimi.",
+  "error.provider.kimiSignIn": "Entre com o Kimi Code para usar o Kimi.",
+  "error.provider.devinSignIn": "Entre com o Devin para usar o Devin.",
+  "error.provider.hermesMissing": "O Hermes Agent não está instalado. Instale-o e tente novamente.",
+  "error.provider.hermesNotStarted":
+    "Não foi possível iniciar o Hermes Agent. Execute `hermes --version` em um terminal.",
+  "error.provider.hermesVersionUnreadable": "Não é possível ler a versão do Hermes Agent.",
+  "error.provider.hermesSignIn": "Entre com o Nous Portal ou execute `hermes setup` em um terminal para usar o Hermes.",
   "error.provider.usageLimitReached": "A conta atingiu seu limite de uso.",
   "error.provider.foreignReasoning":
     "{provider} não aceitou o raciocínio anterior neste chat porque ele foi recebido por outra conta ou chave de API. O OpenBot iniciou uma nova sessão de {provider} com o histórico do chat. Tente novamente.",
@@ -311,6 +331,7 @@ export const messages = {
   "error.provider.customAgentNoSecureStorage":
     "Este computador não tem armazenamento seguro, por isso não é possível salvar os valores das variáveis de ambiente. Remova-os e tente novamente.",
   "error.provider.customAgentNotSaved": "Este agente personalizado não está salvo. Atualize a lista e tente novamente.",
+  "error.provider.customAgentWorkspaceOnly": "{reason}. «Espaço de trabalho» bloqueia isso. Tente «Acesso completo».",
   "error.provider.customAgentTooMany": "Você pode salvar no máximo {count} agentes personalizados.",
   "error.provider.customAgentEnvValueMissing": "Digite um valor para {name}.",
   "error.provider.off": "{provider} está desligado no OpenBot. Ligue-o nas configurações de provedor primeiro.",

@@ -58,6 +58,12 @@ export const messages = {
   "error.backend.sunshineNotReady": "Sunshine is niet klaar geworden.",
   "error.backend.sunshineNotReadyReason": "Sunshine is niet klaar geworden. {reason}",
   "error.backend.channelLeadModelUnavailable": "Het model van de kanaalleider is niet beschikbaar.",
+  "error.backend.contextCompactionIneffective":
+    "Comprimeren maakt deze chat niet kleiner: na twee keer comprimeren gebruikt hij nog {percent}% van het contextvenster van het model, dus OpenBot stopt met comprimeren. Tools en instructies gebruiken het grootste deel van het venster. Zet de MCP-servers of computerbediening uit die deze agent niet nodig heeft, of kies een model met een groter venster. Start daarna een nieuwe chat.",
+  "error.backend.providerRetrying":
+    "De provider kon dit verzoek {attempts} keer niet uitvoeren en probeert het opnieuw. Als de agent niet verdergaat, stop dan de beurt.",
+  "error.backend.providerRetryingLargeContext":
+    "De provider kon dit verzoek {attempts} keer niet uitvoeren en probeert het opnieuw. Deze chat gebruikt {percent}% van het contextvenster van het model. Als de agent niet verdergaat, stop dan de beurt: OpenBot comprimeert de chat dan voor het volgende bericht.",
   "error.backend.sharedDataUnavailable": "Gedeelde gegevens zijn niet beschikbaar.",
   "error.backend.shuttingDown": "OpenBot wordt afgesloten.",
   "error.backend.channelUnconfirmedStart":
@@ -109,8 +115,8 @@ export const messages = {
     "Je hebt {saved} van {limit} herinneringen. Maak ruimte: werk één herinnering bij via memoryId met de gecombineerde tekst van twee verwante herinneringen en vergeet dan de andere, of vergeet een herinnering die niet meer klopt. Probeer het daarna opnieuw.",
   "error.backend.agentMemoryLimitExceeded":
     "Je hebt {saved} herinneringen en de limiet is {limit}. De gebruiker heeft de limiet lager ingesteld dan het aantal opgeslagen herinneringen. Vergeet geen herinneringen om ruimte te maken. Vertel de gebruiker dat deze herinnering niet is opgeslagen.",
-  "error.backend.channelHistoryLeadRequired": "Kies een kanaalleider om de gedeelde geschiedenis voor te bereiden.",
   "error.backend.channelHistoryArriving": "Er komt nog een gedeeld bericht binnen. Ga verder als het compleet is.",
+  "error.backend.channelHistoryLeadRequired": "Kies een kanaalleider om de gedeelde geschiedenis voor te bereiden.",
   "error.backend.channelHistoryInvalid":
     "De samenvatting van de geschiedenis is ongeldig. Ga verder om het opnieuw te proberen.",
   "error.backend.channelContextTooLong":
@@ -142,8 +148,6 @@ export const messages = {
   "error.backend.recipientHidden": "Deze agent is verborgen. Herstel de agent om berichten te sturen.",
   "error.backend.attachBetween": "Voeg tussen 1 en {limit} bestanden toe.",
   "error.backend.attachmentNotFile": "Bijlage is geen bestand: {path}",
-  "error.backend.attachSvg":
-    "{name} is een SVG-bestand en kan niet worden bijgevoegd. Schrijf het absolute pad in je antwoord: de chat toont de afbeelding daar.",
   "error.backend.generatedImageTooLarge": "De gemaakte afbeelding is groter dan de limiet van 100 MB.",
   "error.backend.attachmentNotRegularFile": "Alleen gewone bestanden kunnen worden bijgevoegd: {name}",
   "error.backend.attachmentCopyFailed": "OpenBot kon {name} niet kopiëren.",
@@ -257,6 +261,8 @@ export const messages = {
   "error.backend.sidebarSectionLimit": "Een server kan maximaal {limit} zijbalksecties hebben.",
   "error.backend.sectionNameRequired": "Een naam voor de sectie is verplicht.",
   "error.backend.sectionNameTooLong": "De naam van de sectie is te lang.",
+  "error.backend.sidebarFolderTooDeep": "Mappen kunnen maar drie niveaus diep zijn.",
+  "error.backend.sidebarFolderMoveInvalid": "Deze map kan daar niet naartoe worden verplaatst.",
   "error.backend.sectionNameDuplicate": "Namen van secties moeten uniek zijn.",
   "error.backend.directMessageRequired": "Schrijf eerst een bericht.",
   "error.backend.directMessageTooLong": "Een direct bericht kan maximaal {limit} tekens hebben.",
@@ -293,6 +299,9 @@ export const messages = {
   "error.backend.apiKeySaveFailed": "OpenBot kon de API-sleutel niet opslaan. Probeer het opnieuw.",
   "error.backend.apiKeyNotAllowed": "Alleen de eigenaar van de server of een beheerder kan een API-sleutel invoeren.",
   "error.backend.apiKeySaving": "De API-sleutel wordt al opgeslagen.",
+  "error.backend.vaultItemNotAllowed":
+    "Alleen de eigenaar van de server of een beheerder kan een item aan de Kluis toevoegen.",
+  "error.backend.vaultItemSaving": "Het Kluis-item wordt al opgeslagen.",
   "error.backend.authRequestInactive": "Dit beveiligde verificatieverzoek is niet meer actief.",
   "error.backend.secureAuthUnavailable": "Beveiligde verificatie is niet beschikbaar.",
   "error.backend.browserUrlRequired": "Een URL voor de browser is verplicht.",
@@ -359,8 +368,8 @@ export const messages = {
     "Geef de taak een titel van maximaal 120 tekens en een korte opdracht die zegt wat er moet gebeuren.",
   "error.backend.taskOwnChatOnly":
     "Start een taak alleen vanuit je eigen chat. Een kanaal, een berichtengesprek of een andere taak kan er geen starten.",
-  "error.backend.taskOpenLimit":
-    "Deze agent heeft al {count} open taken. Wacht tot de gebruiker er een sluit voordat je een nieuwe taak start.",
+  "error.backend.taskUnfinishedLimit":
+    "Deze agent heeft al {count} onvoltooide taken. Start een nieuwe taak wanneer er een klaar is.",
   "error.backend.taskOpenLimitReached":
     "Deze agent heeft {count} open taken. Sluit een taak en start of open dan een andere.",
   "error.backend.taskRemoteUnsupported": "Taken zijn alleen beschikbaar voor agents op deze computer.",

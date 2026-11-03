@@ -43,7 +43,9 @@ export function SidebarTopbar() {
             title={props.serverName}
             onClick={(event) => props.onOpenServerSettings?.(event.currentTarget)}
           >
-            <span class="sidebar-server-name-label">{props.serverName}</span>
+            <span class="sidebar-server-name-label" dir="auto">
+              {props.serverName}
+            </span>
           </Button>
         }
       >

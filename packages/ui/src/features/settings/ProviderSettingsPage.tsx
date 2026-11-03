@@ -6,7 +6,9 @@
 
 import { ProviderLogo } from "@openbot/brand";
 import {
+  type AgentModelId,
   type AgentProviderId,
+  type AgentProviderStatus,
   agentProviderName,
   type CustomProviderSummary,
   DEFAULT_CUSTOM_PROVIDER_HARNESS,
@@ -15,11 +17,12 @@ import {
   PROMPT_CACHE_TTLS,
   type PromptCacheTtl,
   type ProviderAccountState,
+  type ProviderModelVisibility,
   type ProviderRuntimeDownload,
   type ProviderUsageResetOutcome,
   type ProviderUsageResets,
 } from "@openbot/contracts/ipc";
-import type { AppFormat, AppTextKey, AppTranslate } from "@openbot/i18n";
+import type { AppFormat, AppMessages, AppTextKey, AppTranslate } from "@openbot/i18n";
 import {
   Badge,
   Button,
@@ -31,6 +34,7 @@ import {
   DropdownMenu,
   Ellipsis,
   Gauge,
+  Globe2,
   Input,
   Item,
   ItemActions,
@@ -59,6 +63,7 @@ import {
   Smartphone,
   Spinner,
   Switch,
+  Text,
   Trash2,
   UserRoundPlus,
   X,
@@ -103,6 +108,17 @@ export interface ProviderPromptCache {
   onChange: (ttl: PromptCacheTtl) => void;
 }
 
+/** The models of one provider, and the ones the model picker shows. `list` is null until the host answers. */
+export interface ProviderModelVisibilityControl {
+  list: ProviderModelVisibility | null;
+  /** A load or a save that failed. */
+  error: string | null;
+  /** Shows the change at once and saves it. */
+  onChange: (shown: AgentModelId[]) => void;
+  /** Gives each model back the host's default. */
+  onReset: () => void;
+}
+
 export interface ProviderSettingsPageProps extends ProviderRowHost {
   options: ProviderPickerOption[];
   /** The default for new agents. A joined server has none: its default is not this computer's. */
@@ -144,6 +160,11 @@ export interface ProviderSettingsPageProps extends ProviderRowHost {
   onDetailChange?: ((detail: ProviderSettingsDetail | null) => void) | undefined;
   /** On the Claude page. Only for a host with `prompt-cache-ttl-v1` that this account administers. */
   promptCache?: ProviderPromptCache | undefined;
+  /**
+   * The model list of one provider page. Called once when the page opens, so the control lives as
+   * long as the page. Only for a host with `model-visibility-v1` that this account administers.
+   */
+  modelVisibility?: ((provider: AgentProviderId) => ProviderModelVisibilityControl) | undefined;
   /** Below the list: what the host found, and the other agents the user can add. */
   footer?: JSX.Element;
 }
@@ -502,6 +523,8 @@ function ProviderPage(props: PageProps) {
   const keyShown = () =>
     Boolean(props.onSignInProvider) &&
     (props.option.id === "opencode" || props.option.id === "muse" || row.apiKeyOffered());
+  // The source can arrive after the page opens, such as when the host's capabilities load.
+  const models = createMemo(() => props.modelVisibility?.(props.option.id));
   return (
     <>
       <DetailHeader
@@ -522,6 +545,7 @@ function ProviderPage(props: PageProps) {
         <Show when={props.option.id === "claude" && props.promptCache}>
           {(cache) => <PromptCacheSection cache={cache()} disabled={props.disabled} menuMount={props.menuMount} />}
         </Show>
+        <Show when={models()}>{(control) => <ModelsSection control={control()} />}</Show>
       </Show>
       <UseSection {...props} row={row} />
       <DownloadSection {...props} row={row} />
@@ -544,27 +568,47 @@ function MenuTrigger(props: { label: string; disabled?: boolean | undefined }) {
   );
 }
 
-/** The second way in, from a ⋯ menu: a code, or the address that the browser shows at its end. */
+/**
+ * The other ways in, from a ⋯ menu: a code, or the address that the browser shows at its end, and
+ * the provider's mainland China site.
+ */
 function AlternativeItem(props: { row: ProviderRow }) {
   const { t } = useText();
   return (
-    <Show when={props.row.alternative()}>
-      {(kind) => (
-        <DropdownMenu.Item onSelect={props.row.signInAlternative}>
-          <Show when={kind() === "address"} fallback={<Smartphone aria-hidden="true" />}>
-            <Link aria-hidden="true" />
-          </Show>
-          {t(kind() === "address" ? "provider.action.pasteAddress" : "provider.action.signInWithCode")}
-        </DropdownMenu.Item>
-      )}
-    </Show>
+    <>
+      <Show when={props.row.alternative()}>
+        {(kind) => (
+          <DropdownMenu.Item onSelect={props.row.signInAlternative}>
+            <Show when={kind() === "address"} fallback={<Smartphone aria-hidden="true" />}>
+              <Link aria-hidden="true" />
+            </Show>
+            {t(kind() === "address" ? "provider.action.pasteAddress" : "provider.action.signInWithCode")}
+          </DropdownMenu.Item>
+        )}
+      </Show>
+      <Show when={props.row.mainlandChinaSite()}>
+        {(site) => (
+          <DropdownMenu.Item onSelect={props.row.connectInMainlandChina}>
+            <Globe2 aria-hidden="true" />
+            {t("provider.action.signInMainlandChina", { site: site() })}
+          </DropdownMenu.Item>
+        )}
+      </Show>
+    </>
   );
 }
 
 /* ---------------------------------------------- Accounts */
 
 /** The providers whose CLI signs its own sign-in out (`signOut` in `src/backend/provider-drivers.ts`). */
-const SIGN_OUT_PROVIDERS: ReadonlySet<AgentProviderId> = new Set(["claude", "codex", "grok", "muse", "cursor"]);
+const SIGN_OUT_PROVIDERS: ReadonlySet<AgentProviderId> = new Set([
+  "claude",
+  "codex",
+  "grok",
+  "muse",
+  "cursor",
+  "devin",
+]);
 
 /** The confirmation text of a Disconnect of the provider's own sign-in. */
 function disconnectDescription(
@@ -796,6 +840,12 @@ const ACCOUNT_STATE_TEXT = {
   "signed-out": "provider.status.signInRequired",
   error: "provider.account.failed",
 } as const satisfies Record<ProviderAccountState, AppTextKey>;
+
+/** The Version line names the CLI that runs: the one the user installed, or OpenBot's download. */
+const VERSION_SOURCE = {
+  system: "provider.settings.versionInstalledByUser",
+  managed: "provider.settings.versionDownloaded",
+} as const satisfies Record<NonNullable<AgentProviderStatus["cliSource"]>, keyof AppMessages>;
 
 /** One account. Its text says what is wrong; the right edge has at most one button, then the ⋯ menu. */
 function AccountRow(
@@ -1160,7 +1210,7 @@ function SignInSection(props: SectionProps & { keyShown: boolean }) {
                 {t("provider.action.signIn")}
               </Button>
             </Show>
-            <Show when={row().alternative() || disconnectOffered()}>
+            <Show when={row().alternative() || row().mainlandChinaSite() || disconnectOffered()}>
               <DropdownMenu.Root placement="bottom-end" gutter={4} modal={false}>
                 <MenuTrigger
                   label={t("provider.aria.moreActions", { name: props.option.name })}
@@ -1170,7 +1220,7 @@ function SignInSection(props: SectionProps & { keyShown: boolean }) {
                   <DropdownMenu.Content>
                     <AlternativeItem row={row()} />
                     <Show when={disconnectOffered()}>
-                      <Show when={row().alternative()}>
+                      <Show when={row().alternative() || row().mainlandChinaSite()}>
                         <DropdownMenu.Separator />
                       </Show>
                       <DropdownMenu.Item onSelect={() => setDisconnecting(true)}>
@@ -1279,7 +1329,9 @@ function RuntimeSection(props: SectionProps) {
     if (row().updatable() && installed) {
       return t("provider.settings.versionAvailable", { installed, available: props.option.availableVersion ?? "" });
     }
-    return installed;
+    // Names the CLI that runs, so a failure of the user's own install does not read as OpenBot's (#4375).
+    const source = props.option.cliSource;
+    return installed && source ? t(VERSION_SOURCE[source], { version: installed }) : installed;
   };
   /** The sign-in card already shows a check error, so the same text does not show twice. */
   const lastError = () =>
@@ -1471,6 +1523,114 @@ function PromptCacheSection(props: {
         </Item>
       </ItemGroup>
     </SettingsSection>
+  );
+}
+
+/* ---------------------------------------------- Models */
+
+/**
+ * Every model of the provider, each with a switch for the model picker. The shown models come
+ * first, in the order of the first answer, and keep their place while the user changes them.
+ */
+function ModelsSection(props: { control: ProviderModelVisibilityControl }) {
+  const { t } = useText();
+  const [query, setQuery] = createSignal("");
+  const order = createMemo<readonly AgentModelId[]>((previous = []) => {
+    const list = props.control.list;
+    if (!list) return previous;
+    const listed = new Set(list.models.map((model) => model.id));
+    const kept = previous.filter((id) => listed.has(id));
+    const placed = new Set(kept);
+    const shown = new Set(list.shown);
+    const added = list.models.map((model) => model.id).filter((id) => !placed.has(id));
+    // Only the first answer, or models that came later, are sorted by their switch.
+    return [...kept, ...added.filter((id) => shown.has(id)), ...added.filter((id) => !shown.has(id))];
+  });
+  const names = createMemo(() => new Map((props.control.list?.models ?? []).map((model) => [model.id, model.name])));
+  const shown = createMemo(() => new Set(props.control.list?.shown ?? []));
+  const rows = createMemo(() => {
+    const needle = query().trim().toLowerCase();
+    return order()
+      .map((id) => ({ id, name: names().get(id) ?? id }))
+      .filter((model) => !needle || `${model.name} ${model.id}`.toLowerCase().includes(needle));
+  });
+  const total = () => props.control.list?.models.length ?? 0;
+  const set = (id: AgentModelId, on: boolean) => {
+    const next = order().filter((candidate) => (candidate === id ? on : shown().has(candidate)));
+    props.control.onChange(next);
+  };
+  return (
+    <Show when={total() > 0 || props.control.error}>
+      <SettingsSection
+        title={t("provider.settings.models")}
+        description={t("provider.settings.modelsDescription", { shown: shown().size, count: total() })}
+        actions={
+          <Show when={total() > 0}>
+            <Show when={props.control.list?.changed}>
+              <Button type="button" variant="ghost" size="xs" onClick={() => props.control.onReset()}>
+                {t("provider.settings.modelsReset")}
+              </Button>
+            </Show>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() => props.control.onChange(shown().size === 0 ? [...order()] : [])}
+            >
+              {shown().size === 0 ? t("provider.settings.modelsShowAll") : t("provider.settings.modelsHideAll")}
+            </Button>
+          </Show>
+        }
+      >
+        <Show when={props.control.error}>
+          {(message) => (
+            <Text variant="body-sm" class="provider-settings-models-error" role="alert">
+              {message()}
+            </Text>
+          )}
+        </Show>
+        <Show when={total() > 0}>
+          <Input
+            aria-label={t("provider.settings.modelsSearch")}
+            placeholder={t("provider.settings.modelsSearch")}
+            value={query()}
+            onValueChange={setQuery}
+          />
+          <ItemGroup class="settings-modal-card provider-settings-models">
+            <Show
+              when={rows().length > 0}
+              fallback={
+                <Text variant="body-sm" tone="muted" class="provider-settings-models-empty" role="status">
+                  {t("provider.settings.modelsNoMatch")}
+                </Text>
+              }
+            >
+              <ul class="provider-settings-models-list">
+                <For each={rows()} keyed={(model) => model.id}>
+                  {(model) => (
+                    <li class="provider-settings-models-row">
+                      <span class="provider-settings-models-name">
+                        <Text as="span" variant="body-sm">
+                          {model().name}
+                        </Text>
+                        <Text as="span" variant="caption" tone="muted" class="provider-settings-models-id">
+                          {model().id}
+                        </Text>
+                      </span>
+                      <Switch
+                        checked={shown().has(model().id)}
+                        aria-label={t("provider.settings.modelShow", { name: model().name, id: model().id })}
+                        onChange={(on: boolean) => set(model().id, on)}
+                      />
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </ItemGroup>
+        </Show>
+      </SettingsSection>
+    </Show>
   );
 }
 

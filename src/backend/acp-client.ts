@@ -168,6 +168,8 @@ interface AcpTurn {
   interruptedAnswer: string | null;
   /** A failure that the server sent as answer text and then ended the turn as a success. */
   providerError: string | null;
+  /** The agent's process lost its sign-in (`AcpFlavor.signInLostChunk`), and ends after this turn. */
+  signInLost: boolean;
   /**
    * Where the answer text stood when Antigravity logged that its SDK failed this prompt. The
    * server then sends the failure as answer text and ends the turn as a success.
@@ -183,6 +185,8 @@ interface AcpTurn {
   toolItems: Map<string, ThreadItem>;
   /** The user stopped the turn. */
   stopped: boolean;
+  /** Aborts when the user stops the turn: a permission request that waits gets its answer then. */
+  readonly stop: AbortController;
   completing: boolean;
   task: Fiber.Fiber<void, ProviderClientOperationError> | null;
   /** When the agent last sent an update for this turn, or the user last answered it. */
@@ -343,6 +347,11 @@ export interface AcpProviderOptions {
    */
   allowNoModels?: boolean;
   /**
+   * An agent that lists no model is signed out. Devin CLI 3000.11.234 opens a session without an
+   * account, and lists its models only when it is signed in.
+   */
+  noModelsWhenSignedOut?: boolean;
+  /**
    * The folder of the session that model discovery opens and closes. The app's own working folder
    * when absent. A custom agent gets an empty folder, because an unknown agent can write where its
    * session starts.
@@ -488,6 +497,12 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     string,
     Deferred.Deferred<{ thread: { id: string } }, ProviderClientOperationError>
   >();
+  /**
+   * The own processes of sessions that are still opening. No thread holds them yet, so a stop must
+   * end them here: a Gemini process with a refused token waits five minutes for a browser sign-in,
+   * and then deletes the saved token.
+   */
+  readonly #openingSessionProcesses = new Set<AcpConnection>();
   /** Session loads currently being consumed as history. These updates must never become live turns. */
   readonly #historyReplays = new Map<string, HistoryReplay>();
   /** The updates of each background replay's `session/load`, by session. */
@@ -540,6 +555,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       requestTimeoutMs,
       discoveryCwd: options.discoveryCwd,
       processWideModel: options.flavor.processWideModel === true,
+      modelSetUnsaved: options.flavor.modelSetUnsaved,
       keepProbeSession: () => options.flavor.closeKeepsSession === true && this.#supportsSessionResume,
     });
   }
@@ -751,6 +767,11 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
           yield* Effect.forEach(
             threads,
             (thread) => (thread.transport ? thread.transport.stop(Effect.void).pipe(Effect.ignore) : Effect.void),
+            { concurrency: "unbounded", discard: true },
+          );
+          yield* Effect.forEach(
+            this.#openingSessionProcesses,
+            (transport) => transport.stop(Effect.void).pipe(Effect.ignore),
             { concurrency: "unbounded", discard: true },
           );
           this.#startingThreads.clear();
@@ -1127,6 +1148,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         if (!turn || (requestedTurnId !== null && requestedTurnId !== turn.id))
           return yield* providerSync(() => decoder({}));
         turn.stopped = true;
+        turn.stop.abort();
         const cancel = providerCall(() => this.#sessionConnection(thread).cancel({ sessionId: thread.id }));
         if (turn.unprompted) {
           // No prompt answers for the agent's own turn, so its open tool calls end as stopped.
@@ -1246,6 +1268,10 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         return;
       }
       this.#models = providerResult(discovery);
+      if (this.#models.length === 0 && this.options.noModelsWhenSignedOut) {
+        this.#signedIn = false;
+        return;
+      }
       if (this.#models.length === 0 && !this.options.allowNoModels) {
         throw new Error(sourceText("error.provider.acpNoModels"));
       }
@@ -1309,16 +1335,25 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       const thread = owner();
       if (thread?.transport === transport) thread.needsResume = true;
     });
+    this.#openingSessionProcesses.add(transport);
     const startTimeout = this.#startTimeout(this.#startTimeoutMs ?? this.#requestTimeoutMs);
     yield* Effect.gen({ self: this }, function* () {
-      yield* providerSync(() => transport.start());
+      yield* providerSync(() => {
+        // A stop that started before this spawn did not see the process. In the same step, so no stop starts between.
+        if (!this.running) throw new Error("ACP client is not running.");
+        transport.start();
+      });
       const connection = yield* providerSync(() => transport.requireConnection());
       const initialization = yield* this.#initializeConnection(connection).pipe(startTimeout);
       yield* (this.options.authenticate?.(connection, initialization) ?? Effect.void).pipe(startTimeout);
     }).pipe(
       // Read before the stop: a stopped process no longer says how it ended.
       Effect.catch((failure) => this.#explainSessionEnd(transport, failure.cause).pipe(Effect.flatMap(Effect.fail))),
-      Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : transport.stop(Effect.void).pipe(Effect.ignore))),
+      Effect.onExit((exit) => {
+        if (Exit.isSuccess(exit)) return Effect.void;
+        this.#openingSessionProcesses.delete(transport);
+        return transport.stop(Effect.void).pipe(Effect.ignore);
+      }),
     );
     return transport;
   });
@@ -1391,8 +1426,9 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     return this.#initialization?.agentCapabilities?.promptCapabilities?.audio === true;
   }
 
-  /** Whether the agent can resume without replaying its transcript. */
+  /** Whether the agent can resume without replaying its transcript, and OpenBot uses that resume. */
   get #supportsSessionResume(): boolean {
+    if (this.#flavor.loadInsteadOfResume) return false;
     return this.#initialization?.agentCapabilities?.sessionCapabilities?.resume != null;
   }
 
@@ -1614,11 +1650,14 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
             retained = true;
             return { thread: { id } };
           } catch (error) {
+            // The server asked for a browser sign-in while the session opened, and the stop ended it.
+            if (!this.#signedIn) return yield* providerFailure(new Error(this.options.signInMessage));
             return yield* transport ? yield* this.#explainSessionEnd(transport, error) : providerFailure(error);
           }
         }),
       (mcp) =>
-        Effect.gen(function* () {
+        Effect.gen({ self: this }, function* () {
+          if (transport) this.#openingSessionProcesses.delete(transport);
           if (retained) return;
           mcp.close();
           if (transport) yield* transport.stop(Effect.void).pipe(Effect.ignore);
@@ -1659,8 +1698,9 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       );
     let failure: unknown;
     let recovery: "wait-for-start" | "list-sessions" | null = null;
+    let restored: LoadSessionResponse | ResumeSessionResponse | undefined;
     try {
-      return providerResult(yield* Effect.result(providerSync(connection).pipe(Effect.flatMap(restore))));
+      restored = providerResult(yield* Effect.result(providerSync(connection).pipe(Effect.flatMap(restore))));
     } catch (error) {
       // For `thread/resume` and `turn/start`, `request` forgets the session and converts this response.
       if (method === "load" && isSessionNotFound(error, request.sessionId, this.#flavor)) {
@@ -1669,6 +1709,13 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       recovery = this.#flavor.restoreFailure?.(error, method) ?? null;
       if (!recovery) return yield* providerFailure(error);
       failure = error;
+    }
+    if (restored) {
+      if (method === "load" && this.#flavor.loadInsteadOfResume?.missing(restored))
+        return yield* providerFailure(
+          new MissingAcpSessionError(`ACP session not found: ${request.sessionId}`, "empty session/load reply"),
+        );
+      return restored;
     }
     if (recovery === "wait-for-start") {
       yield* Effect.sleep(RESTORE_START_RETRY_MS);
@@ -2068,6 +2115,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       reasoned: false,
       interruptedAnswer: null,
       providerError: null,
+      signInLost: false,
       sdkFailureAt: null,
       answerOptional,
       messages: [],
@@ -2075,6 +2123,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       toolKinds: new Map(),
       toolItems: new Map(),
       stopped: false,
+      stop: new AbortController(),
       completing: false,
       task: null,
       lastActivityAt: Date.now(),
@@ -2168,6 +2217,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
         status,
         status === "failed" ? (turn.providerError ?? response.stopReason) : null,
       );
+      if (turn.signInLost)
+        yield* this.#endAgentProcess(sourceText("error.provider.acpSignInLost", { provider: this.#label }));
     } catch (error) {
       // A session's own process that ended names how it ended, as the agent's process does.
       const transport = thread.transport;
@@ -2313,6 +2364,12 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
       // The agent's own transport error sent as answer text (Cursor, #3334).
       if (this.#flavor.noiseChunk?.test(update.content.text)) return;
+      if (this.#flavor.signInLostChunk?.test(update.content.text)) {
+        turn.receivedOutput = true;
+        turn.signInLost = true;
+        turn.providerError = sourceText("error.provider.acpSignInLost", { provider: this.#label });
+        return;
+      }
       // An exhausted quota sent as answer text, and a turn then ended as a success (Antigravity).
       const quota = this.#flavor.sdkHarness?.quota(update.content.text) ?? null;
       if (quota !== null) {
@@ -2591,12 +2648,19 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       yield* transport.stop(Effect.void).pipe(Effect.ignore);
       return true;
     }
-    this.emit("exit", new Error(sourceText("error.provider.acpUnresponsive", { provider: this.#label })));
-    // A warm generation client has no runtime that stops it, and it is used again while it runs.
-    // The stop closes the scope of this fiber, so it runs detached.
-    yield* Effect.forkDetach(this.stop().pipe(Effect.ignore), { startImmediately: true });
+    yield* this.#endAgentProcess(sourceText("error.provider.acpUnresponsive", { provider: this.#label }));
     return true;
   });
+
+  /** Ends the agent's own process with this message. The runtime starts a new one. */
+  #endAgentProcess(message: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.emit("exit", new Error(message));
+      // A warm generation client has no runtime that stops it, and it is used again while it runs.
+      // The stop closes the scope of the calling fiber, so it runs detached.
+      return Effect.forkDetach(this.stop().pipe(Effect.ignore), { startImmediately: true }).pipe(Effect.asVoid);
+    });
+  }
 
   /** Watches a session whose background task can start a turn that the agent sends no update for. */
   #watchBackground(thread: AcpThread): void {
@@ -2871,7 +2935,8 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     // The user stopped this Antigravity session, and its harness can still run until the resume.
     // A tool that it asks for now must not run.
     if (thread?.needsResume && !thread.activeTurn) return { outcome: { outcome: "cancelled" } };
-    const turnId = thread?.activeTurn?.id ?? randomUUID();
+    const turn = thread?.activeTurn;
+    const turnId = turn?.id ?? randomUUID();
     const kind =
       params.toolCall.kind === "execute"
         ? "command"
@@ -2880,7 +2945,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
           : "permissions";
     const requestedPermissions = kind === "permissions" ? { [params.toolCall.kind ?? "file-system"]: true } : null;
     const result = yield* this.#waitForUser(
-      thread?.activeTurn,
+      turn,
       this.#serverRequests.call(
         `item/${kind === "command" ? "commandExecution" : kind === "file-change" ? "fileChange" : "permissions"}/requestApproval`,
         {
@@ -2890,8 +2955,18 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
           reason: params.toolCall.title ?? null,
           permissions: requestedPermissions,
         },
+        turn?.stop.signal,
       ),
-    ).pipe(toProviderClientOperationError);
+    ).pipe(
+      toProviderClientOperationError,
+      Effect.catchIf(
+        () => turn?.stopped === true,
+        () => Effect.succeed(null),
+      ),
+    );
+    // With `session/cancel` the protocol requires the `cancelled` outcome at once, and the answer
+    // that a turn's end gives is not the user's choice (#4165).
+    if (turn?.stopped || turn?.completing) return { outcome: { outcome: "cancelled" } };
     const accepted =
       isRecord(result) &&
       (result.decision === "accept" ||

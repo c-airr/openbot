@@ -6,7 +6,7 @@ import { agentProviderName, type KeyOnlyProviderId } from "@openbot/contracts/ag
 import { type DynamicRecord, isBoolean, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { redactText } from "@openbot/logging";
-import { Effect, Exit, Schema, Scope, Semaphore } from "effect";
+import { Effect, Exit, Option, Schema, Scope, Semaphore } from "effect";
 import { secretElicitationField } from "./agent/prompts";
 import { type AgentClient, type DiagnosticOrigin, MissingPiSessionError, RequestTimeoutError } from "./agent-client";
 import { type AgentCliInfo, cliPathEnvironment, cliSpawnTarget } from "./cli";
@@ -100,6 +100,15 @@ const openRouterModelIds = Effect.fn("PiClient.openRouterModelIds")(
   Effect.catch(() => Effect.succeed(null)),
 );
 
+/**
+ * The context fill of `get_session_stats`. Pi omits it with no model or window, and its `tokens` is
+ * null after a compaction until the next model answer.
+ */
+const PiContextUsage = Schema.Struct({
+  tokens: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+  contextWindow: Schema.Finite.check(Schema.isGreaterThan(0)),
+});
+
 export interface PiProviderOptions {
   requestTimeoutMs?: number;
   discoveryCwd?: () => string;
@@ -152,6 +161,8 @@ interface PiThread {
   mcp: LocalMcpSession;
   extension: PiMcpExtension;
   keyExtension: PiMcpExtension | null;
+  /** The user's MCP tools wait for Pi's `tool_search`. */
+  deferredMcp: boolean;
   turn: PiTurn | null;
   closed: boolean;
   gate: Semaphore.Semaphore;
@@ -198,6 +209,7 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
       this.#running = true;
     }
   }
+  deferredMcpTools = (id: string): boolean => this.#threads.get(id)?.deferredMcp ?? false;
   canReleaseProcess = (): boolean => [...this.#threads.values()].every((thread) => thread.turn === null);
   notify(): void {
     /* Pi has no post-initialize notification. */
@@ -263,10 +275,14 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
 
   readonly releaseIdleThreads = Effect.fn("PiAgentClient.releaseIdleThreads")(function* (this: PiAgentClient) {
     for (const [id, thread] of this.#threads) {
-      if (thread.turn) continue;
-      if (thread.configured) this.#released.set(id, thread.params);
-      yield* this.#close(thread);
-      this.#threads.delete(id);
+      // A held gate is a turn that starts, before it sets `turn`, or a compaction. Out of the map
+      // before it closes, so a turn that starts during the close opens the thread again.
+      yield* Effect.gen({ self: this }, function* () {
+        if (thread.turn) return;
+        if (thread.configured) this.#released.set(id, thread.params);
+        this.#threads.delete(id);
+        yield* this.#close(thread);
+      }).pipe(thread.gate.withPermitsIfAvailable(1));
     }
   });
 
@@ -408,11 +424,15 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
                 .filter(isString)
                 .map((level) => (level === "off" ? "none" : level));
             }
-            const preferred = getString(state, "thinkingLevel");
+            const thinkingLevel = getString(state, "thinkingLevel");
+            const preferred = thinkingLevel === "off" ? "none" : thinkingLevel;
+            const defaultLevel = preferred && levels.includes(preferred) ? preferred : levels[0];
             models.push({
               model: keyProvider ? id : `${provider}/${id}`,
               displayName: getString(model, "name") ?? id,
-              defaultReasoningEffort: preferred && levels.includes(preferred) ? preferred : (levels[0] ?? "none"),
+              // A model without reasoning has no level. The catalog then gives it the `medium` of every
+              // model that cannot change its effort.
+              ...(defaultLevel === undefined ? {} : { defaultReasoningEffort: defaultLevel }),
               supportedReasoningEfforts: levels.map((reasoningEffort) => ({ reasoningEffort })),
               reasoningEffortConfigurable: levels.length > 0,
             });
@@ -589,6 +609,7 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
         mcp,
         extension,
         keyExtension,
+        deferredMcp: !this.options.profileGeneration && Object.keys(handoff.servers).length > 0,
         turn: null,
         closed: false,
         gate: Semaphore.makeUnsafe(1),
@@ -774,7 +795,10 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
 
   #notify(method: string, thread: PiThread, params: DynamicRecord): void {
     // Usage contains only validated numeric counters. Generic secret-name matching masks `*Tokens`.
-    const safe = method === "openbot/usage" ? params : redactMcpRecord(params, this.#secretValues());
+    const safe =
+      method === "openbot/usage" || method === "thread/tokenUsage/updated"
+        ? params
+        : redactMcpRecord(params, this.#secretValues());
     this.emit("notification", {
       method,
       params: {
@@ -874,7 +898,19 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
     if (failure) this.#notify("error", thread, { error: { message: this.#redact(failure) }, willRetry: false });
     // Native totals survive process release/resume. Per-message usage is not a cumulative counter.
     yield* thread.rpc.request({ type: "get_session_stats" }, 2_000).pipe(
-      Effect.flatMap((stats) => providerSync(() => Schema.decodeUnknownSync(PiSessionUsage)(stats))),
+      Effect.flatMap((stats) => {
+        // The meter and the automatic compaction read this. A bad fill must not drop the totals.
+        const context = Schema.decodeUnknownOption(PiContextUsage)(getRecord(stats, "contextUsage"));
+        if (Option.isSome(context))
+          this.#notify("thread/tokenUsage/updated", thread, {
+            tokenUsage: {
+              last: { totalTokens: context.value.tokens },
+              modelContextWindow: context.value.contextWindow,
+              estimated: true,
+            },
+          });
+        return providerSync(() => Schema.decodeUnknownSync(PiSessionUsage)(stats));
+      }),
       Effect.map(({ tokens }) =>
         this.#notify("openbot/usage", thread, {
           usage: {

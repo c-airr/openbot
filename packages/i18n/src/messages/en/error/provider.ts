@@ -8,6 +8,7 @@ export const messages = defineMessages("error.provider", {
     "OpenBot could not register Computer Use in the Codex configuration. Check that your Codex config.toml is valid and writable, then restart OpenBot. You can turn off Computer Use in the teammate settings to continue without it.",
   "error.provider.codexUnresponsive": "Codex stopped answering, so OpenBot ended its process.",
   "error.provider.acpUnresponsive": "{provider} did not answer in time, so OpenBot ended its process.",
+  "error.provider.acpSignInLost": "{provider} lost its sign-in, so OpenBot ended its process. Send your message again.",
   "error.provider.acpMcpNotLoaded":
     "{provider} did not load OpenBot's tools, so this agent cannot use them or reach its teammates. A {provider} team policy can block local MCP servers. Ask your team admin to allow them, then try again.",
   "error.provider.endpointsReadOnly":
@@ -103,6 +104,7 @@ export const messages = defineMessages("error.provider", {
   "error.provider.modelIdDuplicate": "Two models have the same ID.",
   "error.provider.contextWindowInvalid":
     "A model's context window must be a whole number of tokens from {min} to {max}.",
+  "error.provider.maxOutputInvalid": "A model's max output must be a whole number of tokens from {min} to {max}.",
   "error.provider.headersTooMany": "There are too many headers.",
   "error.provider.headerNameCharacter": "A header name has a character HTTP does not allow.",
   "error.provider.headerNameTooLong": "A header name is too long.",
@@ -171,6 +173,8 @@ export const messages = defineMessages("error.provider", {
   "error.provider.noAuthenticatedAccount": "{provider} did not return an authenticated account.",
   "error.provider.signInExpired": "Your {provider} sign-in expired. Sign in again to continue.",
   "error.provider.cliActivateFailed": "OpenBot could not activate the managed CLI.",
+  "error.provider.noMainlandChinaSignIn": "{provider} has no sign-in for mainland China.",
+  "error.provider.cliNewVersionNotStarted": "The new version did not start.",
   "error.provider.cliBusyReconnect": "The {provider} CLI is working on a turn. Wait for it to finish, then reconnect.",
   "error.provider.cliBusySignOut": "The {provider} CLI is working on a turn. Wait for it to finish, then disconnect.",
   "error.provider.opencodeCredentialsRejected":
@@ -247,6 +251,19 @@ export const messages = defineMessages("error.provider", {
   "error.provider.clineNotStarted": "Cline could not start. Run `cline --version` in a terminal.",
   "error.provider.clineVersionUnreadable": "Unable to read the Cline CLI version.",
   "error.provider.clineSignIn": "Sign in with Cline or set CLINE_API_KEY to use Cline.",
+  "error.provider.kimiArchivePath": "The Kimi archive has an unexpected path.",
+  "error.provider.kimiChecksum": "Kimi runtime checksum mismatch.",
+  "error.provider.kimiLicenseChecksum": "Kimi license checksum mismatch.",
+  "error.provider.kimiMissing": "Kimi is not downloaded. Download it in OpenBot to continue.",
+  "error.provider.kimiOutdated": "Kimi CLI {version} is too old. OpenBot requires 1.52.0 or newer.",
+  "error.provider.kimiNotStarted": "Kimi could not start. Run `kimi --version` in a terminal.",
+  "error.provider.kimiVersionUnreadable": "Unable to read the Kimi CLI version.",
+  "error.provider.kimiSignIn": "Sign in with Kimi Code to use Kimi.",
+  "error.provider.devinSignIn": "Sign in with Devin to use Devin.",
+  "error.provider.hermesMissing": "Hermes Agent is not installed. Install it, then try again.",
+  "error.provider.hermesNotStarted": "Hermes Agent could not start. Run `hermes --version` in a terminal.",
+  "error.provider.hermesVersionUnreadable": "Unable to read the Hermes Agent version.",
+  "error.provider.hermesSignIn": "Sign in with Nous Portal, or run `hermes setup` in a terminal, to use Hermes.",
   "error.provider.usageLimitReached": "The account reached its usage limit.",
   "error.provider.foreignReasoning":
     "{provider} did not accept the earlier reasoning in this chat, because a different account or API key received it. OpenBot started a new {provider} session with the chat history. Try again.",
@@ -299,6 +316,7 @@ export const messages = defineMessages("error.provider", {
   "error.provider.customAgentNoSecureStorage":
     "This computer has no secure storage, so environment values cannot be saved. Remove them and try again.",
   "error.provider.customAgentNotSaved": "This custom agent is not saved. Refresh the list and try again.",
+  "error.provider.customAgentWorkspaceOnly": "{reason}. Workspace only blocks this. Try Full access.",
   "error.provider.customAgentTooMany": "You can save at most {count} custom agents.",
   "error.provider.customAgentEnvValueMissing": "Enter a value for {name}.",
   "error.provider.off": "{provider} is off in OpenBot. Turn it on in provider settings first.",

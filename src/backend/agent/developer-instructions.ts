@@ -26,6 +26,8 @@ export interface VaultContents {
   /** A saved card replaces payment-field takeover with `fill_card`. */
   cards: boolean;
   contacts: boolean;
+  /** The user connected Link: `request_link_payment` gives a one-time card. */
+  link?: boolean;
 }
 
 export interface DeveloperInstructionOptions {
@@ -86,19 +88,21 @@ function instructionsFileSection(file: PromptInstructionsFile | null | undefined
   ];
 }
 
-/** When and how to use the OpenBot Vault. Its settings page is on the user's own computer only. */
-function vaultInstruction(vault: VaultContents, serverHost: boolean): string {
+/** When and how to use the OpenBot Vault. */
+function vaultInstruction(vault: VaultContents): string {
   const saved = [vault.cards ? "cards" : "", vault.contacts ? "contact info" : ""].filter(Boolean).join(" and ");
-  const noCard = vault.cards
-    ? ""
-    : serverHost
-      ? "No card is saved: use request_takeover for card fields."
-      : "No card is saved. When the user wants you to pay, ask the user to add the card in Server settings > Vault, or use request_takeover for the card fields.";
+  const noCard =
+    vault.cards || vault.link
+      ? ""
+      : "No card is saved. When the user wants you to pay, call openbot_browser.request_vault_item kind=card, or use request_takeover for the card fields.";
   return [
     "The OpenBot Vault keeps logins, cards, and contact info for all agents of this server.",
     saved ? `The user saved ${saved}.` : "",
     "At a checkout or address form, call openbot_browser.list_vault_items, use the item that fits the request, ask when more than one fits, and follow the browser guidance.",
-    "Save contact info that the user asks you to keep with openbot_browser.save_vault_item kind=contact.",
+    "Save contact info that the user asks you to keep with openbot_browser.save_vault_item kind=contact. When a task needs a login, a card or contact info that the Vault does not have, call openbot_browser.request_vault_item, with the fields that you know filled in.",
+    vault.link
+      ? "The user connected Link: to pay, you can call openbot_browser.request_link_payment, and the user approves the payment in Link."
+      : "",
     noCard,
   ]
     .filter(Boolean)
@@ -292,6 +296,7 @@ export function developerInstructions(
           "When the user needs a service that openbot.suggest_marketplace_app lists, you lack working tools for it, and no teammate covers it, call it first. For GitHub issues, pull requests, and comments, use GitHub MCP tools when you have them, so that the OpenBot app is the author; otherwise use gh as the signed-in user.",
         ]
       : []),
+
     ...(options.httpMcpServers
       ? [
           "When an MCP server's tools are missing or fail with an authorization, sign-in, or client registration error, describe and call openbot.test_mcp_server with the server name: OpenBot then shows a Sign in card in this chat. Do not send the user to /mcp or Server settings to sign in.",
@@ -378,7 +383,7 @@ ${tagSafe(options.compactSummary)}
     ...(agentAutomationAllowed(agent, agentDefaults) ? [automationInstructions(agent.id, automationRoot)] : []),
     ...(agentQuickAcknowledgementEnabled(agent, agentDefaults)
       ? [
-          "Before a long task, such as a fix, a build, research, or a change in many files, describe and call openbot.acknowledge_request first: it shows the user one acknowledgement line and your plan, and the work starts after 10 s or when the user presses start. Do not call it for a quick answer, a question, a small change, a routine run, or a Slack, Discord, or Telegram chat. After the card, do not repeat the plan as prose.",
+          "Before a long task, such as a fix, a build, research, or a change in many files, describe and call openbot.acknowledge_request first: it shows the user one acknowledgement line and your plan, and the work starts after 10 s or when the user presses start. Do not call it for a quick answer, a question, a small change, a routine run, or an external chat. After the card, do not repeat the plan as prose.",
         ]
       : []),
     ...(options.memoriesInTurns

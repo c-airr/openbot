@@ -40,8 +40,10 @@ import {
   type InstanceTransferResult,
   type InstanceTransferSummary,
   isAgentImportKey,
+  isAvatarColor,
   isCustomProviderContextWindow,
   isCustomProviderHarness,
+  isCustomProviderMaxOutput,
   type McpServerConfig,
   type Routine,
   type RoutineFlowLink,
@@ -325,6 +327,7 @@ export class InstanceTransferService {
         description: agent.description,
         avatarSeed: agent.avatarSeed,
         avatarHue: agent.avatarHue,
+        ...(agent.avatarColor ? { avatarColor: agent.avatarColor } : {}),
         avatar,
         provider: agent.provider,
         model: agent.model,
@@ -691,9 +694,12 @@ export class InstanceTransferService {
           name: provider.name,
           baseUrl: provider.baseUrl,
           apiKey: null,
-          models: provider.models.map(({ id, name, contextWindow }) =>
-            isCustomProviderContextWindow(contextWindow) ? { id, name, contextWindow } : { id, name },
-          ),
+          models: provider.models.map(({ id, name, contextWindow, maxOutput }) => ({
+            id,
+            name,
+            ...(isCustomProviderContextWindow(contextWindow) ? { contextWindow } : {}),
+            ...(isCustomProviderMaxOutput(maxOutput) ? { maxOutput } : {}),
+          })),
           headers: [],
           ...(isCustomProviderHarness(provider.harness) ? { harness: provider.harness } : {}),
         }),
@@ -845,6 +851,7 @@ export class InstanceTransferService {
           description: source.description,
           avatarSeed: AVATAR_SEED_PATTERN.test(source.avatarSeed) ? source.avatarSeed : `${source.key}-${randomUUID()}`,
           avatarHue: source.avatarHue,
+          ...(isAvatarColor(source.avatarColor) ? { avatarColor: source.avatarColor } : {}),
           ...(useModel
             ? { provider: source.provider, model: source.model, reasoningEffort: source.reasoningEffort }
             : {}),

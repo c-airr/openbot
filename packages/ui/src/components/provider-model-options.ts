@@ -1,4 +1,5 @@
 import type {
+  AgentModelListing,
   AgentProviderId,
   AgentProviderStatus,
   AgentStatus,
@@ -20,11 +21,14 @@ import { currentText } from "../text";
 
 /** The efforts that have a name in the catalog. The other efforts show their id. */
 const EFFORT_LABELS: Partial<Record<string, AppTextKey>> = {
+  none: "provider.effort.none",
+  minimal: "provider.effort.minimal",
   low: "provider.effort.low",
   medium: "provider.effort.medium",
   high: "provider.effort.high",
   xhigh: "provider.effort.xhigh",
   max: "provider.effort.max",
+  ultra: "provider.effort.ultra",
 };
 
 export interface PickerModel {
@@ -35,6 +39,8 @@ export interface PickerModel {
   service: string;
   free: boolean;
   variants: { id: string; name: string }[];
+  /** From the host: `older` folds the model under Older models, and `new` labels a recent release. */
+  listing?: AgentModelListing;
 }
 
 export interface PickerModelGroup {
@@ -229,6 +235,14 @@ export function pickerModels(options: ClientAgentModelOption[]): PickerModel[] {
         service = labNames.get(lab) ?? providerLabel(lab);
         if (name.startsWith(`${service}: `)) name = name.slice(service.length + 2);
       }
+      // Hermes lists the models of each provider it is signed in to, as `<provider> · <model>`.
+      if (model.provider === "hermes") {
+        const provider = name.indexOf(" · ");
+        if (provider > 0) {
+          service = name.slice(0, provider);
+          name = name.slice(provider + 3);
+        }
+      }
       name = name.replace(/^[\s:–—-]+/, "") || model.id;
       return {
         id: model.id,
@@ -242,6 +256,7 @@ export function pickerModels(options: ClientAgentModelOption[]): PickerModel[] {
         variants: variants.has(model.id)
           ? [{ id: model.id, name: t("app.modelVariant.default") }, ...(variants.get(model.id) ?? [])]
           : [],
+        ...(model.listing ? { listing: model.listing } : {}),
       };
     });
 }

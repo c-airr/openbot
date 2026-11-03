@@ -36,6 +36,8 @@ export const messages = {
   "settings.launchAtLogin.description": "Abrir la aplicación al iniciar sesión en este equipo.",
   "settings.keepRunning.title": "Mantener OpenBot en segundo plano",
   "settings.keepRunning.description": "Mantener las tareas activas al cerrar la ventana.",
+  "settings.menuBar.title": "Mostrar OpenBot en la barra de menús",
+  "settings.menuBar.description": "Abre o cierra OpenBot desde un icono en la barra de menús.",
   "settings.keepAwake.title": "Mantener el ordenador activo",
   "settings.keepAwake.description":
     "Las rutinas se ejecutan a tiempo mientras el ordenador está conectado a la corriente. La pantalla puede apagarse.",
@@ -145,11 +147,11 @@ export const messages = {
   "settings.notch.size.height": "Alto",
   "settings.notch.size.previewNotch": "Pantalla integrada",
   "settings.notch.size.previewIsland": "Pantalla externa",
-  "settings.analytics.title": "Compartir datos de uso",
+  "settings.analytics.title": "Vincular la analítica a mi cuenta",
   "settings.analytics.description":
-    "Enviar metadatos de uso y fiabilidad con tu ID de cuenta y correo electrónico al sistema de análisis alojado por OpenBot.",
+    "Activado: los metadatos de uso y fiabilidad se envían al sistema de análisis alojado por OpenBot con tu ID de cuenta y correo electrónico, junto con los sitios web que visitáis tú y tus agentes, el uso de herramientas y un resumen diario de tu configuración. Desactivado: solo se envía el uso básico, como turnos y recuentos de tokens, con un ID de instalación aleatorio. Nunca se envían chats, archivos ni prompts.",
   "settings.analytics.webDescription":
-    "Enviar metadatos de uso y fiabilidad con tu ID de cuenta y correo electrónico al sistema de análisis alojado por OpenBot. Este ajuste se aplica a este navegador.",
+    "Activado: los metadatos de uso y fiabilidad se envían al sistema de análisis alojado por OpenBot con tu ID de cuenta y correo electrónico. Desactivado: los mismos metadatos se envían solo con un ID de instalación aleatorio. Nunca se envían chats, archivos ni prompts. Este ajuste se aplica a este navegador.",
   "settings.tab.general.title": "General",
   "settings.tab.general.description": "Controla cómo funciona OpenBot en este equipo.",
   "settings.tab.notifications.title": "Notificaciones",
@@ -534,6 +536,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "Leer las respuestas en voz alta",
   "settings.voice.speech.readReplies.description":
     "Cuando dictas un mensaje, la respuesta se lee en voz alta. Dicta otra vez para detenerla.",
+  "settings.voice.speech.speed.title": "Velocidad",
   "settings.voice.speech.voice.title": "Voz",
   "settings.voice.speech.voice.female": "Voz femenina {number}",
   "settings.voice.speech.voice.male": "Voz masculina {number}",

@@ -1,11 +1,13 @@
 import {
   assertSupportedAttachmentName,
   attachmentFileExtension,
+  rasterImageMimeType,
   supportedAttachmentExtensions,
 } from "@openbot/contracts/attachment-files";
 import { isAvatarMimeType } from "@openbot/contracts/avatar-images";
 import type {
   AccountUsage,
+  AgentColors,
   AgentEvent,
   AgentNotificationLevelsSnapshot,
   AgentStatus,
@@ -41,6 +43,8 @@ import type {
   SetMessageReactionInput,
   SidebarLayoutAction,
   SidebarLayoutSnapshot,
+  SidebarPin,
+  SidebarPinsSnapshot,
   SteerQueuedMessageInput,
   TeamInviteSummary,
   TeamMemberSummary,
@@ -53,6 +57,8 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   canAdministerServer,
+  decodeAgentFastModels,
+  decodeAgentModelListings,
   decodeWorkspaceDirectory,
   isAccountUsage,
   isAgentStatus,
@@ -65,10 +71,17 @@ import {
   isQueueSnapshot,
   isSidebarLayoutSnapshot,
   isTeamPresenceSnapshot,
+  withFastServiceTiers,
+  withModelListings,
 } from "@openbot/contracts/ipc";
 import { guardedListDecoder, optionalHistoryExtent, requiredString } from "@openbot/contracts/ipc-decoding";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_COLORS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-colors-v1";
+import {
+  AGENT_FAST_MODE_CAPABILITY,
+  AGENT_FAST_MODE_ROUTES,
+} from "@openbot/contracts/team-protocol/agent-fast-mode-v1";
 import { AGENT_NOTIFICATION_LEVELS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-notification-levels-v1";
 import {
   BROWSER_PAGE_STATE_CAPABILITY,
@@ -87,8 +100,16 @@ import {
 } from "@openbot/contracts/team-protocol/browser-view-v1";
 import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { FOCUS_USE_ROUTES } from "@openbot/contracts/team-protocol/focus-use-v1";
+import {
+  MODEL_VISIBILITY_CAPABILITY,
+  MODEL_VISIBILITY_ROUTES,
+} from "@openbot/contracts/team-protocol/model-visibility-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { ROUTINE_FLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/routine-flows-v1";
+import {
+  SIDEBAR_FOLDERS_CAPABILITY,
+  SIDEBAR_FOLDERS_ROUTES,
+} from "@openbot/contracts/team-protocol/sidebar-folders-v1";
 import { type TeamProtocolSupportV1, teamProtocolUpdateDirection } from "@openbot/contracts/team-protocol/v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { TEAM_PROTOCOL_V3 } from "@openbot/contracts/team-protocol/v3";
@@ -112,6 +133,7 @@ import {
   createRemoteTeamPeer,
   MOBILE_ATTACHMENT_BYTES,
   type RemoteFileUpload,
+  type RemoteTeamCommandResult,
   type RemoteTeamConnectionUpdate,
   type RemoteTeamPeerActions,
 } from "@openbot/team-client/remote-peer";
@@ -119,10 +141,15 @@ import { remoteWorkspaceReadTimeout } from "@openbot/team-client/remote-recovery
 import {
   listAgentNotificationLevels,
   listHiddenAgents,
+  readAgentColors,
+  readSidebarPins,
+  seedSidebarPins,
+  setAgentColor,
   setAgentHidden,
   setAgentNotificationLevel,
   setAgentProviderAccount,
   setOwnServerNotificationLevel,
+  setSidebarPins,
 } from "@openbot/team-client/team-admin-requests";
 import {
   cancelQueuedMessage,
@@ -276,6 +303,15 @@ export interface WebWorkspaceRuntime {
   listHiddenAgents?: () => Promise<HiddenAgentsSnapshot>;
   /** Hides or restores an agent, and returns the host's hidden list. Needs `agent-hidden-v1`. */
   setAgentHidden?: (input: SetAgentHiddenInput) => Promise<HiddenAgentsSnapshot>;
+  /** The exact colours of the agents on the host. A host without `agent-colors-v1` has none. */
+  listAgentColors?: () => Promise<AgentColors>;
+  /** The user's own pinned chats on the open host, for all of their devices. Needs `sidebar-pins-v1`. */
+  sidebarPins?: {
+    read: () => Promise<SidebarPinsSnapshot>;
+    set: (items: SidebarPin[]) => Promise<SidebarPinsSnapshot>;
+    /** Saves `items` only when the user has no list on the host yet. */
+    seed: (items: SidebarPin[]) => Promise<SidebarPinsSnapshot>;
+  };
   /**
    * The user's own level for each agent of a host: the open host, or a host with a status connection.
    * Any member can call it. A host without `agent-notification-levels-v1` has no levels.
@@ -531,6 +567,25 @@ export function createWebWorkspaceRuntime(
   const duplicateOperationIds = new Map<string, string>();
   const completedDraftIdsByHost = new Map<string, Set<string>>();
   const draftCleanupRetryHosts = new Set<string>();
+  // The host names a draft's preview with the desktop `openbot-attachment:` scheme, so a draft image
+  // shows from its local bytes. A discard revokes the URL. A sent draft keeps it until the runtime ends:
+  // the pending row of the message shows it until the host's row comes.
+  const localDraftPreviews = new Map<string, string>();
+  function localDraftPreview(id: string, file: File): string | null {
+    const type = rasterImageMimeType(file.name);
+    if (!type) return null;
+    const url = URL.createObjectURL(new Blob([file], { type }));
+    localDraftPreviews.set(id, url);
+    return url;
+  }
+  function revokeLocalDraftPreviews(ids: Iterable<string>): void {
+    for (const id of ids) {
+      const url = localDraftPreviews.get(id);
+      if (!url) continue;
+      URL.revokeObjectURL(url);
+      localDraftPreviews.delete(id);
+    }
+  }
   function trackCompletedDraft(id: string, hostId = lockedHostId): void {
     if (!hostId) return;
     // The released API has no draft listing. A request that commits before returning cannot be
@@ -576,6 +631,14 @@ export function createWebWorkspaceRuntime(
     }
     if (!completedDraftIdsByHost.has(hostId)) draftCleanupRetryHosts.delete(hostId);
   }
+  /** With `sidebar-folders-v1`, the layout has the parent of each folder. */
+  async function readSidebarLayout(): Promise<SidebarLayoutSnapshot> {
+    const value = capabilities.includes(SIDEBAR_FOLDERS_CAPABILITY)
+      ? await request("POST", SIDEBAR_FOLDERS_ROUTES.read, {})
+      : await request("GET", TEAM_API_ROUTES.sidebarLayout.state);
+    if (!isSidebarLayoutSnapshot(value)) throw new Error(currentText().t("error.remote.invalidData"));
+    return value;
+  }
   async function request(method: string, path: string, body: TeamProtocolV2Json = {}, upload?: RemoteFileUpload) {
     if (disposed) throw new Error(currentText().t("webClient.error.connectionClosed"));
     const current = generation;
@@ -608,7 +671,7 @@ export function createWebWorkspaceRuntime(
     }
     if (!result.ok || (result.status ?? 500) >= 400)
       throw new WebHostRequestError(
-        hostRefusal(result.status, result.body) ?? currentText().t("webClient.error.requestIncomplete"),
+        hostRefusal(result) ?? currentText().t("webClient.error.requestIncomplete"),
         result.status === undefined ? (result.reference ?? null) : referenceFrom("http", result.status),
       );
     return result.body;
@@ -920,13 +983,17 @@ export function createWebWorkspaceRuntime(
     async browserPreview(tabId) {
       return decodeWebBrowserPreview(await request("POST", TEAM_API_ROUTES.browser.preview, { tabId }));
     },
-    async getSidebarLayout() {
-      const value = await request("GET", TEAM_API_ROUTES.sidebarLayout.state);
-      if (!isSidebarLayoutSnapshot(value)) throw new Error(currentText().t("error.remote.invalidData"));
-      return value;
-    },
+    getSidebarLayout: readSidebarLayout,
     async mutateSidebarLayout(action) {
-      const value = await request("POST", TEAM_API_ROUTES.sidebarLayout.actions, { ...action });
+      const folders = capabilities.includes(SIDEBAR_FOLDERS_CAPABILITY);
+      // The released route has every folder at the top: it refuses `nest`, and would drop a parent.
+      if (!folders && (action.type === "nest" || (action.type === "create" && action.parentId !== undefined)))
+        throw new Error(currentText().t("error.team.sidebarFoldersUnsupported"));
+      const value = await request(
+        "POST",
+        folders ? SIDEBAR_FOLDERS_ROUTES.actions : TEAM_API_ROUTES.sidebarLayout.actions,
+        { ...action },
+      );
       if (!isSidebarLayoutSnapshot(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
@@ -1127,6 +1194,7 @@ export function createWebWorkspaceRuntime(
         media: capabilities.includes("media-attachments"),
         zip: capabilities.includes("zip-attachments"),
         mp4: capabilities.includes("mp4-attachments"),
+        svg: capabilities.includes("svg-attachments"),
       });
       if (extension && !supported.includes(extension)) throw new Error(currentText().t("webClient.error.fileType"));
       if (file.size > MOBILE_ATTACHMENT_BYTES) throw new Error(currentText().t("error.remote.attachmentTooLarge"));
@@ -1147,8 +1215,7 @@ export function createWebWorkspaceRuntime(
         throw new Error(currentText().t("webClient.error.uploadCancelled"));
       }
       trackCompletedDraft(value.id, uploadHostGeneration === generation ? lockedHostId : null);
-      // The host names the draft's preview with the desktop `openbot-attachment:` scheme.
-      return { ...value, previewUrl: null };
+      return { ...value, previewUrl: value.kind === "image" ? localDraftPreview(value.id, file) : null };
     },
     setTyping(agentId, typing) {
       peer.setTyping(agentId, typing);
@@ -1160,6 +1227,7 @@ export function createWebWorkspaceRuntime(
     async discard(id) {
       await Effect.runPromise(discardAttachmentDraft(teamApi, id).pipe(Effect.mapError((error) => error.cause)));
       removeCompletedDrafts([id]);
+      revokeLocalDraftPreviews([id]);
     },
     async download(id) {
       return decodeWebFile(await request("GET", TEAM_API_ROUTES.attachment(id)));
@@ -1184,6 +1252,15 @@ export function createWebWorkspaceRuntime(
     listHiddenAgents: () => runTeamEffect(listHiddenAgents(teamApi).pipe(Effect.mapError((error) => error.cause))),
     setAgentHidden: (input) =>
       runTeamEffect(setAgentHidden(teamApi, input).pipe(Effect.mapError((error) => error.cause))),
+    async listAgentColors() {
+      if (!capabilities.includes(AGENT_COLORS_CAPABILITY)) return { agents: [] };
+      return runTeamEffect(readAgentColors(teamApi).pipe(Effect.mapError((error) => error.cause)));
+    },
+    sidebarPins: {
+      read: () => runTeamEffect(readSidebarPins(teamApi).pipe(Effect.mapError((error) => error.cause))),
+      set: (items) => runTeamEffect(setSidebarPins(teamApi, items).pipe(Effect.mapError((error) => error.cause))),
+      seed: (items) => runTeamEffect(seedSidebarPins(teamApi, items).pipe(Effect.mapError((error) => error.cause))),
+    },
     async listAgentNotificationLevels(hostId) {
       if (hostId !== lockedHostId) {
         if (!hosts) throw new Error(currentText().t("webClient.error.hostChanged"));
@@ -1229,10 +1306,21 @@ export function createWebWorkspaceRuntime(
       return runTeamEffect(setOwnServerNotificationLevel(teamApi, level).pipe(Effect.mapError((error) => error.cause)));
     },
     async models() {
-      return guardedListDecoder(
+      const models = guardedListDecoder(
         isClientAgentModelOption,
         "models",
       )(await request("GET", TEAM_API_ROUTES.agents.models));
+      // The fast tiers and the picker listing are optional: when a route fails, the picker gets the
+      // models with no Fast switch or listing.
+      const [fast, listings] = await Promise.all([
+        capabilities.includes(AGENT_FAST_MODE_CAPABILITY)
+          ? request("POST", AGENT_FAST_MODE_ROUTES.models, {}).then(decodeAgentFastModels, () => [])
+          : [],
+        capabilities.includes(MODEL_VISIBILITY_CAPABILITY)
+          ? request("POST", MODEL_VISIBILITY_ROUTES.listing, {}).then(decodeAgentModelListings, () => [])
+          : [],
+      ]);
+      return withModelListings(withFastServiceTiers(models, fast), listings);
     },
     async status() {
       const value = await request("GET", TEAM_API_ROUTES.agents.status);
@@ -1245,9 +1333,20 @@ export function createWebWorkspaceRuntime(
       return value;
     },
     async createAgent(input) {
-      const value = await request("POST", TEAM_API_ROUTES.agents.all, { ...input });
+      // The released route keeps the nearest hue. The exact colour goes on `agent-colors-v1` after it.
+      const { avatarColor, ...profile } = input;
+      const value = await request("POST", TEAM_API_ROUTES.agents.all, { ...profile });
       if (!isClientAgentSummary(value)) throw new Error(currentText().t("error.remote.invalidData"));
-      return value;
+      const agent: ClientAgentSummary = value;
+      if (!avatarColor || !capabilities.includes(AGENT_COLORS_CAPABILITY)) return agent;
+      // The agent exists, so a failed colour change does not fail the create: the agent keeps its hue.
+      const colored = await runTeamEffect(
+        setAgentColor(teamApi, { agentId: agent.id, color: avatarColor }).pipe(Effect.mapError((error) => error.cause)),
+      ).then(
+        (colors) => colors.agents.some((entry) => entry.agentId === agent.id),
+        () => false,
+      );
+      return colored ? { ...agent, avatarColor } : agent;
     },
     async duplicateAgent(agentId) {
       if (!capabilities.includes("agent-duplication")) throw new Error(currentText().t("webClient.error.duplication"));
@@ -1258,15 +1357,42 @@ export function createWebWorkspaceRuntime(
       if (!isDynamicRecord(value) || !isClientAgentSummary(value.agent) || !isSidebarLayoutSnapshot(value.layout))
         throw new Error(currentText().t("error.remote.invalidData"));
       duplicateOperationIds.delete(operationKey);
-      return { agent: value.agent, layout: value.layout } satisfies DuplicateAgentResult;
+      // The released route answers the layout without the parents of the folders. The copy exists, so a
+      // failed read keeps that layout rather than failing the copy; the next layout event has the parents.
+      const answered = value.layout;
+      const layout = capabilities.includes(SIDEBAR_FOLDERS_CAPABILITY)
+        ? await readSidebarLayout().catch(() => answered)
+        : answered;
+      return { agent: value.agent, layout } satisfies DuplicateAgentResult;
     },
     async updateAgent(input) {
       // The released agent route ignores the account, so it goes on `provider-accounts-v1` after the
       // profile: a provider change there returns the agent to the new provider's own sign-in.
       // Backup models stay on the host computer: the Team API does not carry them.
-      const { providerAccountId, backupModels: _backupModels, leaveUsageLimit: _leaveUsageLimit, ...profile } = input;
+      const {
+        providerAccountId,
+        backupModels: _backupModels,
+        leaveUsageLimit: _leaveUsageLimit,
+        avatarColor,
+        ...fields
+      } = input;
       if (providerAccountId !== undefined && !capabilities.includes(PROVIDER_ACCOUNTS_CAPABILITY))
         throw new Error(currentText().t("error.team.providersUnsupported"));
+      // The released agent route does not carry the exact colour. With `agent-colors-v1` it goes on its
+      // own route first. That route also sets the nearest hue, so the profile change then leaves the hue
+      // out: on the released route a hue removes the colour. A removed colour keeps the hue, which then
+      // sets the colour that the user chose. The released route removes the colour only when the hue
+      // changes, so a removed colour always goes on the colour route. Without the capability, only the
+      // hue goes.
+      const colors = capabilities.includes(AGENT_COLORS_CAPABILITY);
+      const { avatarHue: _avatarHue, ...withoutHue } = fields;
+      const profile = colors && avatarColor ? withoutHue : fields;
+      if (colors && avatarColor !== undefined)
+        await runTeamEffect(
+          setAgentColor(teamApi, { agentId: input.agentId, color: avatarColor }).pipe(
+            Effect.mapError((error) => error.cause),
+          ),
+        );
       await request("PATCH", TEAM_API_ROUTES.agent.one(input.agentId), { ...profile });
       if (providerAccountId === undefined) return;
       await runTeamEffect(
@@ -1312,6 +1438,7 @@ export function createWebWorkspaceRuntime(
       generation += 1;
       connectedHost = null;
       duplicateOperationIds.clear();
+      revokeLocalDraftPreviews([...localDraftPreviews.keys()]);
       try {
         await Promise.all([peer.dispose(), hosts?.dispose(), ...retiring]);
       } finally {
@@ -1337,11 +1464,17 @@ function decodeWebFile(value: unknown): WebFile {
   };
 }
 
-/** The host's own reason for a refusal. It redacts it; a server failure keeps the generic text. */
-function hostRefusal(status: number | undefined, body: unknown): string | null {
-  if (status === undefined || status < 400 || status >= 500) return null;
-  if (!isDynamicRecord(body) || !isString(body.error) || !body.error.trim()) return null;
-  const text = body.error.trim();
+/**
+ * The host's own reason for a refusal. It redacts it; a server failure keeps the generic text. Over
+ * WebRTC the host sends a refusal as an error frame, so it arrives as a failed command whose
+ * reference is `host/<4xx status>/<code>`.
+ */
+function hostRefusal(result: RemoteTeamCommandResult): string | null {
+  const status = result.ok ? result.status : Number(/^host\/(\d{3})(?:\/|$)/u.exec(result.reference ?? "")?.[1]);
+  if (status === undefined || !(status >= 400 && status < 500)) return null;
+  const reason = result.ok ? (isDynamicRecord(result.body) ? result.body.error : undefined) : result.error;
+  if (!isString(reason) || !reason.trim()) return null;
+  const text = reason.trim();
   return text.length > 300 ? `${text.slice(0, 299)}…` : text;
 }
 

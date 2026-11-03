@@ -37,6 +37,7 @@ export function serverSupportsCapability(
       capability === "mcp-servers-v1" ||
       capability === "mcp-sign-in-v1" ||
       capability === "mcp-sign-in-app-v1" ||
+      capability === "mcp-accounts-v1" ||
       capability === "sign-in-relay-v1" ||
       capability === "connectors-v1" ||
       capability === "onepassword-connector-v1" ||
@@ -76,8 +77,11 @@ export function serverSupportsCapability(
       capability === "agent-memory-limit-v1" ||
       capability === "memory-review-v1" ||
       capability === "prompt-cache-ttl-v1" ||
+      capability === "model-visibility-v1" ||
       capability === "claude-api-key-v1" ||
       capability === "agent-access-v1" ||
+      capability === "sidebar-folders-v1" ||
+      capability === "server-audit-v1" ||
       capability === "discord-access-v1" ||
       capability === "events-v1" ||
       capability === "context-reset-v1" ||
@@ -91,10 +95,17 @@ export function serverSupportsCapability(
       capability === "agent-threads-v1" ||
       capability === "agent-thread-reads-v1" ||
       capability === "agent-thread-branches-v1" ||
+      capability === "agent-thread-replies-v1" ||
       capability === "channel-task-cancel-v1" ||
       capability === "side-question-v1" ||
       capability === "workflows-github-v1" ||
-      capability === "agent-notification-levels-v1") &&
+      capability === "agent-notification-levels-v1" ||
+      capability === "sidebar-pins-v1" ||
+      capability === "agent-new-chat-v1" ||
+      capability === "agent-folders-v1" ||
+      capability === "agent-fast-mode-v1" ||
+      capability === "context-compact-v1" ||
+      capability === "agent-instructions-v1") &&
     server?.kind === "remote"
   ) {
     return server.compatibility?.capabilities.includes(capability) === true;

@@ -1,6 +1,7 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentApproval,
+  AgentColorEntry,
   AgentEvent,
   AgentRuntimeApproval,
   AgentStatus,
@@ -26,8 +27,9 @@ import type {
   TeamRealtimeEvent,
 } from "@openbot/contracts/ipc";
 import { canAdministerServer } from "@openbot/contracts/ipc";
-import { AGENT_HIDDEN_CAPABILITY } from "@openbot/contracts/team-protocol/current";
+import { AGENT_COLORS_CAPABILITY, AGENT_HIDDEN_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { FOCUS_USE_CAPABILITY } from "@openbot/contracts/team-protocol/focus-use-v1";
+import { SIDEBAR_PINS_CAPABILITY } from "@openbot/contracts/team-protocol/sidebar-pins-v1";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import { createFocusUsePing } from "@openbot/team-client/focus-use";
 import { WAKE_RECONNECT_DELAY_MS } from "@openbot/team-client/hosted-server-wake";
@@ -181,6 +183,8 @@ interface WebWorkspaceState {
   sidebarLayout: SidebarLayoutSnapshot;
   /** The agents that a user hid on the host (`agent-hidden-v1`). Not the same as `hiddenIds`. */
   userHiddenAgents: HiddenAgent[];
+  /** The exact agent colours on the host (`agent-colors-v1`). The released agent list does not carry them. */
+  agentColors: AgentColorEntry[];
 }
 
 export type WebRuntimeFactory = (
@@ -252,6 +256,7 @@ export function createWebWorkspace(
     duplicatingAgentIds: [],
     sidebarLayout: defaultSidebarLayout(),
     userHiddenAgents: [],
+    agentColors: [],
   });
   // Every progress line of the newest turns, by turn, for the steps under the activity line.
   const [stepLines, setStepLines] = createSignal<TurnStepLines>({});
@@ -611,6 +616,12 @@ export function createWebWorkspace(
           setState((draft) => {
             draft.userHiddenAgents = event.agents;
           });
+        if (event.type === "agent-colors-changed")
+          setState((draft) => {
+            draft.agentColors = event.agents;
+          });
+        if (event.type === "sidebar-pins-changed")
+          preferences.receiveServerPins(pinScope(), { items: event.items, updatedAt: event.updatedAt });
         // A read loads only the open conversation, so the events of other agents do not start one.
         const changed = changedConversation(event);
         if (changed !== undefined && changed === selectedId) void refresh();
@@ -618,8 +629,30 @@ export function createWebWorkspace(
     },
     props.accountFetch,
   );
+  const pinScope = () => (state.host ? `${props.accountId}:${state.host.hostId}` : "");
+  /**
+   * The scopes whose host said at its last connect that it keeps the pins (`sidebar-pins-v1`). A change
+   * while the host is away stays pending and goes to the host at the next connect.
+   */
+  const pinScopes = new Set<string>();
+  /**
+   * Only the open host takes a request; a pin change of another host waits for its next connect. A
+   * request while the host is away fails and stays pending. This does not read `state.status`: the
+   * connect sets it in the same tick as the first sync, and the store shows it only at the next flush.
+   */
+  const openHostPins = (scope: string) => {
+    const pins = runtime.sidebarPins;
+    if (!pins || scope !== pinScope()) throw new Error(currentText().t("error.team.sidebarPinsUnsupported"));
+    return pins;
+  };
   const preferences = createSidebarPreferences({
-    scope: () => (state.host ? `${props.accountId}:${state.host.hostId}` : ""),
+    scope: pinScope,
+    sync: {
+      supports: (scope) => pinScopes.has(scope),
+      read: async (scope) => openHostPins(scope).read(),
+      set: async (scope, items) => openHostPins(scope).set(items),
+      seed: async (scope, items) => openHostPins(scope).seed(items),
+    },
   });
   // The other tabs show the opened host with the state this tab has for it.
   createEffect(
@@ -715,12 +748,16 @@ export function createWebWorkspace(
       loadAvatars();
     },
   );
-  const shownAgents = createMemo(() =>
-    state.agents.map((agent) => {
+  const shownAgents = createMemo(() => {
+    const colors = new Map(state.agentColors.map((entry) => [entry.agentId, entry.color]));
+    return state.agents.map((agent) => {
       const avatar = avatars().get(agent.id);
-      return avatar && avatar.source === agent.avatarUrl ? { ...agent, avatarUrl: avatar.url } : agent;
-    }),
-  );
+      const { avatarColor: _avatarColor, ...shown } =
+        avatar && avatar.source === agent.avatarUrl ? { ...agent, avatarUrl: avatar.url } : agent;
+      const color = colors.get(agent.id);
+      return color ? { ...shown, avatarColor: color } : shown;
+    });
+  });
   // A frame agent's last message is not known: its row shows no preview, not "No messages yet".
   const profiles = createMemo(() =>
     shownAgents().map((agent) => {
@@ -770,6 +807,12 @@ export function createWebWorkspace(
   async function readUserHiddenAgents(capabilities: readonly string[]): Promise<HiddenAgent[]> {
     const read = runtime.listHiddenAgents;
     if (!capabilities.includes(AGENT_HIDDEN_CAPABILITY) || !read) return [];
+    return (await read()).agents;
+  }
+  /** A host without `agent-colors-v1` has no exact colours. */
+  async function readAgentColors(capabilities: readonly string[]): Promise<AgentColorEntry[]> {
+    const read = runtime.listAgentColors;
+    if (!capabilities.includes(AGENT_COLORS_CAPABILITY) || !read) return [];
     return (await read()).agents;
   }
   function reconcileAgents(agents: ClientAgentSummary[]): void {
@@ -848,6 +891,7 @@ export function createWebWorkspace(
             draft.browserControlState = { sessions: [] };
             draft.sidebarLayout = defaultSidebarLayout();
             draft.userHiddenAgents = [];
+            draft.agentColors = [];
             draft.duplicatingAgentIds = [];
             draft.capabilities = [];
             draft.status = "offline";
@@ -964,6 +1008,7 @@ export function createWebWorkspace(
       draft.browserControlState = { sessions: [] };
       draft.sidebarLayout = defaultSidebarLayout();
       draft.userHiddenAgents = [];
+      draft.agentColors = [];
       draft.capabilities = [];
       draft.presence = null;
       draft.duplicatingAgentIds = [];
@@ -1086,6 +1131,7 @@ export function createWebWorkspace(
         draft.activeBrowserTabId = null;
         draft.sidebarLayout = defaultSidebarLayout();
         draft.userHiddenAgents = [];
+        draft.agentColors = [];
         draft.duplicatingAgentIds = [];
         draft.capabilities = [];
         draft.presence = null;
@@ -1167,7 +1213,10 @@ export function createWebWorkspace(
       markRemoteSync("workspace-ready");
       // From the read values: the store applies the write above only at the next flush.
       saveRemoteWorkspaceFrame(props.accountId, host.hostId, { agents, models });
+      if (capabilities.includes(SIDEBAR_PINS_CAPABILITY)) pinScopes.add(pinScope());
+      else pinScopes.delete(pinScope());
       preferences.reconcileActiveServerPins(agents.map((agent) => agent.id));
+      void preferences.syncActiveServerPins().catch(() => undefined);
       // The open conversation and its queue go out first. One queue read for each agent sent before
       // them held the first page behind ~50 answers on a large host (`bun run perf:remote`).
       // An agent the user opened in the frame stays open.
@@ -1303,6 +1352,15 @@ export function createWebWorkspace(
             });
         })
         .catch(failed),
+      // The colours are not a panel. If the read fails, the agents keep their nearest hue.
+      readAgentColors(capabilities)
+        .then((colors) => {
+          if (isCurrent())
+            setState((draft) => {
+              draft.agentColors = colors;
+            });
+        })
+        .catch(() => undefined),
     ]);
     if (isCurrent())
       setState((draft) => {
@@ -1496,7 +1554,7 @@ export function createWebWorkspace(
     const current = generation;
     try {
       // A hide on another device can land while this tab is offline, and the event is then lost.
-      const [{ agents, sidebarLayout }, userHiddenAgents] = await Promise.all([
+      const [{ agents, sidebarLayout }, userHiddenAgents, agentColors] = await Promise.all([
         // The layout read needs the agent ids.
         runtime.listAgents().then(async (agents) => ({
           agents,
@@ -1506,6 +1564,8 @@ export function createWebWorkspace(
           ),
         })),
         readUserHiddenAgents(state.capabilities),
+        // A failed colour read keeps the colours that this tab has.
+        readAgentColors(state.capabilities).catch(() => state.agentColors),
       ]);
       if (disposed || current !== generation) return;
       syncedAt = Date.now();
@@ -1513,6 +1573,7 @@ export function createWebWorkspace(
       setState((draft) => {
         if (sidebarLayout.revision >= draft.sidebarLayout.revision) draft.sidebarLayout = sidebarLayout;
         draft.userHiddenAgents = userHiddenAgents;
+        draft.agentColors = agentColors;
       });
       for (const agent of agents) loadQueue(agent.id);
       if (!selectedId && agents[0]) await select(agents[0].id);

@@ -23,7 +23,13 @@ import type { ConversationThreads } from "./conversation-types";
 import { createTurnSteps } from "./turn-steps";
 
 /** A thread takes files only from this computer, which reads every supported type. */
-const THREAD_ATTACHMENT_ACCEPT = supportedAttachmentExtensions({ eml: true, media: true, zip: true, mp4: true })
+const THREAD_ATTACHMENT_ACCEPT = supportedAttachmentExtensions({
+  eml: true,
+  media: true,
+  zip: true,
+  mp4: true,
+  svg: true,
+})
   .map((extension) => `.${extension}`)
   .join(",");
 
@@ -34,6 +40,7 @@ export function ConversationThread() {
     openExternalMessageUrl,
     previewAttachment,
     attachmentAction,
+    attachmentDownloads,
     browserTakeoverResolution,
     installedSkills,
     installedSkillsLoadFailed,
@@ -119,6 +126,10 @@ export function ConversationThread() {
     const key = threadComposer.openDraftKey();
     return key ? threadComposer.draft(key) : undefined;
   };
+  const rowImages = () => {
+    const key = threadComposer.openDraftKey();
+    return key ? threadComposer.rowImages(key) : [];
+  };
   // The preload imports the picked files, and the view routes them to the open thread.
   const openPicker = () => {
     const input = picker();
@@ -165,6 +176,15 @@ export function ConversationThread() {
     const taskId = threads.open?.id;
     if (!threads.onBranch || !taskId) return undefined;
     return (messageId: string) => void branchThread(taskId, messageId);
+  };
+  /** Replies to a message of the open thread. A new thread has no message to reply to. */
+  const reply = (threads: ConversationThreads) => {
+    if (!threads.acceptsReplies || !threads.open) return undefined;
+    return (message: AgentMessage) => threadComposer.setReply(threadComposer.openDraftKey(), message.id);
+  };
+  const replyTo = () => {
+    const id = props.threads?.acceptsReplies ? draft()?.replyToMessageId : null;
+    return id ? messages.find((message) => message.id === id) : undefined;
   };
   /** Where the open thread came from, when it is a branch. The agent's own chat shows the agent's name. */
   const branchSource = (threads: ConversationThreads, agentName: string): AgentThreadBranchSource | undefined => {
@@ -234,8 +254,13 @@ export function ConversationThread() {
             mcpServers={mcpServers()}
             draft={draft()?.text ?? ""}
             draftAttachments={draft()?.attachments}
+            rowAttachments={rowImages()}
+            pendingImages={threadComposer.pendingImages(threadComposer.openDraftKey())}
+            onRemoveAttachment={(attachment) =>
+              threadComposer.removeAttachment(threadComposer.openDraftKey(), attachment.id)
+            }
             onDraftChange={(text) => threadComposer.setText(threadComposer.openDraftKey(), text)}
-            onPasteFiles={threadComposer.pasteFiles}
+            onPasteFiles={(files, selection, text) => threadComposer.pasteFiles(files, selection, undefined, text)}
             onOpenDraftAttachment={(attachment) =>
               canPreviewAttachment(attachment)
                 ? void previewAttachment(attachment)
@@ -250,6 +275,8 @@ export function ConversationThread() {
             onOpenLink={(url) => void openExternalMessageUrl(url)}
             onPreview={(attachment) => void previewAttachment(attachment)}
             onAttachmentAction={attachmentAction}
+            mediaSource={props.runtime?.attachmentMedia}
+            downloads={attachmentDownloads}
             macWindowControls={props.platform === "darwin"}
             approval={current().threads.approval}
             onRespondApproval={(decision) =>
@@ -269,6 +296,9 @@ export function ConversationThread() {
             onBranch={branch(current().threads)}
             branchSource={branchSource(current().threads, current().agent.name)}
             focusMessage={focusMessage(current().threads)}
+            onReply={reply(current().threads)}
+            replyTo={replyTo()}
+            onCancelReply={() => threadComposer.setReply(threadComposer.openDraftKey(), null)}
           />
         </>
       )}

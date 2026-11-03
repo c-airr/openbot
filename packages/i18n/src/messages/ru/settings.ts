@@ -36,6 +36,8 @@ export const messages = {
   "settings.launchAtLogin.description": "Открывать приложение, когда вы входите в систему на этом компьютере.",
   "settings.keepRunning.title": "Оставлять OpenBot работать в фоне",
   "settings.keepRunning.description": "Активные задачи продолжат выполняться после закрытия окна.",
+  "settings.menuBar.title": "Показывать OpenBot в строке меню",
+  "settings.menuBar.description": "Открывать и закрывать OpenBot из значка в строке меню.",
   "settings.keepAwake.title": "Не переводить компьютер в сон",
   "settings.keepAwake.description":
     "Регулярные задачи запускаются вовремя, пока компьютер подключён к сети. Экран всё равно может выключаться.",
@@ -147,11 +149,11 @@ export const messages = {
   "settings.notch.size.height": "Высота",
   "settings.notch.size.previewNotch": "Встроенный дисплей",
   "settings.notch.size.previewIsland": "Внешний дисплей",
-  "settings.analytics.title": "Делиться аналитикой продукта",
+  "settings.analytics.title": "Связывать аналитику с моим аккаунтом",
   "settings.analytics.description":
-    "Отправлять метаданные об использовании и надёжности вместе с ID аккаунта и почтой в собственную аналитику OpenBot.",
+    "Вкл.: метаданные об использовании и надёжности отправляются в собственную аналитику OpenBot вместе с ID аккаунта и почтой, а также сайты, которые посещаете вы и ваши агенты, использование инструментов и ежедневная сводка настройки. Выкл.: отправляется только базовое использование, например ходы и число токенов, со случайным ID установки. Чаты, файлы и промпты никогда не отправляются.",
   "settings.analytics.webDescription":
-    "Отправлять метаданные об использовании и надёжности вместе с ID аккаунта и почтой в собственную аналитику OpenBot. Настройка действует для этого браузера.",
+    "Вкл.: метаданные об использовании и надёжности отправляются в собственную аналитику OpenBot вместе с ID аккаунта и почтой. Выкл.: те же метаданные отправляются только со случайным ID установки. Чаты, файлы и промпты никогда не отправляются. Настройка действует для этого браузера.",
   "settings.tab.general.title": "Основные",
   "settings.tab.general.description": "Как OpenBot ведёт себя на этом компьютере.",
   "settings.tab.notifications.title": "Уведомления",
@@ -555,6 +557,7 @@ export const messages = {
   "settings.voice.speech.readReplies.title": "Читать ответы вслух",
   "settings.voice.speech.readReplies.description":
     "Когда вы диктуете сообщение, ответ читается вслух. Чтобы остановить его, начните диктовать снова.",
+  "settings.voice.speech.speed.title": "Скорость",
   "settings.voice.speech.voice.title": "Голос",
   "settings.voice.speech.voice.female": "Женский голос {number}",
   "settings.voice.speech.voice.male": "Мужской голос {number}",

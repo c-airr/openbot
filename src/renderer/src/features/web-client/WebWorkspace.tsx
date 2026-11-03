@@ -13,7 +13,9 @@ import {
   type ClientAgentModelOption,
   canAdministerServer,
   decodeAgentBackupModelSettings,
+  decodeAgentFastModeSettings,
   decodeAgentHostSettings,
+  decodeAgentNewChatSettings,
   decodeAgentPlanCardSettings,
   decodeAgentTaskLimitSettings,
   type ServerConnectionState,
@@ -22,11 +24,14 @@ import {
 import type { PricingOrder } from "@openbot/contracts/license";
 import type { MarketplaceListingLink } from "@openbot/contracts/marketplace-links";
 import { AGENT_BACKUP_MODELS_ROUTES } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
+import { AGENT_FAST_MODE_ROUTES } from "@openbot/contracts/team-protocol/agent-fast-mode-v1";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
+import { AGENT_NEW_CHAT_ROUTES } from "@openbot/contracts/team-protocol/agent-new-chat-v1";
 import { AGENT_PLAN_CARD_ROUTES } from "@openbot/contracts/team-protocol/agent-plan-card-v1";
 import { AGENT_TASK_LIMIT_ROUTES } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
+import { AGENT_THREAD_FILES_CAPABILITY } from "@openbot/contracts/team-protocol/agent-thread-files-v1";
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { CONNECTORS_CAPABILITY } from "@openbot/contracts/team-protocol/connectors-v1";
 import { CONTEXT_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/context-reset-v1";
@@ -55,7 +60,9 @@ import {
   getAgentAdminSettings,
   getHostAgentAccess,
   getHostAgentMemoryLimit,
+  getHostAuditLog,
   getHostMemoryReview,
+  getHostModelVisibility,
   getHostPromptCacheTtl,
   getHostReleaseStatus,
   getHostTimezone,
@@ -65,6 +72,7 @@ import {
   setHostAgentAccess,
   setHostAgentMemoryLimit,
   setHostMemoryReview,
+  setHostModelVisibility,
   setHostPromptCacheTtl,
   setHostTimezone,
   setHostUpdateSettings,
@@ -97,6 +105,7 @@ import type { SettingsPagePlacement } from "@openbot/ui/features/settings/Settin
 import { createSettingsHostedServersStore } from "@openbot/ui/features/settings/stores/hosted-servers-store";
 import { Sidebar } from "@openbot/ui/features/sidebar/Sidebar";
 import { SidebarCommunityCard } from "@openbot/ui/features/sidebar/SidebarCommunityCard";
+import { sidebarAgentOrder } from "@openbot/ui/features/sidebar/sidebar-agent-order";
 import {
   computeSidebarAgentStates,
   sidebarAgentWaits,
@@ -122,6 +131,8 @@ import {
 } from "solid-js";
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
+// Copying a selection gives clean HTML, as on desktop.
+import "../../selection-copy";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
 import { toAgentMessage } from "../../app-message-projection";
@@ -174,6 +185,7 @@ import type { ScheduleRoutine } from "../schedule/SchedulePanel";
 import { AddServerOverlay, type AddServerResume } from "../servers/AddServerOverlay";
 import { createHostedUpsellOffline, HostedServerUpsell } from "../servers/hosted-server-upsell-controller";
 import { saveRemoteFrameChannels } from "../servers/remote-workspace-frame";
+import type { HostServerAuditCalls } from "../servers/ServerAuditSection";
 import type { HostMemoryLimitCalls } from "../servers/ServerMemoryLimitSetting";
 import type { HostMemoryReviewCalls } from "../servers/ServerMemoryReviewSetting";
 import type { HostAgentAccessCalls } from "../servers/ServerRolesSection";
@@ -194,6 +206,7 @@ import {
   showServerUpdate,
 } from "../servers/server-update-flow";
 import { licenseContactUs, trackLicenseEvent } from "../settings/license-analytics";
+import type { HostModelVisibilityCalls } from "../settings/provider-model-visibility";
 import type { HostPromptCacheTtlCalls } from "../settings/provider-prompt-cache";
 import { createCommunityCardVisibility } from "../sidebar/community-card";
 import { isReaderAuthor } from "../team/reader-identity";
@@ -254,9 +267,9 @@ const PHONE_QUERY = "(max-width: 720px)";
 /** The account whose queue edit the browser may hold under `QUEUE_EDIT_STORAGE_KEY`. */
 const QUEUE_EDIT_ACCOUNT_KEY = "openbot.web.queue-edit-account";
 
-function newAgentAvatar(): Pick<FirstAgentDraft, "avatarSeed" | "avatarHue"> {
+function newAgentAvatar(): Pick<FirstAgentDraft, "avatarSeed" | "avatarHue" | "avatarColor"> {
   const { avatarSeed, avatarHue } = createFirstAgentDraft();
-  return { avatarSeed, avatarHue };
+  return { avatarSeed, avatarHue, avatarColor: null };
 }
 
 /**
@@ -543,6 +556,33 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const current = server();
     return current?.state === "incompatible" ? current : null;
   });
+  const connectionShown = () => !noHost() && workspace.state.status !== "online" && !blockedServer();
+  const connectionPhase = () =>
+    serverWorkspacePhase({
+      hostedSleep: workspace.state.hostedSleep,
+      updating: hostUpdating(),
+      blocked: workspace.state.recovery?.phase === "suspended",
+      loading: workspace.state.status === "connecting",
+      hasContent: workspace.state.workspaceLoaded,
+    });
+  // As on desktop, the first load covers the whole window. A server that sleeps, updates or fails
+  // shows its screen in the pane only.
+  const fullWindowLoading = () =>
+    connectionShown() &&
+    !workspace.state.workspaceLoaded &&
+    !workspace.state.hostOffline &&
+    // The status is "offline" before the first attempt too; only a reported failure ends the cover.
+    !(workspace.state.status === "offline" && workspace.state.connectionError) &&
+    (connectionPhase() === "loading" || connectionPhase() === "connecting");
+  // The full-window screen stays after the load ends, so its crew hop out before it goes. It mounts in
+  // the first render, so the account screen in WebApp hands the pile to it and does not hop alone.
+  const [loadingCover, setLoadingCover] = createSignal<boolean>(untrack(fullWindowLoading));
+  createEffect(
+    () => fullWindowLoading() && !loadingCover(),
+    (show) => {
+      if (show) setLoadingCover(true);
+    },
+  );
   // A phone shows the sidebar as a full pane, so it is never compact there.
   const phoneQuery = window.matchMedia?.(PHONE_QUERY);
   const [phone, setPhone] = createSignal(phoneQuery?.matches ?? false);
@@ -663,6 +703,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     openAccountSettings();
   }
   const [searchOpen, setSearchOpen] = createSignal(false);
+  const hiddenAgentIds = createMemo(() => new Set(workspace.state.userHiddenAgents.map((entry) => entry.agentId)));
+  // In sidebar order, so that ⌘1-9 opens the agents the user put at the top.
+  const searchAgents = createMemo(() =>
+    sidebarAgentOrder(workspace.profiles(), {
+      layout: workspace.state.sidebarLayout,
+      pinnedItems: workspace.preferences.pinnedSidebarItems(),
+      hiddenAgentIds: hiddenAgentIds(),
+    }),
+  );
   const communityCard = createCommunityCardVisibility();
   const [messageFocusRequest, setMessageFocusRequest] = createSignal<{
     agentId: string;
@@ -802,12 +851,26 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           agentId,
           taskLimit,
         }),
+      getAgentNewChat: (agentId, serverId) =>
+        hostRequest(serverId)("POST", AGENT_NEW_CHAT_ROUTES.settings, decodeAgentNewChatSettings, { agentId }),
+      updateAgentNewChat: ({ agentId, allowNewChat }, serverId) =>
+        hostRequest(serverId)("POST", AGENT_NEW_CHAT_ROUTES.update, decodeAgentNewChatSettings, {
+          agentId,
+          allowNewChat,
+        }),
       getAgentPlanCard: (agentId, serverId) =>
         hostRequest(serverId)("POST", AGENT_PLAN_CARD_ROUTES.settings, decodeAgentPlanCardSettings, { agentId }),
       updateAgentPlanCard: ({ agentId, quickAcknowledgement }, serverId) =>
         hostRequest(serverId)("POST", AGENT_PLAN_CARD_ROUTES.update, decodeAgentPlanCardSettings, {
           agentId,
           quickAcknowledgement,
+        }),
+      getAgentFastMode: (agentId, serverId) =>
+        hostRequest(serverId)("POST", AGENT_FAST_MODE_ROUTES.settings, decodeAgentFastModeSettings, { agentId }),
+      updateAgentFastMode: ({ agentId, fastMode }, serverId) =>
+        hostRequest(serverId)("POST", AGENT_FAST_MODE_ROUTES.update, decodeAgentFastModeSettings, {
+          agentId,
+          fastMode,
         }),
       getAgentAdminSettings: (agentId, serverId) =>
         runTeamEffect(
@@ -831,6 +894,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const usageLimitReturn = remoteAgentAdmin.usageLimitReturn();
     const taskLimit = remoteAgentAdmin.taskLimit();
     const quickAcknowledgement = remoteAgentAdmin.quickAcknowledgement();
+    const fastMode = remoteAgentAdmin.fastMode();
+    const computerUse = remoteAgentAdmin.computerUse();
+    const allowNewChat = remoteAgentAdmin.allowNewChat();
     return agent
       ? {
           ...agent,
@@ -841,6 +907,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           ...(usageLimitReturn ? { usageLimitReturn } : {}),
           ...(typeof taskLimit === "number" ? { taskLimit } : {}),
           ...(quickAcknowledgement === undefined ? {} : { quickAcknowledgement }),
+          ...(typeof fastMode === "boolean" ? { fastMode } : {}),
+          ...(computerUse === undefined ? {} : { computerUse }),
+          ...(allowNewChat === undefined ? {} : { allowNewChat }),
         }
       : agent;
   });
@@ -1139,11 +1208,25 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setPromptCacheTtl: async (ttl, serverId) =>
       runTeamEffect(setHostPromptCacheTtl(hostRequest(serverId), ttl).pipe(Effect.mapError((error) => error.cause))),
   };
+  const hostModelVisibilityCalls: HostModelVisibilityCalls = {
+    getModelVisibility: async (provider, serverId) =>
+      runTeamEffect(
+        getHostModelVisibility(hostRequest(serverId), provider).pipe(Effect.mapError((error) => error.cause)),
+      ),
+    setModelVisibility: async (change, serverId) =>
+      runTeamEffect(
+        setHostModelVisibility(hostRequest(serverId), change).pipe(Effect.mapError((error) => error.cause)),
+      ),
+  };
   const hostAgentAccessCalls: HostAgentAccessCalls = {
     getAgentAccess: async (serverId) =>
       runTeamEffect(getHostAgentAccess(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
     setAgentAccess: async (change, serverId) =>
       runTeamEffect(setHostAgentAccess(hostRequest(serverId), change).pipe(Effect.mapError((error) => error.cause))),
+  };
+  const hostServerAuditCalls: HostServerAuditCalls = {
+    getAuditLog: async (serverId) =>
+      runTeamEffect(getHostAuditLog(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
   };
   const [serverSettingsSection, setServerSettingsSection] = createSignal<ServerSettingsSection | null>(null);
   /** Set when the Marketplace asked for the form that adds an MCP server, until the MCP section opens it. */
@@ -1257,6 +1340,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     supported: channelsSupported,
     deletionSupported: () => canAdministerServer(workspace.state.host?.role),
     taskCancelSupported: () => workspace.state.capabilities.includes(CHANNEL_TASK_CANCEL_CAPABILITY),
+    pictureSupported: () => false,
     beforeOpen: () => {
       setCreating(false);
       // Not `showAgents`: the list restores the saved channel after a host connects, and that must
@@ -1754,6 +1838,34 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const unavailable = async (): Promise<never> => {
     throw new Error(t("webClient.error.desktopOnly"));
   };
+  const connectionDetail = () =>
+    workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
+      ? (workspace.state.connectionError ?? null)
+      : null;
+  const connectionNotice = (cover = false) => (
+    <ServerConnectionNotice
+      name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
+      initial={cover || !workspace.state.workspaceLoaded}
+      ready={cover ? !fullWindowLoading() : undefined}
+      onExited={cover ? () => setLoadingCover(false) : undefined}
+      fullWindow={fullWindowLoading()}
+      issue={workspace.state.hostedIssue}
+      start={workspace.state.hostedStart}
+      updateVersion={workspace.state.hostRestart?.version ?? null}
+      detail={connectionDetail()?.message ?? null}
+      reference={connectionDetail()?.reference ?? null}
+      phase={connectionPhase()}
+      remainingSeconds={
+        workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown"
+          ? workspace.state.recovery.remainingSeconds
+          : 0
+      }
+      busy={workspace.state.status === "connecting" || !workspace.state.host}
+      onRetry={() => void workspace.run(workspace.reconnect)}
+      onManage={() => setBillingOpen(true)}
+      upsell={offlineUpsell()}
+    />
+  );
   return (
     <ConversationControllerProvider controller={controller}>
       <ChannelsControllerProvider controller={channels}>
@@ -1818,41 +1930,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               initialLoading={hostOffline()}
               connection={
                 <>
-                  <Show when={!noHost() && workspace.state.status !== "online" && !blockedServer()}>
-                    <ServerConnectionNotice
-                      name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
-                      initial={!workspace.state.workspaceLoaded}
-                      issue={workspace.state.hostedIssue}
-                      start={workspace.state.hostedStart}
-                      updateVersion={workspace.state.hostRestart?.version ?? null}
-                      detail={
-                        workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
-                          ? (workspace.state.connectionError?.message ?? null)
-                          : null
-                      }
-                      reference={
-                        workspace.state.hostedSleep !== "sleeping" && !workspace.state.hostedIssue && !hostUpdating()
-                          ? (workspace.state.connectionError?.reference ?? null)
-                          : null
-                      }
-                      phase={serverWorkspacePhase({
-                        hostedSleep: workspace.state.hostedSleep,
-                        updating: hostUpdating(),
-                        blocked: workspace.state.recovery?.phase === "suspended",
-                        loading: workspace.state.status === "connecting",
-                        hasContent: workspace.state.workspaceLoaded,
-                      })}
-                      remainingSeconds={
-                        workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown"
-                          ? workspace.state.recovery.remainingSeconds
-                          : 0
-                      }
-                      busy={workspace.state.status === "connecting" || !workspace.state.host}
-                      onRetry={() => void workspace.run(workspace.reconnect)}
-                      onManage={() => setBillingOpen(true)}
-                      upsell={offlineUpsell()}
-                    />
-                  </Show>
+                  <Show when={connectionShown() && !fullWindowLoading()}>{connectionNotice()}</Show>
                   <Show when={workspace.state.status === "online" && workspace.state.panelsFailed}>
                     <ServerPanelLoadNotice
                       busy={workspace.state.panelsLoading}
@@ -2047,6 +2125,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     layoutMutable={
                       workspace.state.status === "online" && workspace.state.capabilities.includes("sidebar-layout")
                     }
+                    foldersSupported={
+                      workspace.state.status === "online" && workspace.state.capabilities.includes("sidebar-folders-v1")
+                    }
                     collapsedSectionIds={workspace.preferences.collapsedSidebarSectionIds()}
                     onMutateLayout={workspace.mutateSidebarLayout}
                     sectionDuplicateSupported={
@@ -2107,6 +2188,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                             label: t("sidebar.empty.firstAgent"),
                             avatarSeed: agentAvatar().avatarSeed,
                             avatarHue: agentAvatar().avatarHue,
+                            avatarColor: agentAvatar().avatarColor ?? null,
                             onSelect: startCreate,
                           }
                         : undefined
@@ -2299,7 +2381,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         hostMemoryLimit={{ calls: hostMemoryLimitCalls }}
                         memoryReview={{ calls: hostMemoryReviewCalls }}
                         hostPromptCacheTtl={{ calls: hostPromptCacheTtlCalls }}
+                        hostModelVisibility={{ calls: hostModelVisibilityCalls }}
                         agentAccess={{ calls: hostAgentAccessCalls, listAgents: () => workspace.runtime.listAgents() }}
+                        serverAudit={{ calls: hostServerAuditCalls, listAgents: () => workspace.runtime.listAgents() }}
                         browserProfiles={browserProfileSettings()}
                         vault={vaultSettings()}
                         // Any member imports into a host with `agent-import-v1`.
@@ -2354,7 +2438,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   <ChannelCreateOverlay />
                   <GlobalSearchOverlay
                     open={searchOpen()}
-                    agents={workspace.profiles()}
+                    agents={searchAgents()}
                     channels={channels.supported() ? globalSearchChannels(channels.state.channels) : undefined}
                     onSearchMessages={searchAllMessages}
                     onOpenChange={setSearchOpen}
@@ -2378,6 +2462,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       agentsOpen={!tasksAgentsHidden()}
                       onToggleAgents={() => setTasksAgentsOpen(tasksAgentsHidden())}
                       source={tasksSource}
+                      mediaSource={runtime.attachmentMedia}
+                      files={{
+                        accepted: () => workspace.state.capabilities.includes(AGENT_THREAD_FILES_CAPABILITY),
+                        import: (data, serverId) => runtime.agent.importAttachmentData(data, serverId),
+                        discard: (id, serverId) => runtime.agent.discardDraftAttachment(id, serverId),
+                      }}
                       agents={workspace.profiles()}
                       onOpenLink={(url) => void openWebLink(url)}
                       // The browser only downloads a file.
@@ -2453,7 +2543,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   liveStatus={status()}
                   // A new form starts empty, with the avatar that the first-agent row showed.
                   initialDraft={{ ...createFirstAgentDraft(), ...untrack(agentAvatar) }}
-                  onDraftChange={({ avatarSeed, avatarHue }) => setAgentAvatar({ avatarSeed, avatarHue })}
+                  onDraftChange={({ avatarSeed, avatarHue, avatarColor }) =>
+                    setAgentAvatar({ avatarSeed, avatarHue, avatarColor })
+                  }
                   onClose={() => setCreating(false)}
                   onSaved={async () => {
                     await workspace.refresh();
@@ -2485,7 +2577,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       },
                       approvals: () => workspace.state.approvals,
                       takeovers: () => workspace.state.takeovers,
-                      hiddenAgentIds: () => new Set(workspace.state.userHiddenAgents.map((entry) => entry.agentId)),
+                      hiddenAgentIds,
                     });
                     return (
                       <Conversation
@@ -2743,6 +2835,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   remoteBackupModelsLoaded={remoteAgentAdmin.backupModels() !== undefined}
                   remoteTaskLimitLoaded={remoteAgentAdmin.taskLimit() !== undefined}
                   remotePlanCardLoaded={remoteAgentAdmin.quickAcknowledgement() !== undefined}
+                  remoteComputerUseLoaded={remoteAgentAdmin.computerUse() !== undefined}
+                  remoteNewChatLoaded={remoteAgentAdmin.allowNewChat() !== undefined}
                   remoteBusyMessageModeLoaded={remoteAgentAdmin.busyMessageMode() !== undefined}
                   defaultBusyMessageMode={remoteAgentAdmin.defaultBusyMessageMode()}
                   onUpdateAgentPermissions={remoteAgentAdmin.settings() ? remoteAgentAdmin.update : undefined}
@@ -2766,6 +2860,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 <ProviderSignInDialogs api={providerSettings()?.connection} opener="composer" />
               </Show>
             </WorkspaceFrame>
+            <Show when={loadingCover()}>{connectionNotice(true)}</Show>
           </div>
         </Show>
       </ChannelsControllerProvider>

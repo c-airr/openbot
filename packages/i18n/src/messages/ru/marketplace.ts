@@ -121,6 +121,7 @@ export const messages = {
   "marketplace.app.slackTagline": "Упоминания и личные сообщения в Slack",
   "marketplace.app.discordTagline": "Упоминания и личные сообщения в Discord",
   "marketplace.app.telegramTagline": "Группы и личные чаты в Telegram",
+  "marketplace.app.whatsappTagline": "Свой чат и разрешённые люди в WhatsApp",
   "marketplace.app.bitwardenTagline": "Вход на сайты с учётными данными из общей папки",
   "marketplace.app.onePasswordCategory": "Управление логинами и учётными данными",
   "marketplace.app.yourApps": "Ваши приложения",
@@ -142,6 +143,7 @@ export const messages = {
   "marketplace.app.setup.account": "Войдите в аккаунт {name} в браузере.",
   "marketplace.app.setup.key": "Нужен ключ API из аккаунта {name}.",
   "marketplace.app.setup.keySaved": "{field} хранится на {host}.",
+  "marketplace.app.account.removeDescription": "OpenBot удалит данные входа этого аккаунта на {host}.",
   "marketplace.app.setup.desktop": "Работает в настольном приложении {name} по адресу {address}.",
   "marketplace.app.setup.desktopConnected": "Подключено к {address}.",
   "marketplace.app.setup.open": "Вход и ключ не нужны.",
@@ -415,6 +417,15 @@ export const messages = {
   "marketplace.plugin.trello.prompt.myCards": "Какие карточки в Trello назначены мне?",
   "marketplace.plugin.trello.prompt.board": "Кратко опиши, что сейчас в работе на моей доске Trello.",
   "marketplace.plugin.trello.prompt.newCards": "Добавь эти пункты как карточки на мою доску Trello.",
+  "marketplace.plugin.clickup.tagline": "Задачи, документы и новости команды",
+  "marketplace.plugin.clickup.description":
+    "ClickUp позволяет агентам искать задачи, документы, комментарии и чаты, создавать и изменять задачи, списки и документы, оставлять комментарии, отправлять сообщения в чат и учитывать время. Каждый пользователь входит в свой аккаунт ClickUp через браузер. Агенты получают те же права, что и пользователь. Они могут перемещать задачи в корзину и удалять комментарии.",
+  "marketplace.plugin.clickup.app":
+    "Задачи, документы, комментарии, чат и учёт времени через MCP-сервер ClickUp со входом в браузере.",
+  "marketplace.plugin.clickup.prompt.findTasks": "Найди мои открытые задачи в ClickUp со сроком на этой неделе.",
+  "marketplace.plugin.clickup.prompt.createTask": "Создай задачу в ClickUp из этих пунктов и назначь её мне.",
+  "marketplace.plugin.clickup.prompt.summarizeDoc":
+    "Найди последнее обновление проекта в ClickUp и кратко перечисли открытые вопросы.",
   "marketplace.plugin.huggingface.tagline": "Модели, датасеты и статьи на Hub",
   "marketplace.plugin.huggingface.description":
     "Hugging Face позволяет агентам искать модели, датасеты, Spaces, коллекции и статьи на Hugging Face Hub, читать карточки моделей и файлы репозиториев, просматривать датасеты и искать по документации Hugging Face. Он использует публичные данные Hub и не требует аккаунта и ключа. Инструменты только читают данные: агенты не могут создавать репозитории или запускать задачи.",

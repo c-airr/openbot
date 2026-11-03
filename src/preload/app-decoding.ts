@@ -29,6 +29,7 @@ import {
   type AppLogoColorPreference,
   type ApprovalAutomationPreference,
   type AppSetupState,
+  type AppThemePalette,
   type BitwardenConnectorStatus,
   type BusyMessageModePreference,
   type CentralAuthIssue,
@@ -67,6 +68,8 @@ import {
   isAppLanguage,
   isAppLogoColor,
   isApprovalAutomationPreference,
+  isAppThemePalette,
+  isAppThemePaletteId,
   isBusyMessageMode,
   isCustomAgentCheckResult,
   isCustomAgentResult,
@@ -82,11 +85,13 @@ import {
   isRemoteDesktopSetupStatus,
   isRemoteDesktopTestStatus,
   isRemoteNetworkRoute,
+  isSpeechSpeed,
   isSpeechVoice,
   isVoiceLanguage,
   isVoiceModelId,
   isVoiceServerProbe,
   isVoiceServerSettings,
+  type LinkAccountStatus,
   type MemoryEntry,
   type MobileConnectedDevice,
   type MobileConnectLink,
@@ -97,6 +102,7 @@ import {
   type ProviderDetectionSettings,
   parseGitHubConnectorRepositories,
   parseGitHubConnectorStatus,
+  parseLinkAccountStatus,
   parseOnePasswordConnectorStatus,
   type RemoteDesktopSetupStatus,
   type RemoteDesktopTestStatus,
@@ -147,17 +153,20 @@ import {
 
 export function decodeAppInfo(value: unknown): AppInfo {
   const info = decodeRecord(value, "app info");
-  const { platform, variant, analyticsCaptureUrl } = info;
+  const { platform, variant, analyticsCaptureUrl, analyticsInstallId } = info;
   if (!isOneOf(["darwin", "win32", "linux"] as const, platform)) throw new Error("Invalid platform.");
   if (!isOneOf(["production", "dev", "preview"] as const, variant)) throw new Error("Invalid variant.");
   if (analyticsCaptureUrl !== undefined && !isString(analyticsCaptureUrl))
     throw new Error("Invalid analytics capture URL.");
+  if (analyticsInstallId !== undefined && !isString(analyticsInstallId))
+    throw new Error("Invalid analytics install ID.");
   return {
     name: requiredString(info, "name"),
     version: requiredString(info, "version"),
     platform,
     variant,
     ...(analyticsCaptureUrl === undefined ? {} : { analyticsCaptureUrl }),
+    ...(analyticsInstallId === undefined ? {} : { analyticsInstallId }),
   };
 }
 
@@ -209,11 +218,24 @@ export function decodeAppLogoColorPreference(value: unknown): AppLogoColorPrefer
   return { color: preference.color };
 }
 
+/** Only a hex color passes: each one becomes a CSS property value in the page. */
+function decodeThemePalette(palette: DynamicRecord): AppThemePalette {
+  if (!isAppThemePalette(palette)) throw new Error("Invalid theme palette.");
+  return { id: palette.id, name: palette.name, scheme: palette.scheme, colors: { ...palette.colors } };
+}
+
 export function decodeAppAppearancePreference(value: unknown): AppAppearancePreference {
   const preference = decodeRecord(value, "appearance preference");
   if (!isAppAppearance(preference.appearance)) throw new Error("Invalid appearance.");
   if (typeof preference.transparentWindow !== "boolean") throw new Error("Invalid transparent window.");
-  return { appearance: preference.appearance, transparentWindow: preference.transparentWindow };
+  if (preference.palette !== null && !isAppThemePaletteId(preference.palette))
+    throw new Error("Invalid theme palette.");
+  return {
+    appearance: preference.appearance,
+    transparentWindow: preference.transparentWindow,
+    palette: preference.palette,
+    palettes: decodeList(preference.palettes, "theme palettes", decodeThemePalette),
+  };
 }
 
 export function decodeAppInterfaceSizePreference(value: unknown): AppInterfaceSizePreference {
@@ -248,6 +270,14 @@ export function decodeCentralAuthState(value: unknown): CentralAuthState {
         expiresAt: requiredNumber(state, "expiresAt"),
         resendAvailableAt: requiredNumber(state, "resendAvailableAt"),
         ...(developmentCode === undefined ? {} : { developmentCode }),
+        ...(issue === undefined ? {} : { issue: decodeCentralAuthIssue(issue) }),
+      };
+    }
+    case "company_sign_in": {
+      const { issue } = state;
+      return {
+        status: "company_sign_in",
+        email: requiredString(state, "email"),
         ...(issue === undefined ? {} : { issue: decodeCentralAuthIssue(issue) }),
       };
     }
@@ -508,9 +538,9 @@ export function decodeSpeechModelStatus(value: unknown): SpeechModelStatus {
 
 export function decodeSpeechSettings(value: unknown): SpeechSettings {
   const settings = decodeRecord(value, "speech settings");
-  const { voice } = settings;
-  if (!isSpeechVoice(voice)) throw new Error("Invalid speech settings.");
-  return { readReplies: requiredBoolean(settings, "readReplies"), voice };
+  const { voice, speed } = settings;
+  if (!isSpeechVoice(voice) || !isSpeechSpeed(speed)) throw new Error("Invalid speech settings.");
+  return { readReplies: requiredBoolean(settings, "readReplies"), voice, speed };
 }
 
 export function decodeSpeechAudio(value: unknown): SpeechAudio {
@@ -569,6 +599,12 @@ export function decodeAgentImportSkill(value: unknown): string {
 
 export const decodeVoid = emptyDecoder("IPC returned unexpected data.");
 
+/** True shows the hint that `Cmd + Q` must be held or pressed twice, and false removes it. */
+export function decodeQuitShortcutHint(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  throw new Error("Invalid quit shortcut hint.");
+}
+
 export function decodeHostedSite(value: unknown): HostedSiteSummary {
   const site = parseHostedSiteSummary(value);
   if (!site) throw new Error("Invalid hosted site response.");
@@ -591,6 +627,12 @@ export function decodeGitHubConnectorRepositories(value: unknown): GitHubConnect
   const repositories = parseGitHubConnectorRepositories(value);
   if (!repositories) throw new Error("Invalid GitHub repository list response.");
   return repositories;
+}
+
+export function decodeLinkAccountStatus(value: unknown): LinkAccountStatus {
+  const status = parseLinkAccountStatus(value);
+  if (!status) throw new Error("Invalid Link account response.");
+  return status;
 }
 
 export function decodeOnePasswordConnectorStatus(value: unknown): OnePasswordConnectorStatus {
