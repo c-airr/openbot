@@ -236,6 +236,11 @@ export interface ConversationMessage {
   /** Set on an `instructions-change` message. */
   instructionsChange?: AgentInstructionsChange | undefined;
   /**
+   * Fork: the briefing that /compact wrote for the chat, on the context-reset marker it left. The
+   * agent starts from it, and the user can read and copy it from the marker.
+   */
+  compactBriefing?: string | undefined;
+  /**
    * An interactive block from `ask_ui` (see `ui-blocks.ts`). It rides on a `question_prompt` message
    * beside `questionPrompt`. Absent on a message from an older host.
    */
@@ -292,6 +297,7 @@ export function isConversationMessage(value: unknown): value is ConversationMess
     (value.subagents === undefined || isConversationSubagents(value.subagents)) &&
     (value.memoryChanges === undefined || isConversationMemoryChanges(value.memoryChanges)) &&
     (value.instructionsChange === undefined || isAgentInstructionsChange(value.instructionsChange)) &&
+    (value.compactBriefing === undefined || isString(value.compactBriefing)) &&
     (value.uiBlock === undefined || isConversationUiBlock(value.uiBlock)) &&
     (value.trace === undefined || isConversationTurnTrace(value.trace))
   );

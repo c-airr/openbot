@@ -149,8 +149,12 @@ export type ChatActionMarkerModel =
   | { kind: "marketplace-suggestion"; appId: string; timestamp: string }
   /** The agent saved an MCP server that needs a sign-in. The chat shows a card to sign in. */
   | { kind: "mcp-sign-in"; mcpServerId: string; timestamp: string }
-  /** The user started a new chat: the agent does not see the messages above this marker. */
-  | { kind: "context-reset"; timestamp: string }
+  /**
+   * The user started a new chat, or /compact replaced it: the agent does not see the messages above
+   * this marker. `text` is the host's note ("Session compacted" for a compaction), and `briefing` the
+   * briefing that /compact left, which the reader can open and copy.
+   */
+  | { kind: "context-reset"; timestamp: string; text?: string; briefing?: string }
   /** The agent left its model for a usage limit, or went back to it. `text` is the host's note. */
   | { kind: "model-switch"; reason: ModelSwitchReason; text: string; timestamp: string }
   /** A member agent changed the channel at a person's request. `text` is the host's note. */

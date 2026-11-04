@@ -3487,6 +3487,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         throw new ContextResetBusyError(sourceText("error.agent.waitBeforeClearContext"));
       }
       const database = this.#store.database;
+      // Fork: a compaction puts its briefing on the marker, so that the user can read and copy it
+      // from the chat after the agent's context starts from it.
+      const briefing = reason === "compacted" ? this.#memories.compact.get(agentId) : null;
       const threadId = this.#conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
         const last = snapshot.messages.at(-1);
         if (!last || isContextResetMarker(last)) return { result: threadId, snapshot };
@@ -3498,6 +3501,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           createdAt: new Date().toISOString(),
           status: "completed",
           itemType: CONTEXT_RESET_ITEM_TYPE,
+          ...(briefing ? { compactBriefing: briefing } : {}),
         };
         snapshot.messages.push(message);
         sortConversationMessages(snapshot.messages);

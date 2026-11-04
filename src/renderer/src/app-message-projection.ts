@@ -342,7 +342,13 @@ function chatActionMarker(
       expectsReply: message.exchange.expectsReply !== false,
     };
   }
-  if (isContextResetMarker(message)) return { kind: "context-reset", timestamp: message.createdAt };
+  if (isContextResetMarker(message))
+    return {
+      kind: "context-reset",
+      timestamp: message.createdAt,
+      text: message.text,
+      ...(message.compactBriefing ? { briefing: message.compactBriefing } : {}),
+    };
   const switchReason = modelSwitchReason(message);
   if (switchReason)
     return { kind: "model-switch", reason: switchReason, text: message.text, timestamp: message.createdAt };

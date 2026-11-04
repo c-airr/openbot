@@ -5,6 +5,20 @@ All notable changes to OpenBot will be documented here. The project follows
 [`changelog.d/`](changelog.d/README.md).
 
 ## [Unreleased]
+
+## [0.60.1] - 2026-11-04
+
+Fork release (c-airr/openbot). It includes upstream 0.60.0.
+
+### Added
+
+- A compacted chat keeps its briefing. Open the "Session compacted" line and the briefing that
+  `/compact` wrote shows under it, with a copy button, so you can paste it into another chat.
+
+### Fixed
+
+- A compacted chat's line now says "Session compacted" instead of "New chat started".
+
 ## [0.60.0] - 2026-11-03
 
 ### Added (fork c-airr)

@@ -947,6 +947,43 @@ button.chat-action-target:active,
   text-align: start;
 }
 
+/* Fork: the briefing that /compact left, opened under its marker to be read and copied. */
+.chat-action-briefing {
+  align-self: stretch;
+  display: grid;
+  min-width: 0;
+  gap: var(--openbot-space-1);
+  margin-block: var(--openbot-space-2);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  text-align: start;
+}
+
+.chat-action-briefing-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+}
+
+.chat-action-briefing-title {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.chat-action-briefing-text {
+  max-height: 22rem;
+  overflow: auto;
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font: inherit;
+  font-size: var(--openbot-text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .chat-action-target-status-in-progress .ui-marker-icon {
   color: var(--openbot-accent);
 }

@@ -7,6 +7,7 @@ import {
   CircleCheck,
   CirclePause,
   Clock3,
+  CopyButton,
   DropdownMenu,
   Globe2,
   LoaderCircle,
@@ -445,6 +446,10 @@ function SingleChatActionMarker(
     props.agentMessageText
       ? props.marker
       : undefined;
+  // Fork: /compact leaves its briefing on the marker, which the reader opens to read and copy it.
+  const [briefingExpanded, setBriefingExpanded] = createSignal(false);
+  const briefing = () => (props.marker.kind === "context-reset" ? props.marker.briefing : undefined);
+  const openBriefing = () => (briefingExpanded() ? briefing() : undefined);
   const openTextMessage = () => {
     const marker = textMessage();
     return marker?.expanded === true ? marker : undefined;
@@ -520,6 +525,20 @@ function SingleChatActionMarker(
           <time class="chat-action-marker-time" datetime={props.marker.timestamp}>
             {formatMarkerTime(props.marker.timestamp, t, format)}
           </time>
+          <Show when={briefing()}>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              class="chat-action-history-toggle"
+              type="button"
+              aria-expanded={briefingExpanded() ? "true" : "false"}
+              aria-label={t(briefingExpanded() ? "chat.marker.hideBriefing" : "chat.marker.showBriefing")}
+              data-cuelume-tap={briefingExpanded() ? "close" : "open"}
+              onClick={() => setBriefingExpanded(!briefingExpanded())}
+            >
+              <ChevronDown aria-hidden="true" />
+            </Button>
+          </Show>
           <Show when={messagesRun()}>
             {(run) => (
               <Button
@@ -585,6 +604,17 @@ function SingleChatActionMarker(
         {/* Keyed on the id: each timeline update makes a new marker, which would build the text again. */}
         <Show when={openTextMessage()?.messageId}>
           {(messageId) => <div class="chat-action-message-text">{props.agentMessageText?.(messageId())}</div>}
+        </Show>
+        <Show when={openBriefing()}>
+          {(text) => (
+            <div class="chat-action-briefing">
+              <div class="chat-action-briefing-head">
+                <span class="chat-action-briefing-title">{t("chat.marker.briefing")}</span>
+                <CopyButton value={text()} size="sm" variant="ghost" class="chat-action-briefing-copy" />
+              </div>
+              <pre class="chat-action-briefing-text">{text()}</pre>
+            </div>
+          )}
         </Show>
       </div>
     </Marker>
@@ -925,7 +955,7 @@ function markerLabel(
     marker.kind === "instructions-change"
   )
     return sourceText(marker.text);
-  if (marker.kind === "context-reset") return t("chat.marker.contextReset");
+  if (marker.kind === "context-reset") return marker.text ? sourceText(marker.text) : t("chat.marker.contextReset");
   if (marker.kind === "marketplace-suggestion") return t("chat.marker.marketplaceSuggestion");
   if (marker.kind === "mcp-sign-in") return t("chat.marker.mcpSignIn");
   if (marker.kind === "skill-lifecycle") return t(SKILL_ACTION_LABELS[marker.action]);

@@ -37,7 +37,6 @@ import {
   contextUsageView,
 } from "@openbot/ui/features/conversation/ContextUsage";
 import { type OpenWaitItem, OpenWaits } from "@openbot/ui/features/conversation/OpenWaits";
-import { ReplyQuote } from "@openbot/ui/features/conversation/ReplyQuote";
 import { RunningSubagents } from "@openbot/ui/features/conversation/RunningSubagents";
 import { SpeakingBar } from "@openbot/ui/features/conversation/SpeakingBar";
 import { ComposerVoiceControls } from "@openbot/ui/features/conversation/VoiceRecordingMorph";

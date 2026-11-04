@@ -263,7 +263,8 @@ const AgentActions = createSimpleContext({
      * through the parent tools and hands over a briefing (apply_compact). This chat then starts
      * again from the briefing, in the same chat, with a "Session compacted" marker. The user never
      * sees the helper: it is hidden at once and deleted when it is done, and the parent chat shows
-     * a "compacting" notice meanwhile (see the compact watcher below).
+     * a "compacting" notice meanwhile (see the compact watcher below). The marker carries the
+     * briefing, so the user can open and copy it there.
      */
     async function compactChat(agentId: string) {
       if (creatingAgent()) return;
