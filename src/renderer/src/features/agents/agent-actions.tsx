@@ -1,9 +1,4 @@
-import {
-  type ApplySessionImportInput,
-  type ClientAgentSummary,
-  CONTEXT_RESET_ITEM_TYPE,
-  isAgentProvider,
-} from "@openbot/contracts/ipc";
+import { type ApplySessionImportInput, type ClientAgentSummary, CONTEXT_RESET_ITEM_TYPE } from "@openbot/contracts/ipc";
 import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
@@ -281,6 +276,12 @@ const AgentActions = createSimpleContext({
           .catch(() => null);
         const cheap = cheapestCompactModel(modelOptions(), usage);
         const { t } = currentText();
+        if (!cheap) {
+          actionToast.error(t("composer.compact.failed"), {
+            description: t("composer.compact.noModel"),
+          });
+          return;
+        }
         const input = newAgentInput(
           {
             ...agentSetupDraft(),
@@ -289,16 +290,13 @@ const AgentActions = createSimpleContext({
           },
           createModelSupported(),
         );
+        const { provider: _p, model: _m, reasoningEffort: _r, ...safeInput } = input;
         const helper = addNewAgent(
           await agentsPort().agent.createAgent({
-            ...input,
-            ...(cheap && isAgentProvider(cheap.model.provider)
-              ? {
-                  provider: cheap.model.provider,
-                  model: cheap.model.id,
-                  ...(cheap.reasoningEffort ? { reasoningEffort: cheap.reasoningEffort } : {}),
-                }
-              : {}),
+            ...safeInput,
+            provider: cheap.model.provider,
+            model: cheap.model.id,
+            ...(cheap.reasoningEffort ? { reasoningEffort: cheap.reasoningEffort } : {}),
             // "compact:<start>" lets the hidden helper run its queue and makes a late briefing refused.
             description: `compact:${Date.now()} parent:${agentId}`,
             initialMessage:
@@ -315,7 +313,7 @@ const AgentActions = createSimpleContext({
           // The watcher still deletes the helper when it is done; it only stays visible until then.
         }
         markCompacting(agentId, { helperId: helper.id, serverId, startedAt: Date.now() });
-        actionToast.success(t("composer.compact.started", { model: cheap?.model.name ?? parent.model }));
+        actionToast.success(t("composer.compact.started", { model: cheap.model.name }));
       } catch (error) {
         const { t, errorMessage } = currentText();
         actionToast.error(t("composer.compact.failed"), {

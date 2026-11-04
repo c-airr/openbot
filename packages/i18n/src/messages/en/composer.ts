@@ -33,6 +33,7 @@ export const messages = defineMessages("composer", {
   "composer.compact.done": "Chat compacted in the background.",
   "composer.compact.running": "Compaction of this chat is already running.",
   "composer.compact.failed": "Could not compact this chat",
+  "composer.compact.noModel": "No suitable Gemini or OpenRouter model available (GPT excluded to save quota).",
   "composer.command.compact": "Summarise this chat on a cheap model in the background",
   "composer.command.claude": "Read the Claude Code memory first, then answer",
   "composer.picker.badge.file": "File",

@@ -34,6 +34,8 @@ export const messages = {
   "composer.compact.done": "Skompaktowano czat w tle.",
   "composer.compact.running": "Kompaktowanie tego czatu już trwa.",
   "composer.compact.failed": "Nie udało się skompaktować czatu",
+  "composer.compact.noModel":
+    "Brak dostępnego modelu Gemini lub OpenRouter (modele GPT są wykluczone, aby oszczędzać limit).",
   "composer.command.compact": "Streść ten czat na tanim modelu w tle",
   "composer.command.claude": "Najpierw przeczytaj pamięć Claude Code, potem odpowiedz",
   "composer.picker.badge.file": "Plik",

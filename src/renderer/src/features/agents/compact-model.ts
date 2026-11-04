@@ -1,39 +1,61 @@
 import {
   type AccountUsage,
+  type AgentProviderId,
   type AgentReasoningEffort,
   type ClientAgentModelOption,
   isAgentProvider,
 } from "@openbot/contracts/ipc";
 import { accountUsageProviderRows } from "@openbot/ui/features/account/account-usage-view";
 
+export type CompactAgentModel = ClientAgentModelOption & { provider: AgentProviderId };
+
 export interface CompactModelPick {
-  model: ClientAgentModelOption;
+  model: CompactAgentModel;
   reasoningEffort?: AgentReasoningEffort | undefined;
 }
 
 /**
- * Fork: the preferred /compact chain. Gemini 3.8 Flash on medium first, then MiMo V2.6 Flash,
- * then Nemotron, then GPT-6 Luna on low, then the cheapest small model that still has room.
+ * Checks whether a model belongs to OpenAI / Codex / GPT.
+ * We strictly exclude these to preserve the user's free / quota-limited GPT tier.
+ */
+export function isGptModel(model: ClientAgentModelOption): boolean {
+  if (model.provider === "codex" || model.provider === "openai") return true;
+  const text = `${model.id} ${model.name}`.toLowerCase();
+  return /\b(gpt|chatgpt|openai)\b/iu.test(text) || /\bo[134](-|\b)/iu.test(text) || /gpt-?[0-9]/iu.test(text);
+}
+
+/**
+ * Fork: the preferred /compact chain. Gemini models first (Gemini 3.8 Flash on medium,
+ * Gemini 2.5 Flash, etc.), then OpenRouter models (Nemotron, free-tier models, MiMo).
+ * Strictly excludes any GPT/Codex models to protect the user's free GPT quota.
  */
 const COMPACT_PREFERENCE: readonly { pattern: RegExp; effort?: AgentReasoningEffort }[] = [
+  // 1. Gemini / Google (Antigravity, FreeLLMAPI, or OpenRouter)
   { pattern: /gemini.*3\.8.*flash/iu, effort: "medium" },
-  { pattern: /mimo.*2\.6/iu },
+  { pattern: /gemini.*2\.5.*flash/iu },
+  { pattern: /gemini.*flash/iu },
+  { pattern: /auto:gemini/iu },
+  { pattern: /gemini/iu },
+  // 2. OpenRouter & High-Value Free models
+  { pattern: /nemotron.*3\.5.*super.*vl/iu },
   { pattern: /nemotron/iu },
-  { pattern: /gpt-?6.*luna/iu, effort: "low" },
+  { pattern: /mimo.*2\.6/iu },
+  { pattern: /:free$/iu },
 ];
 
-/** Fork: lower is cheaper. Models that match nothing are not used for a compaction. */
+/** Fork: lower is cheaper. Strictly non-GPT models only. */
 const CHEAP_RANK: readonly RegExp[] = [
   /flash.*low|low.*flash|flash-?lite/iu,
   /deepseek/iu,
-  /flash|mini|haiku|nano|lite/iu,
+  /flash|haiku|nano|lite/iu,
+  /openrouter/iu,
 ];
 
 /**
- * The cheapest model of a provider that still has room: the preferred chain first
- * (Gemini 3.8 Flash medium, MiMo V2.6, Nemotron, GPT-6 Luna low), then a Flash-low model,
- * then DeepSeek, then another small model. A provider whose reading shows nothing left is
- * skipped. `null` when no listed model matches, and the chat then keeps its own model.
+ * The cheapest model of a provider that still has room: prefers Gemini, then OpenRouter
+ * (Nemotron, free models, MiMo), then small Flash/Lite/Haiku/DeepSeek models.
+ * Strictly avoids any GPT / Codex / OpenAI models so the user's free tier quota is never spent on compaction.
+ * Returns `null` if no non-GPT model matches or has quota.
  */
 export function cheapestCompactModel(
   models: readonly ClientAgentModelOption[],
@@ -44,21 +66,39 @@ export function cheapestCompactModel(
       .filter((row) => row.remainingPercent !== null && row.remainingPercent <= 0)
       .map((row) => row.provider),
   );
+  // Strictly filter out all GPT/Codex models and exhausted providers. Allow OpenRouter.
   const usable = models.filter(
-    (model) => isAgentProvider(model.provider) && model.provider !== "openrouter" && !exhausted.has(model.provider),
+    (model): model is CompactAgentModel =>
+      isAgentProvider(model.provider) && !isGptModel(model) && !exhausted.has(model.provider),
   );
-  // OpenRouter bills an API key whose balance OpenBot cannot read, so a Flash model there can fail at once.
+
+  // 1. Preferred chain (Gemini -> Nemotron -> MiMo -> OpenRouter :free)
   for (const { pattern, effort } of COMPACT_PREFERENCE) {
     const match = usable.find((model) => pattern.test(`${model.id} ${model.name}`));
     if (!match) continue;
     const reasoningEffort = effort && match.supportedReasoningEfforts.includes(effort) ? effort : undefined;
     return reasoningEffort ? { model: match, reasoningEffort } : { model: match };
   }
-  let best: { model: ClientAgentModelOption; rank: number } | null = null;
+
+  // 2. Ranked fallback among remaining usable models
+  let best: { model: CompactAgentModel; rank: number } | null = null;
   for (const model of usable) {
     const rank = CHEAP_RANK.findIndex((pattern) => pattern.test(`${model.id} ${model.name}`));
     if (rank < 0 || (best && best.rank <= rank)) continue;
     best = { model, rank };
   }
-  return best ? { model: best.model } : null;
+  if (best) return { model: best.model };
+
+  // 3. Any Gemini or OpenRouter model that is usable
+  const geminiOrOpenRouter = usable.find(
+    (model) =>
+      /gemini/iu.test(`${model.id} ${model.name}`) ||
+      model.provider === "openrouter" ||
+      model.provider === "antigravity",
+  );
+  if (geminiOrOpenRouter) return { model: geminiOrOpenRouter };
+
+  // 4. Any other non-GPT usable model
+  const anyNonGpt = usable[0];
+  return anyNonGpt ? { model: anyNonGpt } : null;
 }

@@ -6,6 +6,15 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.60.2] - 2026-11-04
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- `/compact` now prioritizes Gemini (Gemini 3.8 Flash on medium, Gemini 2.5 Flash) and OpenRouter (Nemotron 3.5 Super VL, `:free` models, MiMo).
+- Strictly excludes all GPT / Codex / OpenAI models from compaction to preserve the user's free / quota-limited GPT tier.
+
 ## [0.60.1] - 2026-11-04
 
 Fork release (c-airr/openbot). It includes upstream 0.60.0.
