@@ -27,6 +27,7 @@ import { isAvatarMimeType } from "@openbot/contracts/avatar-images";
 import { AVATAR_IMAGE_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { type CreateAgentInput, type DuplicateAgentResult, WORKFLOWS_USAGE_ID } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_WELCOME_CAPABILITY } from "@openbot/contracts/team-protocol/agent-welcome-v1";
 import {
   BROWSER_SECRET_VAULT_CAPABILITY,
   BROWSER_SECRET_VAULT_ROUTES,
@@ -65,6 +66,7 @@ import { routeAgentConversation } from "./route-agent-conversation";
 import { routeAgentMemories } from "./route-agent-memories";
 import { routeAgentQueue } from "./route-agent-queue";
 import { routeAgentRoutines } from "./route-agent-routines";
+import { searchPageWithinFrame } from "./route-thread-message-search";
 
 /** Fork: the sidebar section that holds chats. Both names, because the desktop names it in its own language. */
 const CHAT_SECTION_NAME = "Chats";
@@ -148,7 +150,8 @@ export async function routeAgents(
       !agents.listAgents().some((agent) => agent.id === input.agentId)
     )
       throw new HttpError(404, sourceText("error.team.agentNotFound"));
-    const report = agents.getHostAnalytics(input);
+    // The frozen host analytics wire has no skills: only the local Usage page shows them.
+    const { skills: _localOnly, ...report } = agents.getHostAnalytics(input);
     return json(
       200,
       workflows ? report : { ...report, agents: report.agents.filter((row) => row.agentId !== WORKFLOWS_USAGE_ID) },
@@ -186,14 +189,14 @@ export async function routeAgents(
     if (!query.trim() || query.length > INPUT_LIMITS.messageText) {
       throw new HttpError(400, sourceText("error.team.searchQueryRequired"));
     }
+    // A query parameter is part of the released URL, and the versioned adapters translate JSON
+    // bodies only. `botId` is what every shipped client sends and what every shipped host reads.
+    const agentId = url.searchParams.get("botId") ?? undefined;
+    const cursor = url.searchParams.get("cursor") ?? undefined;
     return json(
       200,
-      agents.searchConversationMessages(
-        query,
-        // A query parameter is part of the released URL, and the versioned adapters translate JSON
-        // bodies only. `botId` is what every shipped client sends and what every shipped host reads.
-        url.searchParams.get("botId") ?? undefined,
-        url.searchParams.get("cursor") ?? undefined,
+      searchPageWithinFrame(
+        (limit) => agents.searchConversationMessages(query, agentId, cursor, limit),
         pageLimit(url),
       ),
     );
@@ -240,7 +243,11 @@ export async function routeAgents(
     requireCompatibleDefault();
     const input = agentCreate(await readJson(request));
     requireVisibleProvider(input);
-    const created = await runCauseEffect(agents.createAgent(input, undefined, undefined, memberSender(member)));
+    // A client with `agent-welcome-v1` sends a setup message for the new agent, not a message from the member.
+    const welcome = capabilities.has(AGENT_WELCOME_CAPABILITY);
+    const created = await runCauseEffect(
+      agents.createAgent(input, undefined, undefined, memberSender(member), welcome),
+    );
     await assignToChats(sidebarLayout, agents, created.id);
     return json(201, created);
   }

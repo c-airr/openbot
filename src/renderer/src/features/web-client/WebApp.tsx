@@ -2,7 +2,7 @@ import { agentTemplateIdFromWebAppSearch, WEB_APP_AGENT_TEMPLATE_PARAM } from "@
 import { companySignInErrorKey, WEB_APP_COMPANY_SIGN_IN_ERROR_PARAM } from "@openbot/contracts/company-sign-in";
 import { type FirstTouch, readFirstTouch } from "@openbot/contracts/first-touch";
 import { inviteUrlFromWebAppSearch, WEB_APP_INVITE_FIELDS } from "@openbot/contracts/invite-links";
-import type { AppVariant, CentralAuthState, CentralAuthUser } from "@openbot/contracts/ipc";
+import { type AppVariant, type CentralAuthState, type CentralAuthUser, isAvatarColor } from "@openbot/contracts/ipc";
 import {
   type MarketplaceListingLink,
   marketplaceListingFromWebAppSearch,
@@ -38,6 +38,7 @@ import { createOnboardingTeam, onboardingSessionSeed } from "../onboarding/onboa
 import { deleteRemoteWorkspaceFrames } from "../servers/remote-workspace-frame";
 import type { WebWorkspace } from "./WebWorkspace";
 import { createWebAccountCalls } from "./web-account";
+import { deleteSavedAgentPictures } from "./web-agent-pictures";
 import { createWebAppearancePreference } from "./web-appearance-preference";
 import { takeWebAppStart, WEB_APP_BILLING_PARAM, type WebAppStart } from "./web-billing";
 import type { WebRuntimeFactory } from "./web-client-context";
@@ -243,7 +244,10 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   function clearSession(ended = true) {
     sessionEnded = ended;
     // The saved workspace frames name the agents of the account's servers.
-    if (ended) deleteRemoteWorkspaceFrames(null);
+    if (ended) {
+      deleteRemoteWorkspaceFrames(null);
+      void deleteSavedAgentPictures(null);
+    }
     sessionGeneration += 1;
     setState((draft) => {
       draft.account = null;
@@ -340,6 +344,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
       name: isString(value.user.name) ? value.user.name : null,
       avatarUrl: isString(value.user.avatarUrl) ? value.user.avatarUrl : null,
       analyticsEnabled: isBoolean(value.user.analyticsEnabled) ? value.user.analyticsEnabled : null,
+      chatColor: isAvatarColor(value.user.chatColor) ? value.user.chatColor : null,
     };
   }
   /**
@@ -569,6 +574,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
                   accountEmail={state.account?.email ?? ""}
                   accountName={state.account?.name ?? null}
                   accountAvatarUrl={state.account?.avatarUrl ?? null}
+                  accountChatColor={state.account?.chatColor ?? null}
                   accountFetch={accountFetch}
                   onSessionCheck={checkSession}
                   accountSessionEnded={() => sessionEnded}

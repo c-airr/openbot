@@ -16,6 +16,7 @@ import { Pressable, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
+import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 import { attachmentFrame, FILL, FRAME_RADIUS, MAX_FRAME_WIDTH } from "../model/attachment-frame";
 import { storeCodePreview } from "../model/code-preview-store";
 import { type ImageDimensions, sameShape } from "../model/image-dimensions";
@@ -48,7 +49,7 @@ interface ChatAttachmentProps {
   alignment?: "left" | "right";
   /** The sent fraction of this file, from 0 to 1, while the message that carries it is sending. */
   upload?: number;
-  /** The agent's color for the controls of a player, unless the user turned off agent colors. */
+  /** The message color for the controls of a player. Unset when the user's messages have no color. */
   tint?: AttachmentTint;
   /** The page of a visual reply, which shows in the chat as desktop shows it, at the agent's height. */
   visual?: { height?: number } | undefined;
@@ -328,7 +329,7 @@ function ChatFileAttachment({ attachment, serverId, alignment = "left", upload }
         {shownUpload !== undefined ? (
           <UploadProgressCircle progress={shownUpload} />
         ) : previewable ? (
-          <ChevronRight size={18} color={muted} />
+          <ChevronRight size={18} color={muted} style={MIRROR_IN_RTL} />
         ) : (
           <ExternalLink size={18} color={muted} />
         )}

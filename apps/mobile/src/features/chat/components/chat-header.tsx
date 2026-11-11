@@ -28,6 +28,7 @@ import { haptics } from "@/shared/lib/haptics";
 import { BAR_BUTTON_SIZE, NATIVE_BAR_BUTTON_TOP, NATIVE_BAR_HEIGHT, useBarTop } from "@/shared/lib/native-bar";
 import { isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { MIRROR_IN_RTL } from "@/shared/lib/text-direction";
 import { typeScale } from "@/shared/lib/type-scale";
 import { useVerticalBarShown } from "@/shared/lib/vertical-bar";
 import type { ChatTarget } from "../model/chat-target";
@@ -100,14 +101,27 @@ export function ChatHeader({
     () => new Map(target.kind === "channel" ? target.members.map((member) => [member.id, member]) : []),
     [target],
   );
+  const channelPicture = useMemo(
+    () =>
+      target.kind === "channel"
+        ? {
+            id: target.id,
+            members: target.members.map((member) => ({ agentId: member.id })),
+            icon: target.icon,
+            imageUrl: target.imageUrl,
+          }
+        : { members: [] },
+    [target],
+  );
   const iconColor = String(foreground);
   const identity = (
     <>
       {target.kind === "channel" ? (
         <ChannelAvatar
-          channel={{ members: target.members.map((member) => ({ agentId: member.id })) }}
+          channel={channelPicture}
           agents={members}
           size={28}
+          serverId={target.serverId}
           disconnected={disconnected}
         />
       ) : (
@@ -301,7 +315,7 @@ export function ChatHeader({
       <>
         <Stack.Toolbar placement="left">
           <Stack.Toolbar.Button
-            icon="chevron.left"
+            icon="chevron.backward"
             accessibilityLabel={t("common.back")}
             hidden={splitDetailRoot || accessibilityHidden}
             onPress={goBack}
@@ -375,7 +389,7 @@ export function ChatHeader({
             liquidGlassAvailable={liquidGlassAvailable}
             onPress={goBack}
           >
-            <ArrowLeft color={iconColor} size={24} strokeWidth={2} />
+            <ArrowLeft color={iconColor} size={24} strokeWidth={2} style={MIRROR_IN_RTL} />
           </ChatGlassIconButton>
         )}
 

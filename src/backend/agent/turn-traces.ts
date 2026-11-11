@@ -49,6 +49,8 @@ export class TurnTraces {
       toolKind?: ConversationTraceToolKind | null;
       detail?: string | null;
       recipientAgentIds?: string[] | null;
+      /** The redacted and cut error text of a failed step (`toolFailureText`). */
+      error?: string | null;
     },
   ): void {
     const trace = this.#turns.get(turnId);
@@ -75,6 +77,7 @@ export class TurnTraces {
       step.detail = redactText(detail).slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
     if (kind === "tool" && step.recipientAgentIds === undefined && event.recipientAgentIds?.length)
       step.recipientAgentIds = [...event.recipientAgentIds];
+    if (kind === "tool" && step.error === undefined && event.error) step.error = event.error;
     if (event.completed && step.endedAt === null) step.endedAt = now;
     if (event.completed && event.failed) step.failed = true;
   }

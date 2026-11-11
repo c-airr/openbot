@@ -91,6 +91,8 @@ export const messages = {
   "provider.codeLogin.relayStarting": "Inloggen bij {name} starten op {host}…",
   "provider.codeLogin.pageOpening": "Inlogpagina van {name} openen op {host}…",
   "provider.codeLogin.linkStep": "Log in bij {name}. OpenBot gaat vanzelf verder.",
+  "provider.codeLogin.chatgptDeviceSetting":
+    "Open in ChatGPT op een computer de beveiligingsinstellingen en zet inloggen met apparaatcode voor Codex aan. Bij een werkaccount zet de beheerder van je workspace dit aan.",
   "provider.useApp.title": "Verbind {name} in de OpenBot-app",
   "provider.useApp.description":
     "Het inloggen bij {name} keert terug naar de computer die het startte, en een browsertabblad kan dat niet ontvangen. Verbind {name} in de OpenBot-app. De app rondt het inloggen vanzelf af.",
@@ -112,8 +114,14 @@ export const messages = {
   "provider.picker.olderModels": "Oudere modellen",
   "provider.picker.olderModelsList": "Oudere {name}-modellen",
   "provider.picker.noModels": "{name} heeft geen modellen beschikbaar.",
+  "provider.picker.museNoModels":
+    "Muse heeft geen modellen voor dit account gestuurd. Muse is mogelijk niet beschikbaar in het land waar deze agent draait. Kies een model van een andere provider.",
   "provider.picker.customEmpty":
     "Voeg een OpenAI-compatibel endpoint toe: een modelserver op deze computer, of een dienst met een basis-URL en een sleutel.",
+  "provider.picker.customPending":
+    "De modellen van je endpoints zijn nog niet geladen. De aanbieder leest ze nadat zijn huidige taak stopt.",
+  "provider.picker.customUnlisted": "{name} toont de modellen van je endpoints niet.",
+  "provider.picker.editEndpoints": "Endpoints bewerken",
   "provider.picker.defaultModelLabel": "{name}, standaard",
   "provider.picker.usageLimit": "Gebruikslimiet bereikt",
   "provider.picker.usageLimitWindow": "Limiet ({window})",
@@ -124,7 +132,12 @@ export const messages = {
   "provider.picker.effortLabel": "Redeneerniveau van de agent",
   "provider.picker.effortFixed": "{effort}, vastgezet door {provider}",
   "provider.picker.fast": "Snel",
-  "provider.picker.fastLabel": "Snelle modus",
+  "provider.picker.fastText": "Snellere antwoorden, meer verbruik",
+  "provider.picker.speed": "Snelheid",
+  "provider.picker.standard": "Standaard",
+  "provider.picker.standardText": "Standaardsnelheid",
+  "provider.picker.ultrafast": "Ultrasnel",
+  "provider.picker.ultrafastText": "De snelste antwoorden, veel meer verbruik",
   "provider.picker.selectEffort": "Kies niveau",
   "provider.picker.custom": "Eigen",
   "provider.picker.cliReady": "{cli} gereed",
@@ -149,7 +162,7 @@ export const messages = {
   "provider.geminiKey.label": "Gemini-API-sleutel",
   "provider.claudeKey.title": "Anthropic-API-sleutel",
   "provider.claudeKey.description":
-    "Sla een Anthropic-API-sleutel op de host op. Anthropic brengt elk verzoek in rekening op de sleutel. Om hem voor een agent te gebruiken, kies je het API-sleutelaccount in het modelmenu van de agent. Als Claude niet is ingelogd, gebruiken alle agents de sleutel.",
+    "Sla een Anthropic-API-sleutel op de host op. Anthropic brengt elk verzoek in rekening op het API-tegoed van de sleutel, niet op je Claude-abonnement. Om hem voor een agent te gebruiken, kies je het API-sleutelaccount in het modelmenu van de agent. Als Claude niet is ingelogd, gebruiken alle agents de sleutel.",
   "provider.claudeKey.label": "Anthropic-API-sleutel",
   "provider.inceptionKey.title": "Inception-API-sleutel",
   "provider.inceptionKey.description":
@@ -247,7 +260,7 @@ export const messages = {
   "provider.settings.geminiKeyInUse":
     "Gemini gebruikt deze sleutel, niet je Google AI-abonnement. Het gebruik van het abonnement wordt niet getoond.",
   "provider.settings.claudeKeyInUse":
-    "Kies het API-sleutelaccount in het modelmenu van een agent. Als Claude niet is ingelogd, gebruiken alle agents de sleutel.",
+    "Anthropic brengt het API-tegoed van de sleutel in rekening, niet je Claude-abonnement. Kies het API-sleutelaccount in het modelmenu van een agent. Als Claude niet is ingelogd, gebruiken alle agents de sleutel.",
   "provider.settings.addKey": "Sleutel toevoegen",
   "provider.settings.changeKey": "Sleutel wijzigen",
   "provider.settings.runtime": "Runtime",
@@ -265,6 +278,20 @@ export const messages = {
   "provider.settings.promptCacheHour": "1 uur",
   "provider.settings.promptCacheDefault": "Standaard van Claude Code",
   "provider.settings.promptCacheLoadFailed": "Kan de promptcachetijd van deze server niet laden.",
+  "provider.settings.claudeSetup": "Claude Code",
+  "provider.settings.claudeUserSetup": "Mijn Claude Code-configuratie gebruiken",
+  "provider.settings.claudeUserSetupDescription":
+    "Agents laden je CLAUDE.md, skills, agents, hooks en plug-ins uit ~/.claude. Uit: elke beurt stuurt een kortere prompt. Bestanden van de werkruimte worden nog steeds geladen.",
+  "provider.settings.claudeUserSetupServerDescription":
+    "Agents laden CLAUDE.md, skills, agents, hooks en plug-ins uit ~/.claude op de server. Uit: elke beurt stuurt een kortere prompt. Bestanden van de werkruimte worden nog steeds geladen.",
+  "provider.settings.claudeUserSetupLoadFailed": "Kan de Claude Code-instelling niet laden.",
+  "provider.settings.context": "Context",
+  "provider.settings.compactWindow": "Chats comprimeren bij",
+  "provider.settings.compactWindowDescription":
+    "Claude Code vat de oudere beurten van een chat samen wanneer de chat deze grootte bereikt. Lager houdt beurten snel en goedkoop. Hoger bewaart meer details. Een model met een kleiner venster comprimeert bij zijn eigen limiet.",
+  "provider.settings.compactWindowDefault": "Standaard van Claude Code",
+  "provider.settings.compactWindowTokens": "{size} tokens",
+  "provider.settings.compactWindowLoadFailed": "Kan de compressiegrootte van deze server niet laden.",
   "provider.settings.models": "Modellen",
   "provider.settings.modelsDescription": {
     one: "{shown} van {count} model staat in de modelkiezer.",
@@ -284,6 +311,11 @@ export const messages = {
   "provider.settings.turnOnFirst": "Zet eerst {name} aan.",
   "provider.settings.makeDefault": "Als standaard",
   "provider.settings.useTitle": "{name} gebruiken",
+  "provider.settings.deleteTitle": "{name} verwijderen",
+  "provider.settings.deleteOn":
+    "Zet {name} uit en verwijdert de CLI die OpenBot heeft gedownload. Accounts, aanmeldingen en agents blijven.",
+  "provider.settings.deleteOff":
+    "Verwijdert de CLI die OpenBot voor {name} heeft gedownload ({size}). Accounts, aanmeldingen en agents blijven.",
   "provider.settings.endpoints": "Endpoints",
   "provider.settings.noEndpoints": "Geen endpoints.",
   "provider.settings.endpointModels": { one: "{url} · 1 model", other: "{url} · {count} modellen" },

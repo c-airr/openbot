@@ -128,6 +128,11 @@ export const queryKeys = {
     serverId: string | undefined,
     ...avatar: [] | [agentId: string | undefined, avatarUrl: string | null | undefined]
   ) => ["agent-avatar", ...scope, serverId, ...avatar],
+  channelImage: (
+    scope: QueryScope,
+    serverId: string | undefined,
+    ...image: [] | [channelId: string | undefined, imageUrl: string | null | undefined]
+  ) => ["channel-image", ...scope, serverId, ...image],
   agentModels: (scope: QueryScope, serverId: string) => ["agent-models", ...scope, serverId],
 
   serverMembers: (scope: QueryScope, serverId: string) => ["server-members", ...scope, serverId],
@@ -151,11 +156,31 @@ export const queryKeys = {
   instanceTransferSummary: (scope: QueryScope, serverId: string) => ["instance-transfer-summary", ...scope, serverId],
   /** The named browser profiles of a host. `browser-profiles-changed` reads them again. */
   serverBrowserProfiles: (scope: QueryScope, serverId: string) => ["server-browser-profiles", ...scope, serverId],
+  /** The saved proxies and the member computers of a host. `browser-profiles-changed` reads them again. */
+  serverBrowserProxies: (scope: QueryScope, serverId: string) => ["server-browser-proxies", ...scope, serverId],
   providerStatus: (scope: QueryScope, serverId: string) => ["provider-status", ...scope, serverId],
   providerRuntimes: (scope: QueryScope, serverId: string) => ["provider-runtimes", ...scope, serverId],
   providerDefault: (scope: QueryScope, serverId: string) => ["provider-default", ...scope, serverId],
   providerKey: (scope: QueryScope, serverId: string, provider: string) => [
     "provider-key",
+    ...scope,
+    serverId,
+    provider,
+  ],
+  /** Every model of one provider of a host, and the ones its model picker shows (`model-visibility-v1`). */
+  providerModels: (scope: QueryScope, serverId: string, ...provider: [] | [provider: string]) => [
+    "provider-models",
+    ...scope,
+    serverId,
+    ...provider,
+  ],
+  /** How long Claude keeps the prompt cache of a host's agents (`prompt-cache-ttl-v1`). */
+  providerPromptCache: (scope: QueryScope, serverId: string) => ["provider-prompt-cache", ...scope, serverId],
+  /** The size at which Claude Code compacts the chats of a host's agents (`claude-compact-window-v1`). */
+  providerCompactWindow: (scope: QueryScope, serverId: string) => ["provider-compact-window", ...scope, serverId],
+  /** The usage reset credits of each account of one provider of a host (`provider-usage-reset-v1`). */
+  providerUsageResets: (scope: QueryScope, serverId: string, provider: string) => [
+    "provider-usage-resets",
     ...scope,
     serverId,
     provider,
@@ -176,7 +201,15 @@ export const queryKeys = {
   ],
   /** The plan limits of a server's providers. The host's `usage-changed` event writes the providers' own sign-ins. */
   planLimits: (scope: QueryScope, serverId: string) => ["plan-limits", ...scope, serverId],
+  machineMetrics: (scope: QueryScope, serverId: string) => ["machine-metrics", ...scope, serverId],
   serverUsage: (scope: QueryScope, serverId: string, range: unknown) => ["server-usage", ...scope, serverId, range],
+  /** The past year of the paired desktop, which the Profile page summarizes as the desktop Profile tab does. */
+  profileActivity: (scope: QueryScope, serverId: string, range: unknown) => [
+    "profile-activity",
+    ...scope,
+    serverId,
+    range,
+  ],
   /** The routine calendar of a server. Its routine and turn events invalidate the prefix. */
   serverRoutines: (scope: QueryScope, serverId: string, ...range: [] | [from: string, to: string]) => [
     "server-routines",
@@ -235,6 +268,8 @@ export const queryKeys = {
     ...queryKeys.serverWorkflows(scope, serverId),
     "github-catalog",
   ],
+  /** The Telegram chats and Slack workspaces of the host, from the routine-results options. */
+  workflowChats: (scope: QueryScope, serverId: string) => [...queryKeys.serverWorkflows(scope, serverId), "chats"],
   workflowGitHubOptions: (scope: QueryScope, serverId: string, repository: string) => [
     ...queryKeys.serverWorkflows(scope, serverId),
     "github-options",

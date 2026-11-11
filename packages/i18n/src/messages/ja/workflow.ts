@@ -98,6 +98,7 @@ export const messages = {
   "workflow.model.providerModels": "{name} のモデル",
   "workflow.model.effort": "推論レベル: {name}",
   "workflow.model.effortRange": "{from}～{to}",
+  "workflow.model.auto": "自動",
 
   "workflow.llm.title": "LLM",
   "workflow.llm.name": "LLM ステップ",
@@ -163,6 +164,10 @@ export const messages = {
 
   "workflow.output.title": "出力",
   "workflow.output.name": "出力",
+  "workflow.output.channel.openbot": "OpenBot",
+  "workflow.output.channel.search": "チャンネルを検索",
+  "workflow.output.postsAs": "投稿の形式",
+  "workflow.output.postsAsNote": "メモ（タスクは開始されません）",
   "workflow.output.target.file": "ファイル",
   "workflow.output.target.notify": "通知",
   "workflow.output.path": "ファイルのパス",

@@ -3,6 +3,7 @@ import { Button, X } from "@openbot/ui";
 import { createEffect, createSignal, Show } from "solid-js";
 import { useText } from "../../text";
 import { DownloadIcon } from "./ConversationIcons";
+import { createSteadyImageUrl } from "./steady-image-url";
 
 export type ImageGenerationStatus = "generating" | "completed" | "failed" | "interrupted";
 
@@ -14,6 +15,11 @@ export interface ImageGenerationProps {
   aspectRatio: ImageGenerationAspectRatio;
   attachment?: AttachmentSummary | undefined;
   error?: string | undefined;
+  /**
+   * The image file is on its way, such as a file that the web client reads from the host. The stage
+   * shows its dots at the size of the image, so the chat does not grow when the image shows.
+   */
+  loading?: boolean | undefined;
   /** `origin` is the clicked image, for a viewer that zooms out of it. */
   onPreview?: (attachment: AttachmentSummary, origin: HTMLElement) => void;
   onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
@@ -22,16 +28,28 @@ export interface ImageGenerationProps {
 export function ImageGeneration(props: ImageGenerationProps) {
   const { t, errorMessage } = useText();
   const [previewError, setPreviewError] = createSignal(false);
+  // The ratio stays when the URL changes: a sent image gets the URL of its stored copy, and the
+  // image keeps its size and pixels until that copy loads.
   const [imageRatio, setImageRatio] = createSignal<string | null>(null);
+  const imageUrl = createSteadyImageUrl(() => props.attachment?.previewUrl);
+  let image: HTMLImageElement | undefined;
+  const readRatio = (element: HTMLImageElement) => {
+    const { naturalHeight, naturalWidth } = element;
+    if (naturalWidth > 0 && naturalHeight > 0) setImageRatio(`${naturalWidth} / ${naturalHeight}`);
+  };
+  // Keyed by the drawn URL: a URL that failed is not tried again while the new one loads.
   createEffect(
-    () => `${props.attachment?.id ?? ""}:${props.attachment?.previewUrl ?? ""}`,
+    () => imageUrl(),
     () => {
       setPreviewError(false);
-      setImageRatio(null);
+      // An image in the memory cache, such as one the composer showed, is complete at once. A lazy
+      // image fires `load` frames later, and the box would be square until then.
+      if (image?.complete) readRatio(image);
     },
   );
 
-  const previewUnavailable = () => props.status === "completed" && !props.attachment?.previewUrl;
+  const previewUnavailable = () =>
+    props.status === "completed" && !props.attachment?.previewUrl && props.loading !== true;
   const isAttachment = () => props.presentation === "attachment";
   const hasImage = () => props.status === "completed" && Boolean(props.attachment?.previewUrl) && !previewError();
   const hasFailure = () =>
@@ -86,7 +104,7 @@ export function ImageGeneration(props: ImageGenerationProps) {
           role="img"
           aria-label={hasImage() ? undefined : label()}
           aria-hidden={hasImage() ? "true" : undefined}
-          aria-busy={props.status === "generating" ? "true" : undefined}
+          aria-busy={props.status === "generating" || props.loading === true ? "true" : undefined}
         >
           <Show
             when={!hasFailure()}
@@ -115,14 +133,14 @@ export function ImageGeneration(props: ImageGenerationProps) {
             }}
           >
             <img
-              src={props.attachment?.previewUrl ?? ""}
+              src={imageUrl() ?? ""}
               alt={props.prompt ?? t("chat.image.generated")}
               loading="lazy"
               decoding="async"
-              onLoad={(event) => {
-                const { naturalHeight, naturalWidth } = event.currentTarget;
-                if (naturalWidth > 0 && naturalHeight > 0) setImageRatio(`${naturalWidth} / ${naturalHeight}`);
+              ref={(element) => {
+                image = element;
               }}
+              onLoad={(event) => readRatio(event.currentTarget)}
               onError={() => setPreviewError(true)}
             />
           </Button>
@@ -144,7 +162,7 @@ export function ImageGeneration(props: ImageGenerationProps) {
           </Button>
         </Show>
       </div>
-      <Show when={!hasImage()}>
+      <Show when={!hasImage() && props.loading !== true}>
         <div class="image-generation-meta">
           <span class="image-generation-label">{label()}</span>
           <Show when={props.prompt}>

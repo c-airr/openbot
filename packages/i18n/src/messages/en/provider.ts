@@ -105,6 +105,8 @@ export const messages = defineMessages("provider", {
   "provider.codeLogin.relayStarting": "Starting the {name} sign-in on {host}…",
   "provider.codeLogin.pageOpening": "Opening the {name} sign-in page on {host}…",
   "provider.codeLogin.linkStep": "Log in to {name}. OpenBot continues by itself.",
+  "provider.codeLogin.chatgptDeviceSetting":
+    "In ChatGPT on a computer, open the security settings and turn on device code sign-in for Codex. For a work account, your workspace admin turns it on.",
 
   // A provider that only the OpenBot app can sign in, from a browser tab.
   "provider.useApp.title": "Connect {name} in the OpenBot app",
@@ -130,8 +132,14 @@ export const messages = defineMessages("provider", {
   "provider.picker.olderModels": "Older models",
   "provider.picker.olderModelsList": "Older {name} models",
   "provider.picker.noModels": "No models are available from {name}.",
+  "provider.picker.museNoModels":
+    "Muse sent no models for this account. Muse may not be available in the country where this agent runs. Choose a model from another provider.",
   "provider.picker.customEmpty":
     "Add an OpenAI-compatible endpoint — a model server on this computer, or any service with a base URL and a key.",
+  "provider.picker.customPending":
+    "The models of your endpoints are not loaded yet. The provider reads them after its current task stops.",
+  "provider.picker.customUnlisted": "{name} does not list the models of your endpoints.",
+  "provider.picker.editEndpoints": "Edit endpoints",
   "provider.picker.defaultModelLabel": "{name}, default",
   "provider.picker.usageLimit": "Usage limit reached",
   "provider.picker.usageLimitWindow": "{window} limit",
@@ -144,6 +152,12 @@ export const messages = defineMessages("provider", {
   "provider.picker.fast": "Fast",
   "provider.picker.freeOnly": "Free models only",
   "provider.picker.fastLabel": "Fast mode",
+  "provider.picker.fastText": "Faster responses, increased usage",
+  "provider.picker.speed": "Speed",
+  "provider.picker.standard": "Standard",
+  "provider.picker.standardText": "Default speed",
+  "provider.picker.ultrafast": "Ultrafast",
+  "provider.picker.ultrafastText": "The fastest responses, much higher usage",
   "provider.picker.selectEffort": "Select effort",
   "provider.picker.custom": "Custom",
   "provider.picker.cliReady": "{cli} ready",
@@ -169,11 +183,13 @@ export const messages = defineMessages("provider", {
   "provider.geminiKey.label": "Gemini API key",
   "provider.claudeKey.title": "Anthropic API key",
   "provider.claudeKey.description":
-    "Save an Anthropic API key on the host. Anthropic bills each request to the key. To use it for an agent, select the API key account in the agent's model menu. When Claude is not signed in, all agents use the key.",
+    "Save an Anthropic API key on the host. Anthropic bills each request to the key's API credit, not to your Claude plan. To use it for an agent, select the API key account in the agent's model menu. When Claude is not signed in, all agents use the key.",
   "provider.claudeKey.label": "Anthropic API key",
   "provider.codexKey.title": "Log in with an OpenAI API key",
   "provider.codexKey.description":
     "Codex saves the key on this computer. OpenAI bills each request to the key, not to your ChatGPT plan. To use the plan again, disconnect the account and connect ChatGPT.",
+  "provider.codexKey.descriptionHost":
+    "Codex saves the key on the host. OpenAI bills each request to the key, not to your ChatGPT plan. To use the plan again, disconnect the account and connect ChatGPT.",
   "provider.codexKey.label": "OpenAI API key",
   "provider.inceptionKey.title": "Inception API key",
   "provider.inceptionKey.description":
@@ -273,7 +289,7 @@ export const messages = defineMessages("provider", {
   "provider.settings.keyAlternative": "Or paste a {name} API key.",
   "provider.settings.geminiKeyInUse": "Gemini uses this key, not your Google AI plan. The plan's usage is not shown.",
   "provider.settings.claudeKeyInUse":
-    "Select the API key account in an agent's model menu. When Claude is not signed in, all agents use the key.",
+    "Anthropic bills the key's API credit, not your Claude plan. Select the API key account in an agent's model menu. When Claude is not signed in, all agents use the key.",
   "provider.settings.codexKeyInUse":
     "ChatGPT uses this key, not your ChatGPT plan. OpenAI bills each request to the key. The plan's usage is not shown.",
   "provider.settings.codexKeyAlternative": "Or log in with an OpenAI API key. OpenAI bills each request to the key.",
@@ -294,6 +310,20 @@ export const messages = defineMessages("provider", {
   "provider.settings.promptCacheHour": "1 hour",
   "provider.settings.promptCacheDefault": "Claude Code default",
   "provider.settings.promptCacheLoadFailed": "Could not load the prompt cache time of this server.",
+  "provider.settings.claudeSetup": "Claude Code",
+  "provider.settings.claudeUserSetup": "Use my Claude Code setup",
+  "provider.settings.claudeUserSetupDescription":
+    "Agents load your CLAUDE.md, skills, agents, hooks and plugins from ~/.claude. Off, each turn sends a shorter prompt. Workspace files still load.",
+  "provider.settings.claudeUserSetupServerDescription":
+    "Agents load the CLAUDE.md, skills, agents, hooks and plugins from ~/.claude on the server. Off, each turn sends a shorter prompt. Workspace files still load.",
+  "provider.settings.claudeUserSetupLoadFailed": "Could not load the Claude Code setting.",
+  "provider.settings.context": "Context",
+  "provider.settings.compactWindow": "Compact chats at",
+  "provider.settings.compactWindowDescription":
+    "Claude Code sums up the older turns of a chat when the chat reaches this size. Lower keeps turns fast and cheap. Higher keeps more detail. A model with a smaller window compacts at its own limit.",
+  "provider.settings.compactWindowDefault": "Claude Code default",
+  "provider.settings.compactWindowTokens": "{size} tokens",
+  "provider.settings.compactWindowLoadFailed": "Could not load the compaction size of this server.",
   "provider.settings.models": "Models",
   "provider.settings.modelsDescription": {
     one: "{shown} of {count} model shows in the model picker.",
@@ -313,18 +343,11 @@ export const messages = defineMessages("provider", {
   "provider.settings.turnOnFirst": "Turn {name} on first.",
   "provider.settings.makeDefault": "Make default",
   "provider.settings.useTitle": "Use {name}",
-  "provider.settings.download": "Download",
-  "provider.settings.downloadedCli": "{name} CLI",
-  "provider.settings.downloadDetail": {
-    one: "{version} · 1 version · {size}",
-    other: "{version} · {count} versions · {size}",
-  },
-  "provider.settings.downloadVersions": { one: "1 version · {size}", other: "{count} versions · {size}" },
-  "provider.settings.downloadAgain": "When you turn {name} on, OpenBot downloads its CLI again.",
-  "provider.settings.removeDownloadConfirm": "Remove {size}?",
-  "provider.settings.removeDownloadKeeps": "Accounts, sign-ins and agents stay.",
-  "provider.settings.removeDownload": "Remove download",
-  "provider.settings.removingDownload": "Removing…",
+  "provider.settings.deleteTitle": "Delete {name}",
+  "provider.settings.deleteOn":
+    "Turns {name} off and deletes the CLI that OpenBot downloaded. Accounts, sign-ins and agents stay.",
+  "provider.settings.deleteOff":
+    "Deletes the CLI that OpenBot downloaded for {name} ({size}). Accounts, sign-ins and agents stay.",
   "provider.settings.removeDownloadFailed": "Could not remove the download.",
   "provider.settings.endpoints": "Endpoints",
   "provider.settings.noEndpoints": "No endpoints.",

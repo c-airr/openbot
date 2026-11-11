@@ -11,7 +11,18 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
+import BookBookmark from "lucide-react-native/icons/book-bookmark";
+import CalendarClock from "lucide-react-native/icons/calendar-clock";
+import Cpu from "lucide-react-native/icons/cpu";
+import FileText from "lucide-react-native/icons/file-text";
+import Folder from "lucide-react-native/icons/folder";
+import Gauge from "lucide-react-native/icons/gauge";
 import Pencil from "lucide-react-native/icons/pencil";
+import Puzzle from "lucide-react-native/icons/puzzle";
+import ShieldCheck from "lucide-react-native/icons/shield-check";
+import SlidersHorizontal from "lucide-react-native/icons/sliders-horizontal";
+import Table2 from "lucide-react-native/icons/table-2";
+import Upload from "lucide-react-native/icons/upload";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import {
@@ -31,6 +42,7 @@ import {
   AgentNewChatSection,
   AgentNotificationLevelRow,
 } from "@/features/agents/components/agent-chat-settings";
+import { AgentDeleteSection } from "@/features/agents/components/agent-delete-section";
 import { AgentFolderBrowser, AgentFolders, AgentFoldersRow } from "@/features/agents/components/agent-folders";
 import {
   AgentBusyMessageField,
@@ -50,6 +62,7 @@ import { AgentTasksRow } from "@/features/agents/components/agent-tasks-row";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import { InstructionsLimit, instructionsTooLong } from "@/features/agents/components/instructions-limit";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
+import { RowIcon } from "@/features/settings/components/settings-row-icon";
 import {
   type MobileAgent,
   type MobileServer,
@@ -204,10 +217,12 @@ function AgentForm({
     (edits.model !== undefined && edits.model !== agent.model) ||
     (edits.reasoningEffort !== undefined && edits.reasoningEffort !== agent.reasoningEffort) ||
     accountChanged;
+  const nameMissing = page === "info" && !name.trim();
+  // The name error shows after the first Save, not while the person still edits.
+  const [triedSave, setTriedSave] = useState(false);
   const valid =
     page !== "info" ||
-    (Boolean(name.trim()) &&
-      name.length <= INPUT_LIMITS.agentName &&
+    (name.length <= INPUT_LIMITS.agentName &&
       title.length <= INPUT_LIMITS.agentTitle &&
       !instructionsTooLong(description));
 
@@ -262,6 +277,11 @@ function AgentForm({
   );
 
   async function submit(): Promise<void> {
+    if (nameMissing) {
+      setTriedSave(true);
+      void haptics.notification("error");
+      return;
+    }
     if (!valid || !dirty || !available || pickingPhoto || pending.current) return;
     pending.current = true;
     setSaving(true);
@@ -362,6 +382,7 @@ function AgentForm({
               maxLength={INPUT_LIMITS.agentName}
               value={name}
               editable={!saving}
+              error={triedSave && nameMissing ? t("mobile.agent.add.nameRequired") : undefined}
               onChangeText={(value) => change({ name: value })}
             />
           </View>
@@ -406,6 +427,10 @@ function AgentForm({
       {page === "runtime" ? (
         <AgentRuntimeFields
           serverId={agent.serverId}
+          modelPickerRoute={{
+            pathname: "/agent-info/[agentId]/model-picker",
+            params: { agentId: agent.id, serverId: agent.serverId },
+          }}
           available={available}
           saving={saving}
           provider={provider}
@@ -496,6 +521,7 @@ function AgentForm({
         <>
           <SettingsSection title={t("mobile.agent.groups.brain")}>
             <SettingsRow
+              leading={<RowIcon icon={Cpu} />}
               supportingText={agent.model}
               onPress={() =>
                 router.push({
@@ -512,6 +538,7 @@ function AgentForm({
             {/* First, as in the desktop group. */}
             {canManageAgentInstructions(agent.serverId) ? (
               <SettingsRow
+                leading={<RowIcon icon={FileText} />}
                 onPress={() =>
                   router.push({
                     pathname: "/agent-info/[agentId]/instructions",
@@ -523,6 +550,7 @@ function AgentForm({
               </SettingsRow>
             ) : null}
             <SettingsRow
+              leading={<RowIcon icon={BookBookmark} />}
               onPress={() =>
                 router.push({
                   pathname: "/agent-info/[agentId]/memories",
@@ -533,6 +561,7 @@ function AgentForm({
               <Typography.Paragraph>{t("mobile.agent.info.memories.title")}</Typography.Paragraph>
             </SettingsRow>
             <SettingsRow
+              leading={<RowIcon icon={Puzzle} />}
               onPress={() =>
                 router.push({
                   pathname: "/agent-info/[agentId]/skills",
@@ -543,6 +572,7 @@ function AgentForm({
               <Typography.Paragraph>{t("mobile.agent.info.skills.title")}</Typography.Paragraph>
             </SettingsRow>
             <SettingsRow
+              leading={<RowIcon icon={Folder} />}
               onPress={() =>
                 router.push({
                   pathname: "/agent-info/[agentId]/files",
@@ -554,6 +584,7 @@ function AgentForm({
             </SettingsRow>
             {canManageSharedTables(agent.serverId) ? (
               <SettingsRow
+                leading={<RowIcon icon={Table2} />}
                 onPress={() =>
                   router.push({
                     pathname: "/agent-info/[agentId]/tables",
@@ -568,6 +599,7 @@ function AgentForm({
           <SettingsSection title={t("mobile.agent.groups.does")}>
             <AgentTasksRow agent={agent} />
             <SettingsRow
+              leading={<RowIcon icon={CalendarClock} />}
               onPress={() =>
                 router.push({
                   pathname: "/agent-info/[agentId]/routines",
@@ -578,6 +610,7 @@ function AgentForm({
               <Typography.Paragraph>{t("mobile.agent.info.routines.title")}</Typography.Paragraph>
             </SettingsRow>
             <SettingsRow
+              leading={<RowIcon icon={Gauge} />}
               onPress={() =>
                 router.push({
                   pathname: "/agent-info/[agentId]/usage",
@@ -589,6 +622,7 @@ function AgentForm({
             </SettingsRow>
             {canPublishAgent(agent.serverId) ? (
               <SettingsRow
+                leading={<RowIcon icon={Upload} />}
                 onPress={() =>
                   router.push({
                     pathname: "/agent-info/[agentId]/publish",
@@ -610,6 +644,7 @@ function AgentForm({
             >
               {showPermissions ? (
                 <SettingsRow
+                  leading={<RowIcon icon={ShieldCheck} />}
                   supportingText={adminSettings ? t(PERMISSION_LABEL[agentPermissionLevel(adminSettings)]) : undefined}
                   onPress={() =>
                     router.push({
@@ -625,6 +660,7 @@ function AgentForm({
               {showNotificationLevel ? <AgentNotificationLevelRow agent={agent} /> : null}
               {showAdvanced ? (
                 <SettingsRow
+                  leading={<RowIcon icon={SlidersHorizontal} />}
                   onPress={() =>
                     router.push({
                       pathname: "/agent-info/[agentId]/advanced",
@@ -636,6 +672,9 @@ function AgentForm({
                 </SettingsRow>
               ) : null}
             </SettingsSection>
+          ) : null}
+          {host && canAdministerServer(host.role) ? (
+            <AgentDeleteSection agent={agent} disabled={!available || saving || dirty} />
           ) : null}
         </>
       ) : null}

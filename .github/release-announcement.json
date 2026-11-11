@@ -1,10 +1,10 @@
 {
-  "version": "0.60.0",
+  "version": "0.68.0",
   "highlights": [
-    "Talk to your agents from WhatsApp: link a number under Marketplace → Apps → WhatsApp.",
-    "Start a workflow when someone mentions OpenBot in Slack or in a Telegram group, and send its result back there.",
-    "OpenBot is now available in Arabic, with a right-to-left layout.",
-    "Turn models off for each provider, and find the newest models first in the model picker.",
-    "Owners and admins can see an Audit log of member, role and agent access changes in Server settings."
+    "Set which members can use the browser in a channel, and see their tabs and the channel's files in the side panel.",
+    "Right-click the Dynamic Island or the agent dock to hide it, drag agents on the dock to move them, and change the dock size.",
+    "A chat that you read no longer stays in the Unread group, and you can turn the group off.",
+    "A Claude chat that got too long now starts a new session with its history, and an agent moves to its backup model at the 5-hour limit.",
+    "New versions now go to about 1 in 10 computers first, and to all computers about one day later."
   ]
 }

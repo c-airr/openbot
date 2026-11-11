@@ -7,6 +7,7 @@ import type {
   MacAutomationTarget,
   MarketplaceAgentDetail,
   MarketplaceAgentQuery,
+  MarketplaceAgentSkill,
   MarketplaceAgentSummary,
   MarketplaceSkillDetail,
   MarketplaceSkillQuery,
@@ -18,7 +19,7 @@ import type {
 import { assignedSkillCount, isRemovableSkill, isSkillEnabled, mcpConfigErrors } from "@openbot/contracts/ipc";
 import { createMarketplaceShareUrl, type MarketplaceListingLink } from "@openbot/contracts/marketplace-links";
 import { mcpAccountFragment, mcpAccountUrl } from "@openbot/contracts/mcp-accounts";
-import { type McpConnectFlow, mcpFlowFields } from "@openbot/contracts/mcp-connect-flows";
+import { type McpConnectFlow, mcpFlowFields, savedKeyFlow } from "@openbot/contracts/mcp-connect-flows";
 import { createPluginShareUrl } from "@openbot/contracts/plugin-links";
 import { TOAST_DURATION, toast } from "@openbot/ui";
 import { connectorSummary } from "@openbot/ui/features/connectors/ConnectorDetailPanel";
@@ -30,6 +31,7 @@ import type {
   MarketplaceApp,
   MarketplaceAppConnection,
   MarketplaceAppStatus,
+  MarketplaceAppsBlock,
   MarketplaceMacAutomation,
   MarketplaceModel,
   MarketplaceSkillChange,
@@ -39,6 +41,7 @@ import type {
 import { serverAddress } from "@openbot/ui/features/marketplace/marketplace-view";
 import type { McpConnectSubject } from "@openbot/ui/features/settings/McpConnectShell";
 import {
+  currentPluginAppConfig,
   isPluginAppConfig,
   type MarketplacePluginApp,
   type MarketplacePluginDetail,
@@ -96,6 +99,8 @@ export interface MarketplaceControllerProps {
   plugins?: readonly MarketplacePluginDetail[] | undefined;
   /** The server that holds the MCP servers of an app. Absent: apps show, but do not connect. */
   pluginServerId?: string | undefined;
+  /** Why apps do not connect while `pluginServerId` is absent. */
+  pluginsBlocked?: MarketplaceAppsBlock | undefined;
   /** The joined server that keeps an app's credential. Absent when this computer keeps it. */
   pluginHostName?: string | undefined;
   /** The joined server in `pluginServerId` relays its sign-ins to this computer (`sign-in-relay-v1`). */
@@ -122,7 +127,8 @@ export interface MarketplaceControllerProps {
 /** The connect step of one app. `settle(null)` is a closed dialog. */
 export interface PendingConnect {
   subject: McpConnectSubject;
-  flow: McpConnectFlow;
+  /** The ways in that work here, in the listing's order. The dialog opens on the first. */
+  flows: readonly [McpConnectFlow, ...McpConnectFlow[]];
   settle: (config: McpServerConfig | null) => void;
 }
 
@@ -132,6 +138,17 @@ export interface PendingSkillConfirm {
   /** The agents whose copy has local changes, as a list. */
   agents: string;
   settle: (confirmed: boolean) => void;
+}
+
+/**
+ * The question before an agent update that meets skills with local changes. `settle` gets the ids
+ * of the skills to replace, or null when the user cancels.
+ */
+export interface PendingAgentUpdate {
+  agentName: string;
+  changed: readonly { skillId: string; name: string }[];
+  othersCount: number;
+  settle: (replaceSkillIds: string[] | null) => void;
 }
 
 /** A remove of one change, and whether its copy has local changes. */
@@ -258,6 +275,35 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     return canUpdate() && (copy.marketplaceSource?.version ?? 0) < listing.version ? "update" : "added";
   }
 
+  const [agentUpdate, setAgentUpdate] = createSignal<PendingAgentUpdate | null>(null);
+  /**
+   * Before an update: asks about the skills that get a new version but have local changes on the agent.
+   * Gives the ones the user picks to replace, or null when the user cancels. The update keeps the others.
+   */
+  async function askChangedSkills(
+    listing: MarketplaceAgentDetail | MarketplaceAgentSummary,
+    copy: MarketplaceAgentRow,
+  ): Promise<MarketplaceAgentSkill[] | null> {
+    const detail = "skills" in listing ? listing : await calls().agents.getListing(listing.id);
+    const installed = new Map((await skillCalls().listInstalled(copy.id)).map((skill) => [skill.skillId, skill]));
+    const updates = detail.skills.filter((skill) => installed.get(skill.skillId)?.installedVersion !== skill.version);
+    const changed = updates.filter((skill) => installed.get(skill.skillId)?.state === "modified");
+    if (changed.length === 0) return [];
+    untrack(agentUpdate)?.settle(null);
+    const replaceIds = await new Promise<string[] | null>((resolve) =>
+      setAgentUpdate({
+        agentName: copy.name,
+        changed: changed.map(({ skillId, name }) => ({ skillId, name })),
+        othersCount: updates.length - changed.length,
+        settle: (ids) => {
+          setAgentUpdate(null);
+          resolve(ids);
+        },
+      }),
+    );
+    return replaceIds && changed.filter((skill) => replaceIds.includes(skill.skillId));
+  }
+
   async function addAgent(listing: MarketplaceAgentDetail | MarketplaceAgentSummary, update = false) {
     const copy = update ? installation(listing) : undefined;
     if (copy && "versionId" in listing && copy.marketplaceSource?.versionId === listing.versionId) return true;
@@ -266,17 +312,25 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     const serverId = copy ? (props.hostServerId ? props.agentUpdateServerId : undefined) : props.agentServerId;
     const analytics = desktopAnalytics.scope();
     mark(key, true);
-    const agent = await run(() =>
-      calls().addAgent(
-        {
-          listingId: listing.id,
-          ...(copy ? { agentId: copy.id } : {}),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-          receiptId: crypto.randomUUID(),
-        },
-        serverId,
-      ),
-    );
+    // A cancel ends the update before anything changed. A failed read is the update's failure.
+    const replace = copy ? await run(() => askChangedSkills(listing, copy)) : [];
+    if (replace === null) {
+      mark(key, false);
+      return false;
+    }
+    const agent =
+      replace &&
+      (await run(() =>
+        calls().addAgent(
+          {
+            listingId: listing.id,
+            ...(copy ? { agentId: copy.id } : {}),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            receiptId: crypto.randomUUID(),
+          },
+          serverId,
+        ),
+      ));
     analytics.track("marketplace_action", {
       entity: "agent",
       action: copy ? "update" : "install",
@@ -284,6 +338,19 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       result: agent ? "succeeded" : "failed",
       ...(agent ? {} : { failure_code: copy ? "update_failed" : "install_failed" }),
     });
+    // The update keeps each changed skill, so a failed update loses no edits. Only then are the picked ones replaced.
+    if (agent && copy && replace?.length) {
+      await run(async () => {
+        for (const skill of replace)
+          await skillCalls().install({
+            agentId: copy.id,
+            skillId: skill.skillId,
+            versionId: skill.versionId,
+            replaceModified: true,
+          });
+      });
+      await readInstalled(copy.id);
+    }
     mark(key, false);
     if (!agent) return false;
     setAdded((draft) => {
@@ -769,7 +836,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   const accountName = (app: MarketplacePluginApp, row: McpServerConfig) =>
     row.name === app.server.name ? app.name : row.name;
   function appConnection(app: MarketplacePluginApp): MarketplaceAppConnection {
-    const accounts = heldApps(app).map((row) => ({
+    const rows = heldApps(app);
+    const accounts = rows.map((row) => ({
       id: row.id,
       name: accountName(app, row),
       signInNeeded: signIns()[row.id]?.needsSignIn === true,
@@ -781,6 +849,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       signInNeeded: accounts.some((account) => account.signInNeeded),
       accounts,
       multipleAccounts: accounts.length > 0 && accountsOffered(app),
+      keySaved: rows[0] !== undefined && savedKeyFlow(app.server.auth, rows[0]) !== null,
     };
   }
   /** The agent that a plugin's skills go to: the open conversation, else the first agent. */
@@ -916,13 +985,24 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   /** The listing the user asked to disconnect, held while the confirmation is on screen. */
   const [uninstalling, setUninstalling] = createSignal<MarketplacePluginDetail | null>(null);
 
-  function connectStep(app: MarketplacePluginApp, config: McpServerConfig): Promise<McpServerConfig | null> {
-    const flow = (app.server.auth ?? [])[0];
-    if (!flow) return Promise.resolve(config);
+  /**
+   * `row` is the row as the host holds it, when `config` connects it again. A row that moved to the
+   * listing's current address left its headers behind, so only the held row says which flow saved it.
+   */
+  function connectStep(
+    app: MarketplacePluginApp,
+    config: McpServerConfig,
+    row: McpServerConfig = config,
+  ): Promise<McpServerConfig | null> {
+    // A row that a key saved opens on the key again, so a new key does not start with a sign-in.
+    const here = flowsHere(app);
+    const saved = savedKeyFlow(here, row);
+    const [first, ...rest] = saved ? [saved, ...here.filter((flow) => flow !== saved)] : here;
+    if (!first) return Promise.resolve(config);
     return new Promise((resolve) => {
       setConnecting({
         subject: { name: app.name, iconUrl: app.iconUrl, config },
-        flow,
+        flows: [first, ...rest],
         settle: (answer) => {
           // Each way out of the step that adds nothing also ends the sign-in that the step waits for.
           if (answer === null) cancelSignIn();
@@ -986,7 +1066,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     }
   }
 
-  /** Opens the relayed sign-in page in this computer's browser, after the user checked its host name. */
+  /** Opens the relayed sign-in page in this computer's browser again. */
   async function openSignInRelay(): Promise<void> {
     const relay = signInRelay();
     const current = relayed();
@@ -1015,17 +1095,25 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   }
 
   /**
+   * The ways into `app` that work from here. On a joined server a local server answers only on the
+   * host, and a browser sign-in needs a host that relays it; a key works from any computer.
+   */
+  function flowsHere(app: MarketplacePluginApp): McpConnectFlow[] {
+    const flows = app.server.auth ?? [];
+    // `pluginHostName` names a joined server that this account connects apps on, a member's too.
+    if (!props.pluginHostName) return flows;
+    return flows.filter((flow) => flow.kind === "key" || (flow.kind === "link" && Boolean(signInRelay())));
+  }
+
+  /**
    * A browser sign-in saves its grant on the computer that finishes it, and a local server answers
    * only on the computer that runs it, so an app that asks for either is connected on the host
    * itself. A host that relays its sign-ins finishes a browser sign-in in this computer's browser
    * and keeps the grant itself. False, with the error shown, when one of `apps` cannot connect here.
    */
   function canConnectHere(plugin: MarketplacePluginDetail, apps: readonly MarketplacePluginApp[]): boolean {
-    const hostOnly = apps.find((app) => {
-      const kind = app.server.auth?.[0]?.kind ?? "";
-      return kind === "local" || (kind === "link" && !signInRelay());
-    });
-    if (!props.hostServerId || !hostOnly) return true;
+    const hostOnly = apps.find((app) => (app.server.auth ?? []).length > 0 && flowsHere(app).length === 0);
+    if (!hostOnly) return true;
     const key =
       hostOnly.server.auth?.[0]?.kind === "local"
         ? "marketplace.error.installLocalOnHost"
@@ -1202,7 +1290,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, true);
     const analytics = desktopAnalytics.scope();
     const saved = await run(async () => {
-      const connected = await connectStep(app, row);
+      const connected = await connectStep(app, currentPluginAppConfig(row, app), row);
       if (!connected) return false;
       setServers(await calls().mcp.saveMcpServer({ config: connected }, serverId));
       return true;
@@ -1423,6 +1511,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   const stopDialogs = () => {
     untrack(connecting)?.settle(null);
     untrack(skillConfirm)?.settle(false);
+    untrack(agentUpdate)?.settle(null);
     setUninstalling(null);
   };
   createEffect(
@@ -1434,6 +1523,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   onCleanup(() => {
     untrack(connecting)?.settle(null);
     untrack(skillConfirm)?.settle(false);
+    untrack(agentUpdate)?.settle(null);
   });
 
   const model: MarketplaceModel = {
@@ -1481,6 +1571,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
     apps,
     canConnectApps: () => Boolean(props.pluginServerId),
+    appsBlocked: () => props.pluginsBlocked,
     appBusy: (id) => Boolean(busy[`app:${id}`]) || connector(id)?.busy() === true,
     connectApp: (app) => installPlugin(app.plugin),
     reconnectApp: (app, appId, accountId) => reconnectPluginApp(app.plugin, appId, accountId),
@@ -1530,6 +1621,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     connecting,
     uninstalling,
     skillConfirm,
+    agentUpdate,
     uninstallPlan,
     uninstallPlugin,
     uninstallBusy: (plugin: MarketplacePluginDetail) => Boolean(busy[`app:${plugin.slug}`]),

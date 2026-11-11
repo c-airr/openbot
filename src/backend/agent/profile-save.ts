@@ -179,6 +179,7 @@ export function standingProfileChanged(
     agentAutomationAllowed(previous, previousDefaults) !== agentAutomationAllowed(agent, defaults) ||
     agentQuickAcknowledgementEnabled(previous, previousDefaults) !==
       agentQuickAcknowledgementEnabled(agent, defaults) ||
-    (previous.leanMode === true) !== (agent.leanMode === true)
+    (previous.leanMode === true) !== (agent.leanMode === true) ||
+    previousDefaults.commitCoAuthor !== defaults.commitCoAuthor
   );
 }

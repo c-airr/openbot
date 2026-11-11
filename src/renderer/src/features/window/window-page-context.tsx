@@ -1,4 +1,4 @@
-import type { SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
+import type { SettingsPageBack, SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import { createSimpleContext } from "../../simple-context";
 import { useServerSettings } from "../servers/server-settings";
@@ -13,14 +13,15 @@ export type WindowPage =
   | "schedule"
   | "workflows"
   | "usage"
+  | "library"
   | "marketplace"
   | "settings"
   | "server-settings";
 
 /**
- * How a page sits in the window. The tasks page shows in the middle pane, as the agents do. The agent
- * list beside it is hidden until the user shows it. A settings page starts below the top row. The title of a schedule, workflows, usage or
- * Marketplace page goes in the top row after the server menu.
+ * How a page sits in the window. The tasks page shows in the middle pane, as the agents do, with the
+ * agent list beside it. A settings page starts below the top row. The title of a schedule, workflows
+ * or usage page goes in the top row after the buttons of the frame.
  */
 export type WindowPageKind = "agents" | "settings" | "titled";
 
@@ -50,19 +51,17 @@ const context = createSimpleContext({
     const usage = useUsage();
     const { activeServerId } = useServers();
     /** The elements of the settings page that the settings panel shows in. The page sets them. */
-    const [settingsMounts, setSettingsMounts] = createSignal<{ nav: HTMLElement; content: HTMLElement } | undefined>();
+    const [settingsMounts, setSettingsMounts] = createSignal<SettingsPagePlacement | undefined>();
+    /** The search of the server settings page. The server settings show only the sections that match it. */
+    const [serverSettingsQuery, setServerSettingsQuery] = createSignal("");
+    /** Each Enter in the server settings search adds one. The server settings then open the first match. */
+    const [openFirstServerSectionRequest, setOpenFirstServerSectionRequest] = createSignal(0);
 
     const page = createMemo<WindowPage>(() => {
       if (serverSettings.serverSettingsOpen()) return "server-settings";
       if (settings.appSettingsOpen()) return "settings";
       if (settings.skillsMarketplaceOpen()) return "marketplace";
       return usage.state.serverId ? usage.state.view : "agents";
-    });
-
-    /** Whether the agent list shows beside the Tasks page. Each time the page opens, the list is hidden. */
-    const [tasksAgentsOpen, setTasksAgentsOpen] = createSignal(false);
-    createEffect(page, (next) => {
-      if (next !== "tasks") setTasksAgentsOpen(false);
     });
 
     // Opening the user settings closes the server settings, the Marketplace and the host pane.
@@ -107,21 +106,39 @@ const context = createSimpleContext({
       if (untrack(serverSettings.serverSettingsOpen)) untrack(() => serverSettings.openServerSettings(serverId, null));
     });
 
+    /** The way back from the open detail page of each settings page. */
+    const [personalBack, setPersonalBack] = createSignal<SettingsPageBack | null>(null);
+    const [serverBack, setServerBack] = createSignal<SettingsPageBack | null>(null);
+    const placementFor = (kind: SettingsKind) =>
+      createMemo<SettingsPagePlacement | undefined>(() => {
+        const mounts = settingsMounts();
+        if (!mounts || page() !== (kind === "personal" ? "settings" : "server-settings")) return undefined;
+        return { ...mounts, onBack: (back) => (kind === "personal" ? setPersonalBack(back) : setServerBack(back)) };
+      });
+    const placements = { personal: placementFor("personal"), server: placementFor("server") };
+
     /** Where the panel of a settings page shows, or nothing while that page is not on screen. */
     function settingsPlacement(kind: SettingsKind): SettingsPagePlacement | undefined {
-      const mounts = settingsMounts();
-      if (!mounts || page() !== (kind === "personal" ? "settings" : "server-settings")) return undefined;
-      return mounts;
+      return placements[kind]();
+    }
+
+    /** The way back from the detail page that shows, such as Providers › ChatGPT, or nothing. */
+    function pageBack(): SettingsPageBack | null {
+      if (page() === "settings") return personalBack();
+      return page() === "server-settings" ? serverBack() : null;
     }
 
     return {
       page,
       /** Whether a page other than the agents covers the conversation. A message there is not seen. */
       conversationCovered: () => page() !== "agents",
-      tasksAgentsOpen: () => page() === "tasks" && tasksAgentsOpen(),
-      setTasksAgentsOpen: (open: boolean) => setTasksAgentsOpen(open),
       setSettingsMounts,
       settingsPlacement,
+      serverSettingsQuery,
+      setServerSettingsQuery: (query: string) => setServerSettingsQuery(query),
+      openFirstServerSectionRequest,
+      openFirstServerSection: () => setOpenFirstServerSectionRequest((request) => request + 1),
+      pageBack,
       /** Shows the agents and closes the other pages. */
       showAgents() {
         settings.setAppSettingsOpen(false);
@@ -144,6 +161,10 @@ const context = createSimpleContext({
       openUsage(source: HTMLElement | null) {
         const serverId = activeServerId();
         if (serverId) usage.openUsage(serverId, source);
+      },
+      openLibrary(source: HTMLElement | null) {
+        const serverId = activeServerId();
+        if (serverId) usage.openLibrary(serverId, source);
       },
       openSettings(source: HTMLElement | null) {
         settings.openAppSettings(source);

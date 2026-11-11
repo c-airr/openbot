@@ -36,6 +36,7 @@ import type {
   AgentTasksSnapshot,
   AgentTemplatePreview,
   AgentTemplatePublication,
+  AnswerWhatsAppRequestInput,
   ApplyAgentImportInput,
   ApplyInstanceTransferInput,
   AvatarColor,
@@ -46,16 +47,18 @@ import type {
   BranchAgentTaskInput,
   BrowserProfileList,
   BrowserProfileSummary,
+  BrowserProxyList,
+  BrowserProxySummary,
   ClearableStorageCategory,
   ClearBrowserDataInput,
   ConnectorMessagingPlatform,
   ConversationFileSearchPage,
   ConversationSearchPage,
   ConversationSnapshot,
-  CreateAgentInput,
   CreateRoutineInput,
   CreateWorkflowInput,
   DecideWorkflowStepInput,
+  DeleteBrowserProxyInput,
   DraftAttachment,
   ExportInstanceInput,
   ForeignProviderId,
@@ -80,16 +83,22 @@ import type {
   InstallSkillInput,
   InstanceTransferPreview,
   InstanceTransferSummary,
+  MachineMetrics,
   MarkAgentTaskReadInput,
   McpServerConfig,
   McpSignInState,
   McpTestResult,
   MessagingOverview,
+  MessagingWorkspaceInput,
   OnePasswordConnectorStatus,
+  PasswordManagerConnectInput,
+  PasswordManagerId,
+  PasswordManagerStatus,
   QueuedMessageReceipt,
   QueueSnapshot,
   RemoteAgentImportResult,
   RemoteInstanceTransferResult,
+  RemoveWhatsAppSenderInput,
   RenameWorkflowInput,
   ResetAgentSessionSettingInput,
   RespondToApprovalInput,
@@ -103,6 +112,7 @@ import type {
   RoutineResultDestination,
   RoutineResultRoutineInput,
   SaveAgentInstructionsInput,
+  SaveBrowserProxyInput,
   SaveWorkflowGraphInput,
   ServerAuditLog,
   ServerNotificationLevel,
@@ -110,13 +120,18 @@ import type {
   SetAgentNotificationLevelInput,
   SetAgentProviderAccountInput,
   SetAgentSessionSettingInput,
+  SetBrowserProfileProxyInput,
   SetEnabledSkillInput,
+  SetMessagingEnabledInput,
   SetRoutineResultDestinationInput,
+  SetWhatsAppOwnNumberInput,
+  SetWhatsAppWorkingMessageInput,
   SharedTable,
   SidebarLayoutAction,
   SidebarLayoutSnapshot,
   SidebarPin,
   SignInRelayStatus,
+  StartWhatsAppLinkInput,
   StorageUsage,
   UninstallSkillInput,
   UpdateAgentAdminSettingsInput,
@@ -134,6 +149,10 @@ import type {
   VaultHostImportResult,
   VaultSaveInput,
   VaultState,
+  WhatsAppGroupList,
+  WhatsAppLinkState,
+  WhatsAppOverview,
+  WhatsAppSenderInput,
   WorkflowDetail,
   WorkflowGitHubCatalog,
   WorkflowGitHubHistory,
@@ -159,6 +178,7 @@ import type {
   SaveEventRoutineResult,
   WebhookSecret,
 } from "@openbot/contracts/ipc-events";
+import type { LiveVoiceSessionResponse, LiveVoiceStartRequest } from "@openbot/contracts/team-protocol/live-voice-v1";
 import type { QueueEditRequest } from "@openbot/contracts/team-protocol/queue-edit-v1";
 import type { RemoteConnectionFailure, RemoteRecoveryStatus, RemoteTeamDirectoryClient } from "@openbot/team-client";
 import type { PlanLimits } from "@openbot/team-client/plan-limits";
@@ -168,14 +188,29 @@ import type {
   HostLocalServerList,
   MessagingConnectorPage,
 } from "@openbot/team-client/team-admin-requests";
+import type { AgentExportParts } from "@openbot/team-client/team-api-requests";
+import type { NewAgentInput } from "@/features/agents/model/agent-initial-message";
 import type { MobileBrowserTab } from "@/features/browser/model/browser-tabs";
 import type { BrowserViewBridgeEvent, RemoteBrowserViewSession } from "@/features/browser/model/browser-view-bridge";
 import type { MobileChannelStore } from "@/features/channels/model/channel-store";
+import type { MessageFileTarget } from "@/features/chat/model/message-file-target";
 import type { ProviderAdmin } from "@/features/servers/model/provider-admin";
+import type { RemoteDesktopConnection } from "@/features/workspace/components/remote-team-transport";
 import type { MobileConversationStore } from "./conversation-store";
 import type { LiveWorkspaceStore } from "./live-workspace-store";
 
+/** An export file on this phone, read when it is sent. */
+export interface AgentExportFile extends AgentExportParts {
+  /** The whole file as Base64. */
+  readAll: () => Promise<string>;
+}
+
 type MobileServerKind = "local" | "remote";
+/** The message that `message-delete-v1` deletes. */
+type MessageDeleteTarget =
+  | { kind: "agent"; agentId: string; taskId?: string; messageId: string }
+  | { kind: "channel"; channelId: string; messageId: string };
+
 /** The route set that reaches a host's OpenBot update: the admin set or the member set. */
 export type ServerUpdateAccess = "admin" | "member";
 
@@ -303,6 +338,10 @@ export interface MobileWorkspaceContextValue {
   canEditQueue: (serverId: string) => boolean;
   /** True when the host advertises `message-client-id-v1`: a repeat of a message is stored once. */
   canRetryMessage: (serverId: string) => boolean;
+  /** True when the host advertises `message-delete-v1`. */
+  canDeleteMessages: (serverId: string) => boolean;
+  /** True when the host advertises `conversation-unread-from-v1`: a message of an agent chat can be marked unread. */
+  canMarkUnreadFrom: (serverId: string) => boolean;
   /** The files this host accepts beyond the base list, as the desktop picker reads them. */
   attachmentSupport: (serverId: string) => AttachmentSupport;
   changeQueue: (
@@ -314,6 +353,11 @@ export interface MobileWorkspaceContextValue {
   editQueue: (agentId: string, serverId: string, input: QueueEditRequest) => Promise<QueueSnapshot>;
   /** Sets the reader's reaction on a message of an agent chat. `null` removes it. */
   setMessageReaction: (agentId: string, serverId: string, messageId: string, emoji: string | null) => Promise<void>;
+  /**
+   * Deletes one message for everyone, with `message-delete-v1`: from an agent chat, from one task of
+   * the agent (`taskId`), or from a channel. The host refuses a message that the reader may not delete.
+   */
+  deleteMessage: (serverId: string, target: MessageDeleteTarget) => Promise<void>;
   interruptTurn: (agentId: string, turnId: string, serverId?: string) => Promise<void>;
   channelStore: MobileChannelStore;
   /** The servers in the order saved on this device. The app opens on the first one. */
@@ -347,6 +391,13 @@ export interface MobileWorkspaceContextValue {
   toggleWorkflowPin: (workflowId: string, serverId: string) => ToggleAgentPinResult;
   /** Drops the pins of workflows that the host no longer lists. Call only with a complete list. */
   reconcileWorkflowPins: (serverId: string, workflowIds: readonly string[]) => void;
+  /** The sidebar sections of the active server that the user closed. Saved on this device. */
+  collapsedSectionIds: ReadonlySet<string>;
+  /**
+   * Opens or closes a sidebar section of a server. `sectionIds` are the sections of its layout now:
+   * the saved list drops the others.
+   */
+  toggleSectionCollapsed: (serverId: string, sectionId: string, sectionIds: readonly string[]) => void;
   conversationStore: MobileConversationStore;
   /** Activity, unread agents, and browser requests. Read them with a selector hook, not from the context. */
   liveState: LiveWorkspaceStore;
@@ -457,6 +508,10 @@ export interface MobileWorkspaceContextValue {
   canManageOnePasswordConnector: (serverId: string) => boolean;
   /** The same for the host's Bitwarden connection (`bitwarden-connector-v1`). */
   canManageBitwardenConnector: (serverId: string) => boolean;
+  /** The same for the host's WhatsApp numbers (`whatsapp-connector-v1`). */
+  canManageWhatsAppConnector: (serverId: string) => boolean;
+  /** The same for the host's password managers, such as Proton Pass (`password-managers-v1`). */
+  canManagePasswordManagers: (serverId: string) => boolean;
   /** True for an owner or admin of a host that serves its Vault to other devices (`vault-v1`). */
   canManageVault: (serverId: string) => boolean;
   /** The same for a CSV import from this phone (`vault-import-v1`). */
@@ -475,6 +530,11 @@ export interface MobileWorkspaceContextValue {
    * each agent (`browser-profiles-v1`). The host checks the role again.
    */
   canManageBrowserProfiles: (serverId: string) => boolean;
+  /**
+   * True for an owner or admin of a host that serves the proxies of its named profiles
+   * (`browser-proxies-v1`). The phone cannot share its own connection: it has no TCP sockets.
+   */
+  canManageBrowserProxies: (serverId: string) => boolean;
   /** Reads or changes the host's GitHub connection. The answer names the GitHub pages that the phone opens. */
   githubConnector: (route: GitHubConnectorRoute, serverId: string) => Promise<HostGitHubConnectorStatus>;
   /** The repositories where the host's GitHub App is installed. The host reads them from GitHub. */
@@ -491,6 +551,17 @@ export interface MobileWorkspaceContextValue {
   connectBitwarden: (input: BitwardenHostConnectInput, serverId: string) => Promise<BitwardenConnectorStatus>;
   /** Also stops a sign-in that has not ended. */
   disconnectBitwarden: (serverId: string) => Promise<BitwardenConnectorStatus>;
+  /** The managers that the host can connect, each with its status. */
+  loadPasswordManagers: (serverId: string) => Promise<PasswordManagerStatus[]>;
+  /**
+   * Starts a sign-in on the host, connects with an access key, or sends the extra password that the
+   * sign-in asks for. The key and the password go to the host once. No answer carries them.
+   */
+  connectPasswordManager: (input: PasswordManagerConnectInput, serverId: string) => Promise<PasswordManagerStatus>;
+  /** Stops a sign-in that has not ended. */
+  cancelPasswordManager: (manager: PasswordManagerId, serverId: string) => Promise<PasswordManagerStatus>;
+  /** The host deletes its access key. The vault stays in the manager. */
+  disconnectPasswordManager: (manager: PasswordManagerId, serverId: string) => Promise<PasswordManagerStatus>;
   /** The host's Vault. No answer carries a password, a card number or a security code. */
   loadVault: (serverId: string) => Promise<VaultState>;
   /** A new secret goes to the host once; a null secret keeps the saved one. */
@@ -498,9 +569,14 @@ export interface MobileWorkspaceContextValue {
   deleteVaultItem: (id: string, serverId: string) => Promise<VaultState>;
   /** The text of a CSV password export. The host adds its logins and answers only the counts. */
   importVaultCsv: (csv: string, serverId: string) => Promise<VaultHostImportResult>;
-  /** Sends a Grok Bot or Hermes export to the host, which keeps it under the preview's token. */
+  /** Throws when the host takes an export of this size only with a newer OpenBot. Nothing goes to the host. */
+  checkAgentExport: (size: number, serverId: string) => void;
+  /**
+   * Sends a Grok Bot or Hermes export to the host, which keeps it under the preview's token. A host
+   * with `agent-import-v2` gets it in parts; an older host takes up to 100 MB.
+   */
   stageAgentImport: (
-    upload: RemoteFileUpload,
+    file: AgentExportFile,
     serverId: string,
     onProgress?: (fraction: number) => void,
   ) => Promise<AgentImportPreview>;
@@ -532,6 +608,14 @@ export interface MobileWorkspaceContextValue {
   loadAgentBrowserProfile: (agentId: string, serverId: string) => Promise<AgentBrowserProfile>;
   /** The host closes the open tabs of the agent. */
   updateAgentBrowserProfile: (input: UpdateAgentBrowserProfileInput, serverId: string) => Promise<AgentBrowserProfile>;
+  /** The saved proxies of the named profiles, and the computers of members. No proxy carries its password. */
+  loadBrowserProxies: (serverId: string) => Promise<BrowserProxyList>;
+  /** A new proxy, or a change to one. The host closes the tabs of the profiles that use a changed proxy. */
+  saveBrowserProxy: (input: SaveBrowserProxyInput, serverId: string) => Promise<BrowserProxySummary>;
+  /** Its profiles change to Automatic. Takes a computer id too. */
+  deleteBrowserProxy: (input: DeleteBrowserProxyInput, serverId: string) => Promise<void>;
+  /** Null: Automatic. The host closes the tabs of the profile. */
+  setBrowserProfileProxy: (input: SetBrowserProfileProxyInput, serverId: string) => Promise<void>;
   loadMessagingConnections: (platform: ConnectorMessagingPlatform, serverId: string) => Promise<MessagingOverview>;
   /** The platform's page that the phone opens. The host opens no page. */
   connectMessaging: (input: HostMessagingConnectInput, serverId: string) => Promise<MessagingConnectorPage>;
@@ -548,6 +632,27 @@ export interface MobileWorkspaceContextValue {
     input: HostAddMessagingOrchestratorInput,
     serverId: string,
   ) => Promise<AddMessagingOrchestratorResult>;
+  /** The host's WhatsApp numbers and the settings of each. */
+  loadWhatsAppConnector: (serverId: string) => Promise<WhatsAppOverview>;
+  /** The host's WhatsApp session asks WhatsApp for a pairing code or a QR code, and answers it. */
+  startWhatsAppLink: (input: StartWhatsAppLinkInput, serverId: string) => Promise<WhatsAppLinkState>;
+  /** The link that runs now on the host. */
+  loadWhatsAppLinkState: (serverId: string) => Promise<WhatsAppLinkState>;
+  /** Stops a link that did not end, so the phone cannot use its code. */
+  cancelWhatsAppLink: (serverId: string) => Promise<void>;
+  disconnectWhatsAppNumber: (input: MessagingWorkspaceInput, serverId: string) => Promise<void>;
+  reconnectWhatsAppNumber: (input: MessagingWorkspaceInput, serverId: string) => Promise<void>;
+  setWhatsAppEnabled: (input: SetMessagingEnabledInput, serverId: string) => Promise<void>;
+  /** Creates the WhatsApp Orchestrator on the host's default provider and model. */
+  addWhatsAppOrchestrator: (serverId: string) => Promise<AddMessagingOrchestratorResult>;
+  /** The groups of a linked number, to choose from. */
+  loadWhatsAppGroups: (input: MessagingWorkspaceInput, serverId: string) => Promise<WhatsAppGroupList>;
+  addWhatsAppSender: (input: WhatsAppSenderInput, serverId: string) => Promise<void>;
+  removeWhatsAppSender: (input: RemoveWhatsAppSenderInput, serverId: string) => Promise<void>;
+  answerWhatsAppRequest: (input: AnswerWhatsAppRequestInput, serverId: string) => Promise<void>;
+  setWhatsAppOwnNumber: (input: SetWhatsAppOwnNumberInput, serverId: string) => Promise<void>;
+  /** Needs `whatsapp-working-message-v1`. A number carries `workingMessage` only on such a host. */
+  setWhatsAppWorkingMessage: (input: SetWhatsAppWorkingMessageInput, serverId: string) => Promise<void>;
   /**
    * How this user reaches the OpenBot update of an online host: an owner or admin through
    * `host-update-v1`, any member through `host-member-update-v1`. Null when neither applies.
@@ -581,7 +686,11 @@ export interface MobileWorkspaceContextValue {
   canManageProviders: (serverId: string) => boolean;
   /** The Providers admin of one host, with the newest route set that it serves. */
   providerAdmin: (serverId: string) => ProviderAdmin;
-  /** An owner or admin of an online host that serves `mcp-servers-v1`. The host checks the role again. */
+  /**
+   * An owner or admin of an online host that serves `mcp-servers-v1`, or a member when the host also
+   * serves `mcp-member-access-v1`. The host checks the role again, and refuses a member a row that
+   * another person added.
+   */
   canManageMcpServers: (serverId: string) => boolean;
   /** The MCP servers that the host gives its agents. Each change answers with the whole list. */
   listMcpServers: (serverId: string) => Promise<McpServerConfig[]>;
@@ -592,7 +701,7 @@ export interface MobileWorkspaceContextValue {
   /** Connects once with `config` on the host. Nothing is saved. */
   testMcpServer: (config: McpServerConfig, serverId: string) => Promise<McpTestResult>;
   /**
-   * An owner or admin of an online host that serves `mcp-servers-v1` and `sign-in-relay-v1`: the phone
+   * A user who manages the MCP servers of a host that serves `sign-in-relay-v1`: the phone
    * opens the browser sign-in of an MCP server, and the host keeps the grant.
    */
   canRelayMcpSignIn: (serverId: string) => boolean;
@@ -602,8 +711,11 @@ export interface MobileWorkspaceContextValue {
   listMcpSignIns: (serverId: string) => Promise<McpSignInState[]>;
   signOutMcpServer: (mcpServerId: string, serverId: string) => Promise<McpSignInState[]>;
   addRemoteServer: (input: AddRemoteServerInput) => Promise<string>;
-  /** Creates an agent on the active server and returns its id. */
-  createAgent: (input: CreateAgentInput) => Promise<string>;
+  /**
+   * Creates an agent on the active server and returns its id. A host with `agent-welcome-v1` gets a
+   * hidden setup message, then the first task as the user's own message.
+   */
+  createAgent: (input: NewAgentInput) => Promise<string>;
   /**
    * Changes an agent. A host with `agent-colors-v1` gets `avatarColor` through its colour route, and
    * sets the hue itself. An older host gets only `avatarHue`, the nearest hue of the colour.
@@ -611,7 +723,8 @@ export interface MobileWorkspaceContextValue {
   updateAgent: (input: UpdateAgentInput, serverId?: string) => Promise<void>;
   setAgentAvatar: (agentId: string, image: RemoteFileUpload | null, serverId: string) => Promise<void>;
   loadAgentAvatar: (agentId: string, avatarUrl: string, serverId: string) => Promise<string>;
-  deleteAgent: (agentId: string) => Promise<void>;
+  /** Deletes an agent on `serverId`, or on the active server. */
+  deleteAgent: (agentId: string, serverId?: string) => Promise<void>;
   duplicateAgent: (agentId: string) => Promise<void>;
   saveAgentMemory: (agentId: string, text: string, serverId: string, memoryId?: string) => Promise<void>;
   deleteAgentMemory: (agentId: string, memoryId: string, serverId: string) => Promise<void>;
@@ -684,6 +797,14 @@ export interface MobileWorkspaceContextValue {
   loadAgentStorage: (agentId: string, serverId: string, force?: boolean) => Promise<StorageUsage | null>;
   /** True when the host advertises `storage-v1`. Every member reads the host's storage. */
   canReadServerStorage: (serverId: string) => boolean;
+  /** An owner or admin of an online host that serves `machine-resources-v1`. The host checks the role again. */
+  canReadMachineMetrics: (serverId: string) => boolean;
+  /** The disk, memory and CPU use of the machine that runs the host. Owners and admins only. */
+  loadMachineMetrics: (serverId: string) => Promise<MachineMetrics>;
+  /** True when the host advertises `remote-desktop`. The host decides which members it lets in. */
+  canControlComputer: (serverId: string) => boolean;
+  /** The connected peer's path for the remote desktop viewer, or null while the server is not connected. */
+  remoteDesktopConnection: (serverId: string) => RemoteDesktopConnection | null;
   /** Every location on the host, its agents, its largest chats and its stored files. */
   loadServerStorage: (serverId: string, force?: boolean) => Promise<StorageUsage>;
   /** Owners and admins only; the host refuses a member. */
@@ -795,6 +916,11 @@ export interface MobileWorkspaceContextValue {
   /** The folders in one folder of the host computer; `path` null is the home folder. */
   browseAgentFolders: (agentId: string, path: string | null, serverId: string) => Promise<AgentFolderBrowse>;
   startNewChat: (agentId: string, serverId: string) => Promise<void>;
+  /** True when the host advertises `live-voice-v1`: a member can talk with an agent by GPT live voice. */
+  canUseLiveVoice: (serverId: string) => boolean;
+  /** Starts GPT live voice with the WebRTC offer of the phone's peer. Only a host with `canUseLiveVoice` takes it. */
+  startLiveVoice: (input: LiveVoiceStartRequest, serverId: string) => Promise<LiveVoiceSessionResponse>;
+  stopLiveVoice: (sessionId: string, serverId: string) => Promise<void>;
   /** True when the host advertises `context-compact-v1`. Any member who can send messages can compact. */
   canCompactContext: (serverId: string) => boolean;
   /**
@@ -873,6 +999,11 @@ export interface MobileWorkspaceContextValue {
   restoreWorkflowVersion: (input: WorkflowVersionInput, serverId: string) => Promise<WorkflowDetail>;
   /** True when the host advertises `workflows-github-v1`: it runs GitHub triggers and outputs. */
   canUseWorkflowGitHub: (serverId: string) => boolean;
+  /**
+   * True when the host advertises `workflows-chats-v1` and `routine-results-v1`: an owner or admin adds
+   * and changes Telegram and Slack triggers and outputs, with the chats of the routine-results options.
+   */
+  canUseWorkflowChats: (serverId: string) => boolean;
   /** The repositories of the host's GitHub connection. Only an owner or admin reads them. */
   loadWorkflowGitHubCatalog: (serverId: string) => Promise<WorkflowGitHubCatalog>;
   /** The labels and people of one repository. Only an owner or admin reads them. */
@@ -938,12 +1069,19 @@ export interface MobileWorkspaceContextValue {
     onProgress?: (fraction: number) => void,
   ) => Promise<DraftAttachment>;
   downloadAttachment: (serverId: string, attachmentId: string) => Promise<RemoteFileUpload>;
+  /**
+   * A file that a message names, from the agent's workspace or from the shared folder. Any member
+   * reads it; the host keeps the path inside the folder.
+   */
+  downloadMessageFile: (serverId: string, file: MessageFileTarget) => Promise<RemoteFileUpload>;
   discardAttachment: (agentId: string, attachmentId: string, serverId?: string) => Promise<void>;
   /**
    * True when a hide goes to the host (`agent-hidden-v1`, and the user is an owner or admin), so each
    * device shows it. A member hides on this phone only.
    */
   hidesAgentsOnServer: (serverId: string) => boolean;
+  /** True when the host keeps a hidden agent at work (`agent-hidden-work`). An older host stops it. */
+  hiddenAgentsWorkOnServer: (serverId: string) => boolean;
   /**
    * True when the user can show a hidden agent of the active server again: this phone hid it, or the
    * host hid it and the user is an owner or admin.
@@ -955,6 +1093,11 @@ export interface MobileWorkspaceContextValue {
   unhideAgent: (agentId: string) => void;
   markAgentRead: (agentId: string, throughMessageId?: string, serverId?: string) => void;
   markAgentUnread: (agentId: string) => void;
+  /**
+   * Marks a message of an agent chat and the messages after it unread. It rejects when the host
+   * refuses it. Only a host with `canMarkUnreadFrom` takes it.
+   */
+  markAgentUnreadFrom: (agentId: string, fromMessageId: string, serverId: string) => Promise<void>;
   /** Marks every unread chat of the active server read. It rejects when a chat stays unread. */
   markAllRead: () => Promise<void>;
   toggleAgentPin: (agentId: string) => ToggleAgentPinResult;
@@ -978,6 +1121,9 @@ export type MobileWorkspaceCapabilityCheck =
   | "browserViewSupport"
   | "canEditQueue"
   | "canRetryMessage"
+  | "canDeleteMessages"
+  | "canMarkUnreadFrom"
+  | "canUseLiveVoice"
   | "attachmentSupport"
   | "canStartNewChat"
   | "canCompactContext"
@@ -991,7 +1137,9 @@ export type MobileWorkspaceCapabilityCheck =
   | "canBranchThreads"
   | "canUseWorkflows"
   | "canUseWorkflowGitHub"
+  | "canUseWorkflowChats"
   | "canReadServerStorage"
+  | "canControlComputer"
   | "canSetAgentNotificationLevel";
 
 type MobileWorkspaceStateKey =
@@ -1008,14 +1156,17 @@ type MobileWorkspaceStateKey =
   | "pinnedAgentIds"
   | "pinnedChannelIds"
   | "pinnedWorkflowIds"
+  | "collapsedSectionIds"
   | "hiddenChannelIds"
   | "hidesAgentsOnServer"
+  | "hiddenAgentsWorkOnServer"
   | "canUnhideAgent"
   | "canEditServerIdentity"
   | "canRotateServerKey"
   | "canCreateLocalServers"
   | "localServerKind"
   | "canManageServerTimezone"
+  | "canReadMachineMetrics"
   | "canManageAgentMemoryLimit"
   | "canManageServerRoles"
   | "canReadServerAudit"
@@ -1023,12 +1174,15 @@ type MobileWorkspaceStateKey =
   | "canManageConnectors"
   | "canManageOnePasswordConnector"
   | "canManageBitwardenConnector"
+  | "canManageWhatsAppConnector"
+  | "canManagePasswordManagers"
   | "canManageVault"
   | "canImportVault"
   | "canImportAgents"
   | "canTransferServer"
   | "canManageVaultApiKeys"
   | "canManageBrowserProfiles"
+  | "canManageBrowserProxies"
   | "serverUpdateAccess"
   | "canReadServerRelease"
   | "canViewHostedSites"

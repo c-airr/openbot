@@ -7,6 +7,7 @@ apps/
   auth-api/          Public web and /app browser entry, accounts, memberships, connection tickets, and billing
   discord-app/       Developer Portal settings of the OpenBot Discord app (no code)
   mobile/            Expo React Native client for remote team hosts
+  mobile-updates/    Cloudflare Worker that gives the mobile app its over-the-air updates from private R2 storage
   site-router/       Cloudflare Worker that serves published sites from private R2 storage
   slack-app/         Slack CLI projects with the OpenBot Slack app manifests (production, development)
   status/            Public status page on GitHub Pages, and the check and webhook scripts of its workflow
@@ -86,7 +87,7 @@ SolidJS, provider, Cloudflare, and application code; and the account server to d
   recovery. They do not create a second copy of messages already saved by the live turn.
 - `ConversationRuntime` keeps active work and a bounded recent cache. Released full-history APIs
   build their responses from SQLite for each request. They do not set the working cache.
-- `~/.codex`, `~/.claude`, `~/.grok`, `~/.gemini`, `~/.cursor`, `~/.cline`, `~/.kimi`, `~/.pi`, `~/.devin`, and the OpenCode,
+- `~/.codex`, `~/.claude`, `~/.grok`, `~/.gemini`, `~/.cursor`, `~/.cline`, `~/.kimi`, `~/.pi`, `~/.devin`, `~/.copilot`, `~/.vibe`, and the OpenCode,
   Muse and Devin XDG folders are provider-owned login and resume state. They are not OpenBot
   conversation storage.
 - D1 is the source of truth for central accounts, remote membership, invitations, and logical sessions.

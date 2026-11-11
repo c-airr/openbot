@@ -139,6 +139,7 @@ import {
   agentStepText,
   conditionAnswer,
   conditionPrompt,
+  currentAnswers,
   fieldText,
   inputText,
   modelStepPrompt,
@@ -229,6 +230,16 @@ export interface WorkflowsDependencies {
     placeId: string,
     markdown: string,
   ): Effect.Effect<{ posted: true } | { failure: MessagingPostFailure }>;
+  /**
+   * Posts a note into an OpenBot channel of this host. The same operation id posts once. Absent where
+   * this host has no channels.
+   */
+  channelPost?: (input: {
+    operationId: string;
+    channelId: string;
+    author: { id: string; name: string };
+    text: string;
+  }) => Effect.Effect<"posted" | "missing" | "archived", { readonly cause: unknown }>;
   /** Replies, posts or reacts in a Discord server; absent where this host has no messaging. */
   discordSend?: (
     connectionId: string,
@@ -244,8 +255,11 @@ export interface WorkflowsDependencies {
     connectionId: string,
     send: MessagingSlackSend,
   ) => Effect.Effect<{ posted: true } | { failure: MessagingPostFailure }>;
-  /** The workflow whose graph, title, versions or runs changed. */
-  changed(workflowId: string): void;
+  /**
+   * The workflow whose graph, title, versions or runs changed. `agentId` names the agent whose tool
+   * call made or saved it; only this computer's event carries it.
+   */
+  changed(workflowId: string, agentId?: string): void;
   /**
    * Plans the schedule timer again: a trigger changed, or a run ended, and an occurrence that waited
    * for it is due.
@@ -307,10 +321,12 @@ interface WorkflowsShape {
   /** Every workflow with its graph, in one read. */
   listWithGraphs(): Effect.Effect<{ summary: WorkflowSummary; graph: WorkflowGraph }[], WorkflowFailed>;
   get(workflowId: string): Effect.Effect<WorkflowDetail, WorkflowFailed>;
-  create(input: CreateWorkflowInput): Effect.Effect<WorkflowDetail, WorkflowFailed>;
+  /** `agentId`: the agent whose tool call makes it. The change event names it, so an open canvas shows the build. */
+  create(input: CreateWorkflowInput, agentId?: string): Effect.Effect<WorkflowDetail, WorkflowFailed>;
   rename(input: RenameWorkflowInput): Effect.Effect<WorkflowSummary, WorkflowFailed>;
   remove(workflowId: string): Effect.Effect<void, WorkflowFailed>;
-  saveGraph(input: SaveWorkflowGraphInput): Effect.Effect<WorkflowSaveResult, WorkflowFailed>;
+  /** `agentId`: the agent whose tool call saves it, as for `create`. */
+  saveGraph(input: SaveWorkflowGraphInput, agentId?: string): Effect.Effect<WorkflowSaveResult, WorkflowFailed>;
   versions(workflowId: string): Effect.Effect<WorkflowVersion[], WorkflowFailed>;
   restoreVersion(input: WorkflowVersionInput): Effect.Effect<WorkflowDetail, WorkflowFailed>;
   /** The graph that a restore of the version would put back, or null when there is no such version. */
@@ -568,6 +584,60 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
           const output = runs.output(step.id);
           return output ? startPost(step, output) : Effect.void;
         };
+
+        /**
+         * Posts the input into an OpenBot channel as a note of the workflow. The step id is the operation
+         * id, so the same call after a restart does not post it twice.
+         */
+        const sendChannelNote = Effect.fn("Workflows.sendChannelNote")(function* (
+          step: StoredWorkflowStep,
+          node: WorkflowNode,
+        ) {
+          const channelId = fieldText(node, "channelId");
+          if (!channelId) {
+            settle(step, { status: "failed", error: sourceText("error.workflow.outputChannelMissing") });
+            return;
+          }
+          // Nothing to say: the channel gets no post, as for a messaging place.
+          if (!step.input.trim()) {
+            settle(step, { status: "done", output: "" });
+            return;
+          }
+          if (!dependencies.channelPost) {
+            settle(step, { status: "failed", error: sourceText("error.workflow.outputChannelFailed") });
+            return;
+          }
+          const posted = yield* dependencies
+            .channelPost({
+              operationId: step.id,
+              channelId,
+              author: {
+                id: `workflow:${step.workflowId}`,
+                name: titleOf(step.workflowId).slice(0, INPUT_LIMITS.accountName),
+              },
+              text: step.input,
+            })
+            .pipe(
+              Effect.catch((failure) =>
+                Effect.sync(() => {
+                  logger.warn("A workflow output could not post into a channel.", { cause: String(failure.cause) });
+                  return "failed" as const;
+                }),
+              ),
+            );
+          if (posted === "posted") settle(step, { status: "done", output: step.input });
+          else
+            settle(step, {
+              status: "failed",
+              error: sourceText(
+                posted === "archived"
+                  ? "error.backend.channelArchived"
+                  : posted === "missing"
+                    ? "error.backend.channelNotFound"
+                    : "error.workflow.outputChannelFailed",
+              ),
+            });
+        });
 
         /**
          * Ends an output step whose post has no fiber, after a restart: a post that did not start is
@@ -853,6 +923,10 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             if ("error" in plan) return settle(step, { status: "failed", error: plan.error });
             return yield* resumeOutput(step, slackPost(plan));
           }
+          if (node && fieldText(node, "target") === "chat-channel") {
+            yield* sendChannelNote(step, node);
+            return runs.step(step.id)?.status !== "running";
+          }
           if (!node || fieldText(node, "target") !== "github") return yield* resumeOutput(step);
           yield* sendGitHub(step, node, run);
           return runs.step(step.id)?.status !== "running";
@@ -896,6 +970,10 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             case "output":
               if (fieldText(node, "target") === "channel") {
                 yield* sendOutput(step, node);
+                return;
+              }
+              if (fieldText(node, "target") === "chat-channel") {
+                yield* sendChannelNote(step, node);
                 return;
               }
               if (fieldText(node, "target") === "github") {
@@ -975,6 +1053,31 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             { triggerNodeId: run.triggerNodeId, fromNodeId: run.fromNodeId },
             new Set([...latest.values()].filter((step) => step.status === "done").map((step) => step.nodeId)),
           );
+
+        /**
+         * The graph that an answer ran with: the graph of its run. A step alone has no run, and a retry
+         * ran with the node's settings at the time of the retry, so their graph is not known. Each run
+         * is read once.
+         */
+        const answerGraphs = () => {
+          const read = new Map<string, { graph: WorkflowGraph; steps: StoredWorkflowStep[] } | null>();
+          return (step: StoredWorkflowStep) => {
+            if (step.runId === null) return undefined;
+            let run = read.get(step.runId);
+            if (run === undefined) {
+              const found = runs.run(step.runId);
+              run = found ? { graph: found.graph, steps: runs.steps(found.id) } : null;
+              read.set(step.runId, run);
+            }
+            const retry = run?.steps.some(
+              (earlier) =>
+                earlier.nodeId === step.nodeId &&
+                earlier.attempt === step.attempt - 1 &&
+                (earlier.status === "failed" || earlier.status === "stopped"),
+            );
+            return run && !retry ? run.graph : undefined;
+          };
+        };
 
         /** Starts every node of the run that can start now, then sets the run's status. */
         const advance = Effect.fn("Workflows.advance")(function* (runId: string) {
@@ -1117,11 +1220,11 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
           return yield* attempt(() => detailOf(workflowId));
         });
 
-        const create = Effect.fn("Workflows.create")(function* (input: CreateWorkflowInput) {
+        const create = Effect.fn("Workflows.create")(function* (input: CreateWorkflowInput, agentId?: string) {
           const detail = yield* attempt(() =>
             store.create(input.graph ? { ...input, graph: prepareGraph(input.graph) } : input, now()),
           );
-          changed(detail.summary.id);
+          changed(detail.summary.id, agentId);
           rearm();
           watchGitHub();
           return detail;
@@ -1148,13 +1251,13 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
           );
         });
 
-        const saveGraph = Effect.fn("Workflows.saveGraph")(function* (input: SaveWorkflowGraphInput) {
+        const saveGraph = Effect.fn("Workflows.saveGraph")(function* (input: SaveWorkflowGraphInput, agentId?: string) {
           const result = yield* attempt(() =>
             store.saveGraph(input.workflowId, input.baseRevision, prepareGraph(input.graph), now()),
           );
           // A conflict changed nothing: the editor that saved gets the newer workflow in the answer.
           if (result.ok) {
-            changed(input.workflowId);
+            changed(input.workflowId, agentId);
             rearm();
             watchGitHub();
           }
@@ -1193,7 +1296,7 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             fromNodeId: from && from.kind !== "trigger" ? from.id : null,
           };
           const workflowId = detail.summary.id;
-          const answered = runs.latestDone(workflowId);
+          const answered = currentAnswers(detail.graph, runs.latestDone(workflowId), answerGraphs());
           const scope = runScope(detail.graph, start, new Set(answered.keys()));
           if (detail.graph.nodes.some((node) => scope.nodes.has(node.id) && unsupportedNode(node)))
             return yield* refuse("refused", sourceText("error.workflow.nodeUnsupported"));

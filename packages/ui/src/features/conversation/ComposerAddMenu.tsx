@@ -1,8 +1,8 @@
 import {
   AudioLines,
+  CircleDot,
   DropdownMenu,
   File,
-  Image,
   MessageCirclePlus,
   MessageCircleQuestionMark,
   Plus,
@@ -16,10 +16,12 @@ export interface ComposerAddMenuProps {
   onOpenChange: (open: boolean) => void;
   disabled: boolean;
   attachDisabled?: boolean | undefined;
-  /** Opens the file picker. Without it, the menu has no image or context item. */
+  /** Opens the file picker. Without it, the menu has no attach item. */
   onAttach?: (() => void) | undefined;
   /** Opens the skill picker of the editor, after the menu gave the focus back. Without it, no skill item. */
   onPickSkill?: (() => void) | undefined;
+  /** Starts the recording of a task that the user shows in the browser. Without it, no teach item. */
+  onTeach?: (() => void) | undefined;
   /** Without it, no side question item. */
   onSideQuestion?: (() => void) | undefined;
   /** Without it, no voice conversation item. */
@@ -68,8 +70,8 @@ export function ComposerAddMenu(props: ComposerAddMenuProps) {
               }}
               onKeyDown={attachFromKey}
             >
-              <Image aria-hidden="true" />
-              <span>{t("composer.add.image")}</span>
+              <File aria-hidden="true" />
+              <span>{t("composer.add.files")}</span>
             </DropdownMenu.Item>
           </Show>
           {/* Fork: a subagent belongs to the chat whose plus menu made it. */}
@@ -94,17 +96,13 @@ export function ComposerAddMenu(props: ComposerAddMenuProps) {
               <span>{t("composer.add.skill")}</span>
             </DropdownMenu.Item>
           </Show>
-          <Show when={props.onAttach}>
-            <DropdownMenu.Item
-              disabled={props.attachDisabled ?? false}
-              onPointerDown={(event) => {
-                if (event.button === 0) attach();
-              }}
-              onKeyDown={attachFromKey}
-            >
-              <File aria-hidden="true" />
-              <span>{t("composer.add.context")}</span>
-            </DropdownMenu.Item>
+          <Show when={props.onTeach}>
+            {(teach) => (
+              <DropdownMenu.Item onSelectAfterClose={() => teach()()}>
+                <CircleDot class="composer-add-record" aria-hidden="true" />
+                <span>{t("composer.add.teach")}</span>
+              </DropdownMenu.Item>
+            )}
           </Show>
           <Show when={props.onSideQuestion}>
             {(open) => (

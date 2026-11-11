@@ -16,7 +16,7 @@ export const MESSAGING_PLATFORMS = ["slack", "discord", "telegram", "whatsapp"] 
 export type MessagingPlatform = (typeof MESSAGING_PLATFORMS)[number];
 /**
  * The platforms that a joined server manages through `connectors-v1`, whose codec is frozen. A
- * WhatsApp number links by a code on its host's own screen, so it is not one of them.
+ * WhatsApp number has its own capability, `whatsapp-connector-v1`, so it is not one of them.
  */
 export const CONNECTOR_MESSAGING_PLATFORMS = ["slack", "discord", "telegram"] as const;
 export type ConnectorMessagingPlatform = (typeof CONNECTOR_MESSAGING_PLATFORMS)[number];
@@ -334,6 +334,12 @@ export interface WhatsAppAccount {
    * where an unknown person gets a pairing code.
    */
   ownNumber: boolean;
+  /**
+   * False when the owner turned off the "Waiting" and "Working on it…" posts: a request then gets only
+   * a reaction and its answer. Absent when the host cannot set it (a joined server without
+   * `whatsapp-working-message-v1`): the host then always posts them, and the client shows no switch.
+   */
+  workingMessage?: boolean;
   allowedSenders: WhatsAppSender[];
   pendingRequests: WhatsAppPairingRequest[];
 }
@@ -394,6 +400,16 @@ export interface SetWhatsAppOwnNumberInput {
   ownNumber: boolean;
 }
 
+export interface SetWhatsAppWorkingMessageInput {
+  workspaceId: string;
+  workingMessage: boolean;
+}
+
+/** The "Working on it…" setting of each linked number of a joined server (`whatsapp-working-message-v1`). */
+export interface WhatsAppWorkingMessageList {
+  numbers: { workspaceId: string; workingMessage: boolean }[];
+}
+
 /** Creates the WhatsApp Orchestrator, which every linked number shares. */
 export type AddWhatsAppOrchestratorInput = Omit<AddMessagingOrchestratorInput, "workspaceId">;
 
@@ -430,6 +446,7 @@ function isWhatsAppAccount(value: unknown): value is WhatsAppAccount {
     isDynamicRecord(value) &&
     isIdentifier(value.workspaceId) &&
     isBoolean(value.ownNumber) &&
+    (value.workingMessage === undefined || isBoolean(value.workingMessage)) &&
     Array.isArray(value.allowedSenders) &&
     value.allowedSenders.length <= MESSAGING_LIMITS.allowedSenders &&
     value.allowedSenders.every(isWhatsAppSender) &&
@@ -456,8 +473,60 @@ export function isWhatsAppLinkState(value: unknown): value is WhatsAppLinkState 
     isNullableBoundedString(value.qr, 1_024) &&
     (value.code === null || (typeof value.code === "string" && PAIRING_CODE.test(value.code))) &&
     (value.workspaceId === null || isIdentifier(value.workspaceId)) &&
-    (value.error === null || isOneOf(["timeout", "refused", "busy", "unavailable"] as const, value.error))
+    (value.error === null || isOneOf(WHATSAPP_LINK_ERRORS, value.error))
   );
+}
+
+const WHATSAPP_LINK_ERRORS = ["timeout", "refused", "busy", "unavailable"] as const;
+
+/**
+ * Reads a joined server's WhatsApp numbers (`whatsapp-connector-v1`). A connection state that this
+ * build does not know shows as an error, as in `decodeHostMessagingOverview`.
+ */
+export function decodeHostWhatsAppOverview(value: unknown): WhatsAppOverview {
+  const overview = { ...decodeHostMessagingOverview(value), accounts: isDynamicRecord(value) ? value.accounts : null };
+  if (!isWhatsAppOverview(overview)) throw new Error("Invalid WhatsApp response.");
+  return overview;
+}
+
+export function isWhatsAppWorkingMessageList(value: unknown): value is WhatsAppWorkingMessageList {
+  return (
+    isDynamicRecord(value) &&
+    Array.isArray(value.numbers) &&
+    value.numbers.length <= MESSAGING_LIMITS.connections &&
+    value.numbers.every(
+      (entry: unknown) => isDynamicRecord(entry) && isIdentifier(entry.workspaceId) && isBoolean(entry.workingMessage),
+    )
+  );
+}
+
+/**
+ * A joined server's WhatsApp numbers with the "Working on it…" setting of each. `settings` is null
+ * for a host without `whatsapp-working-message-v1`: the accounts then carry no setting.
+ */
+export function withWhatsAppWorkingMessages(
+  overview: WhatsAppOverview,
+  settings: WhatsAppWorkingMessageList | null,
+): WhatsAppOverview {
+  if (!settings) return overview;
+  const values = new Map(settings.numbers.map((entry) => [entry.workspaceId, entry.workingMessage]));
+  return {
+    ...overview,
+    accounts: overview.accounts.map((account) => {
+      const workingMessage = values.get(account.workspaceId);
+      return workingMessage === undefined ? account : { ...account, workingMessage };
+    }),
+  };
+}
+
+/** Reads a joined server's link. A link error that this build does not know reads as `unavailable`. */
+export function decodeHostWhatsAppLinkState(value: unknown): WhatsAppLinkState {
+  const state =
+    isDynamicRecord(value) && value.error !== null && !isOneOf(WHATSAPP_LINK_ERRORS, value.error)
+      ? { ...value, error: "unavailable" }
+      : value;
+  if (!isWhatsAppLinkState(state)) throw new Error("Invalid WhatsApp response.");
+  return state;
 }
 
 export function isWhatsAppGroupList(value: unknown): value is WhatsAppGroupList {

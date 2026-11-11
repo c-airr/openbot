@@ -96,6 +96,8 @@ export const messages = {
   "provider.codeLogin.relayStarting": "{name} oturum açma işlemi {host} üzerinde başlatılıyor…",
   "provider.codeLogin.pageOpening": "{name} oturum açma sayfası {host} üzerinde açılıyor…",
   "provider.codeLogin.linkStep": "{name} hesabında oturum açın. OpenBot kendiliğinden devam eder.",
+  "provider.codeLogin.chatgptDeviceSetting":
+    "Bir bilgisayarda ChatGPT'de güvenlik ayarlarını açın ve Codex için cihaz koduyla oturum açmayı açın. İş hesabında bunu çalışma alanı yöneticiniz açar.",
   "provider.useApp.title": "{name} bağlantısını OpenBot uygulamasında yapın",
   "provider.useApp.description":
     "{name} oturum açma işlemi onu başlatan bilgisayara döner ve bir tarayıcı sekmesi bunu alamaz. {name} bağlantısını OpenBot uygulamasında yapın. Uygulama oturum açmayı kendiliğinden tamamlar.",
@@ -118,8 +120,14 @@ export const messages = {
   "provider.picker.olderModels": "Eski modeller",
   "provider.picker.olderModelsList": "Eski {name} modelleri",
   "provider.picker.noModels": "{name} sağlayıcısından kullanılabilir model yok.",
+  "provider.picker.museNoModels":
+    "Muse bu hesap için model göndermedi. Muse, bu ajanın çalıştığı ülkede kullanılamıyor olabilir. Başka bir sağlayıcıdan model seçin.",
   "provider.picker.customEmpty":
     "OpenAI uyumlu bir uç nokta ekleyin — bu bilgisayardaki bir model sunucusu veya bir temel URL ve anahtara sahip herhangi bir hizmet.",
+  "provider.picker.customPending":
+    "Uç noktalarınızın modelleri henüz yüklenmedi. Sağlayıcı bunları geçerli görevi durduktan sonra okur.",
+  "provider.picker.customUnlisted": "{name}, uç noktalarınızın modellerini listelemiyor.",
+  "provider.picker.editEndpoints": "Uç noktaları düzenle",
   "provider.picker.defaultModelLabel": "{name}, varsayılan",
   "provider.picker.usageLimit": "Kullanım sınırına ulaşıldı",
   "provider.picker.usageLimitWindow": "{window} sınırı",
@@ -130,7 +138,12 @@ export const messages = {
   "provider.picker.effortLabel": "Ajan akıl yürütme eforu",
   "provider.picker.effortFixed": "{effort}, {provider} tarafından sabit",
   "provider.picker.fast": "Hızlı",
-  "provider.picker.fastLabel": "Hızlı mod",
+  "provider.picker.fastText": "Daha hızlı yanıtlar, daha fazla kullanım",
+  "provider.picker.speed": "Hız",
+  "provider.picker.standard": "Standart",
+  "provider.picker.standardText": "Varsayılan hız",
+  "provider.picker.ultrafast": "Ultra hızlı",
+  "provider.picker.ultrafastText": "En hızlı yanıtlar, çok daha fazla kullanım",
   "provider.picker.selectEffort": "Efor seçin",
   "provider.picker.custom": "Özel",
   "provider.picker.cliReady": "{cli} hazır",
@@ -157,7 +170,7 @@ export const messages = {
   "provider.geminiKey.label": "Gemini API anahtarı",
   "provider.claudeKey.title": "Anthropic API anahtarı",
   "provider.claudeKey.description":
-    'Ana bilgisayara bir Anthropic API anahtarı kaydedin. Anthropic her isteği anahtara faturalar. Bir ajan için kullanmak üzere ajanın model menüsünde "API anahtarı" hesabını seçin. Claude\'da oturum açık değilse tüm ajanlar anahtarı kullanır.',
+    'Ana bilgisayara bir Anthropic API anahtarı kaydedin. Anthropic her isteği Claude planınıza değil, anahtarın API kredisine faturalar. Bir ajan için kullanmak üzere ajanın model menüsünde "API anahtarı" hesabını seçin. Claude\'da oturum açık değilse tüm ajanlar anahtarı kullanır.',
   "provider.claudeKey.label": "Anthropic API anahtarı",
   "provider.inceptionKey.title": "Inception API anahtarı",
   "provider.inceptionKey.description":
@@ -227,6 +240,20 @@ export const messages = {
   "provider.settings.promptCacheHour": "1 saat",
   "provider.settings.promptCacheDefault": "Claude Code varsayılanı",
   "provider.settings.promptCacheLoadFailed": "Bu sunucunun istem önbelleği süresi yüklenemedi.",
+  "provider.settings.claudeSetup": "Claude Code",
+  "provider.settings.claudeUserSetup": "Kendi Claude Code kurulumumu kullan",
+  "provider.settings.claudeUserSetupDescription":
+    "Ajanlar CLAUDE.md dosyanızı, becerilerinizi, ajanlarınızı, kancalarınızı ve eklentilerinizi ~/.claude klasöründen yükler. Kapalıyken her tur daha kısa bir istem gönderir. Çalışma alanı dosyaları yine yüklenir.",
+  "provider.settings.claudeUserSetupServerDescription":
+    "Ajanlar sunucudaki ~/.claude konumundan CLAUDE.md, beceriler, ajanlar, hook’lar ve eklentileri yükler. Kapalıyken her tur daha kısa bir istem gönderir. Çalışma alanı dosyaları yine yüklenir.",
+  "provider.settings.claudeUserSetupLoadFailed": "Claude Code ayarı yüklenemedi.",
+  "provider.settings.context": "Bağlam",
+  "provider.settings.compactWindow": "Sohbetleri sıkıştırma boyutu",
+  "provider.settings.compactWindowDescription":
+    "Sohbet bu boyuta ulaştığında Claude Code eski turları özetler. Düşük değer turları hızlı ve ucuz tutar. Yüksek değer daha fazla ayrıntı tutar. Daha küçük pencereli bir model kendi sınırında sıkıştırır.",
+  "provider.settings.compactWindowDefault": "Claude Code varsayılanı",
+  "provider.settings.compactWindowTokens": "{size} token",
+  "provider.settings.compactWindowLoadFailed": "Bu sunucunun sıkıştırma boyutu yüklenemedi.",
   "provider.settings.models": "Modeller",
   "provider.settings.modelsDescription": {
     one: "{count} modelden {shown} tanesi model seçicide görünür.",
@@ -239,17 +266,10 @@ export const messages = {
   "provider.settings.modelShow": "{name} ({id}) modelini model seçicide göster",
   "provider.settings.modelsNoMatch": "Aramanızla eşleşen model yok.",
   "provider.settings.modelsLoadFailed": "Bu sunucunun modelleri yüklenemedi.",
-  "provider.settings.download": "İndirme",
-  "provider.settings.downloadedCli": "{name} CLI",
-  "provider.settings.downloadDetail": {
-    one: "{version} · 1 sürüm · {size}",
-    other: "{version} · {count} sürüm · {size}",
-  },
-  "provider.settings.downloadVersions": { one: "1 sürüm · {size}", other: "{count} sürüm · {size}" },
-  "provider.settings.downloadAgain": "{name} açıldığında OpenBot CLI'yi yeniden indirir.",
-  "provider.settings.removeDownloadConfirm": "{size} kaldırılsın mı?",
-  "provider.settings.removeDownloadKeeps": "Hesaplar, oturumlar ve ajanlar kalır.",
-  "provider.settings.removeDownload": "İndirmeyi kaldır",
-  "provider.settings.removingDownload": "Kaldırılıyor…",
+  "provider.settings.deleteTitle": "{name} sil",
+  "provider.settings.deleteOn":
+    "{name} kapatılır ve OpenBot'un indirdiği CLI silinir. Hesaplar, oturumlar ve ajanlar kalır.",
+  "provider.settings.deleteOff":
+    "OpenBot'un {name} için indirdiği CLI silinir ({size}). Hesaplar, oturumlar ve ajanlar kalır.",
   "provider.settings.removeDownloadFailed": "İndirme kaldırılamadı.",
 } as const satisfies PartialTranslation<typeof source>;

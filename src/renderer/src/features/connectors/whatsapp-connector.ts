@@ -4,6 +4,7 @@ import type {
   WhatsAppLinkState,
   WhatsAppOverview,
 } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
 import { WHATSAPP_LINK_IDLE } from "@openbot/ui/features/settings/WhatsAppIntegrationPanel";
 import { currentText } from "@openbot/ui/text";
 import { createSignal, onCleanup, untrack } from "solid-js";
@@ -14,10 +15,7 @@ import {
 } from "./connector-controller";
 import type { MessagingConnectorOptions } from "./messaging-connector";
 
-/**
- * The WhatsApp requests to main. A number links by a code on the screen of the computer that runs
- * OpenBot, so only this computer has them; a joined server does not.
- */
+/** The WhatsApp requests of one server: this computer's, or a joined server's (`whatsapp-connector-v1`). */
 export type WhatsAppPort = Pick<
   MessagingDesktopApi,
   | "getWhatsAppOverview"
@@ -33,10 +31,62 @@ export type WhatsAppPort = Pick<
   | "removeWhatsAppSender"
   | "answerWhatsAppRequest"
   | "setWhatsAppOwnNumber"
+  | "setWhatsAppWorkingMessage"
 >;
 
 /** This computer's WhatsApp, through main. Read on each call: tests and stories replace `window.openbot`. */
 export const whatsappPort = (): WhatsAppPort => window.openbot.messaging;
+
+/** The `whatsapp-connector-v1` requests to a joined server: main's, or the browser client's. */
+export type HostWhatsAppApi = Pick<
+  MessagingDesktopApi,
+  | "hostGetWhatsAppOverview"
+  | "hostStartWhatsAppLink"
+  | "hostGetWhatsAppLinkState"
+  | "hostCancelWhatsAppLink"
+  | "hostDisconnectWhatsAppNumber"
+  | "hostReconnectWhatsAppNumber"
+  | "hostSetWhatsAppEnabled"
+  | "hostAddWhatsAppOrchestrator"
+  | "hostListWhatsAppGroups"
+  | "hostAddWhatsAppSender"
+  | "hostRemoveWhatsAppSender"
+  | "hostAnswerWhatsAppRequest"
+  | "hostSetWhatsAppOwnNumber"
+  | "hostSetWhatsAppWorkingMessage"
+>;
+
+/**
+ * The WhatsApp numbers of the joined server that `serverId` names, through main or the browser
+ * client's `host`. The orchestrator starts on the host's default provider and model, so a choice is
+ * not sent.
+ */
+export function hostWhatsAppPort(
+  serverId: () => string | undefined,
+  host: () => HostWhatsAppApi = () => window.openbot.messaging,
+): WhatsAppPort {
+  const call = <T>(method: (api: HostWhatsAppApi, serverId: string) => Promise<T>) => {
+    const id = serverId();
+    if (!id) return Promise.reject(new Error(sourceText("error.team.connectorsUnsupported")));
+    return method(host(), id);
+  };
+  return {
+    getWhatsAppOverview: () => call((api, id) => api.hostGetWhatsAppOverview(id)),
+    startWhatsAppLink: (input) => call((api, id) => api.hostStartWhatsAppLink(input, id)),
+    getWhatsAppLinkState: () => call((api, id) => api.hostGetWhatsAppLinkState(id)),
+    cancelWhatsAppLink: () => call((api, id) => api.hostCancelWhatsAppLink(id)),
+    disconnectWhatsAppNumber: (input) => call((api, id) => api.hostDisconnectWhatsAppNumber(input, id)),
+    reconnectWhatsAppNumber: (input) => call((api, id) => api.hostReconnectWhatsAppNumber(input, id)),
+    setWhatsAppEnabled: (input) => call((api, id) => api.hostSetWhatsAppEnabled(input, id)),
+    addWhatsAppOrchestrator: () => call((api, id) => api.hostAddWhatsAppOrchestrator(id)),
+    listWhatsAppGroups: (input) => call((api, id) => api.hostListWhatsAppGroups(input, id)),
+    addWhatsAppSender: (input) => call((api, id) => api.hostAddWhatsAppSender(input, id)),
+    removeWhatsAppSender: (input) => call((api, id) => api.hostRemoveWhatsAppSender(input, id)),
+    answerWhatsAppRequest: (input) => call((api, id) => api.hostAnswerWhatsAppRequest(input, id)),
+    setWhatsAppOwnNumber: (input) => call((api, id) => api.hostSetWhatsAppOwnNumber(input, id)),
+    setWhatsAppWorkingMessage: (input) => call((api, id) => api.hostSetWhatsAppWorkingMessage(input, id)),
+  };
+}
 
 /** How often a page reads the numbers while it shows: a number changes on its own. */
 const POLL_MS = 3_000;
@@ -147,6 +197,9 @@ export function createWhatsAppConnector(
         get agents() {
           return options.agents();
         },
+        get hostName() {
+          return options.hostName?.();
+        },
         get connections() {
           return connections();
         },
@@ -180,6 +233,8 @@ export function createWhatsAppConnector(
         onSetEnabled: (workspaceId, enabled) =>
           run(() => port().setWhatsAppEnabled({ workspaceId, enabled }), enabled ? "enabled" : "disabled"),
         onSetOwnNumber: (workspaceId, ownNumber) => run(() => port().setWhatsAppOwnNumber({ workspaceId, ownNumber })),
+        onSetWorkingMessage: (workspaceId, workingMessage) =>
+          run(() => port().setWhatsAppWorkingMessage({ workspaceId, workingMessage })),
         onAddOrchestrator: (choice) =>
           run(async () => {
             const { sectionId } = await port().addWhatsAppOrchestrator({ ...(choice ?? {}) });

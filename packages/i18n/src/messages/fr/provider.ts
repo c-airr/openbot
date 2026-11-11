@@ -105,6 +105,8 @@ export const messages = {
   "provider.codeLogin.relayStarting": "Démarrage de la connexion à {name} sur {host}…",
   "provider.codeLogin.pageOpening": "Ouverture de la page de connexion de {name} sur {host}…",
   "provider.codeLogin.linkStep": "Connectez-vous à {name}. OpenBot continue tout seul.",
+  "provider.codeLogin.chatgptDeviceSetting":
+    "Dans ChatGPT sur un ordinateur, ouvrez les paramètres de sécurité et activez la connexion par code d’appareil pour Codex. Pour un compte professionnel, l’administrateur de votre espace de travail l’active.",
   "provider.useApp.title": "Connectez {name} dans l’app OpenBot",
   "provider.useApp.description":
     "La connexion à {name} revient sur l’ordinateur qui l’a lancée, et un onglet du navigateur ne peut pas la recevoir. Connectez {name} dans l’app OpenBot. L’app termine la connexion toute seule.",
@@ -127,8 +129,14 @@ export const messages = {
   "provider.picker.olderModels": "Modèles plus anciens",
   "provider.picker.olderModelsList": "Modèles {name} plus anciens",
   "provider.picker.noModels": "Aucun modèle n’est disponible chez {name}.",
+  "provider.picker.museNoModels":
+    "Muse n’a envoyé aucun modèle pour ce compte. Muse n’est peut-être pas disponible dans le pays où cet agent s’exécute. Choisissez un modèle d’un autre fournisseur.",
   "provider.picker.customEmpty":
     "Ajoutez un point de terminaison compatible OpenAI : un serveur de modèles sur cet ordinateur, ou tout service avec une URL de base et une clé.",
+  "provider.picker.customPending":
+    "Les modèles de vos points de terminaison ne sont pas encore chargés. Le fournisseur les lit quand sa tâche en cours s’arrête.",
+  "provider.picker.customUnlisted": "{name} ne liste pas les modèles de vos points de terminaison.",
+  "provider.picker.editEndpoints": "Modifier",
   "provider.picker.defaultModelLabel": "{name}, par défaut",
   "provider.picker.usageLimit": "Limite d’utilisation atteinte",
   "provider.picker.usageLimitWindow": "Limite ({window})",
@@ -139,7 +147,12 @@ export const messages = {
   "provider.picker.effortLabel": "Effort de raisonnement de l’agent",
   "provider.picker.effortFixed": "{effort}, fixé par {provider}",
   "provider.picker.fast": "Rapide",
-  "provider.picker.fastLabel": "Mode rapide",
+  "provider.picker.fastText": "Réponses plus rapides, utilisation accrue",
+  "provider.picker.speed": "Vitesse",
+  "provider.picker.standard": "Standard",
+  "provider.picker.standardText": "Vitesse par défaut",
+  "provider.picker.ultrafast": "Ultrarapide",
+  "provider.picker.ultrafastText": "Les réponses les plus rapides, utilisation bien plus élevée",
   "provider.picker.selectEffort": "Choisir l’effort",
   "provider.picker.custom": "Personnalisé",
   "provider.picker.cliReady": "{cli} prêt",
@@ -166,7 +179,7 @@ export const messages = {
   "provider.geminiKey.label": "Clé d’API Gemini",
   "provider.claudeKey.title": "Clé d’API Anthropic",
   "provider.claudeKey.description":
-    "Enregistrez une clé API Anthropic sur l'hôte. Anthropic facture chaque requête à la clé. Pour l'utiliser pour un agent, sélectionnez le compte « Clé API » dans le menu des modèles de l'agent. Si Claude n'est pas connecté, tous les agents utilisent la clé.",
+    "Enregistrez une clé API Anthropic sur l'hôte. Anthropic facture chaque requête au crédit API de la clé, pas à votre forfait Claude. Pour l'utiliser pour un agent, sélectionnez le compte « Clé API » dans le menu des modèles de l'agent. Si Claude n'est pas connecté, tous les agents utilisent la clé.",
   "provider.claudeKey.label": "Clé d’API Anthropic",
   "provider.inceptionKey.title": "Clé d’API Inception",
   "provider.inceptionKey.description":
@@ -236,6 +249,20 @@ export const messages = {
   "provider.settings.promptCacheHour": "1 heure",
   "provider.settings.promptCacheDefault": "Défaut de Claude Code",
   "provider.settings.promptCacheLoadFailed": "Impossible de charger la durée du cache de prompt de ce serveur.",
+  "provider.settings.claudeSetup": "Claude Code",
+  "provider.settings.claudeUserSetup": "Utiliser ma configuration Claude Code",
+  "provider.settings.claudeUserSetupDescription":
+    "Les agents chargent votre CLAUDE.md, vos skills, agents, hooks et plugins depuis ~/.claude. Désactivé, chaque tour envoie un prompt plus court. Les fichiers de l’espace de travail restent chargés.",
+  "provider.settings.claudeUserSetupServerDescription":
+    "Les agents chargent CLAUDE.md, les skills, agents, hooks et plugins depuis ~/.claude sur le serveur. Désactivé, chaque tour envoie un prompt plus court. Les fichiers de l’espace de travail restent chargés.",
+  "provider.settings.claudeUserSetupLoadFailed": "Impossible de charger le réglage Claude Code.",
+  "provider.settings.context": "Contexte",
+  "provider.settings.compactWindow": "Compacter les chats à",
+  "provider.settings.compactWindowDescription":
+    "Claude Code résume les anciens tours d’un chat quand le chat atteint cette taille. Plus bas garde des tours rapides et économiques. Plus haut garde plus de détails. Un modèle avec une fenêtre plus petite compacte à sa propre limite.",
+  "provider.settings.compactWindowDefault": "Défaut de Claude Code",
+  "provider.settings.compactWindowTokens": "{size} jetons",
+  "provider.settings.compactWindowLoadFailed": "Impossible de charger la taille de compactage de ce serveur.",
   "provider.settings.models": "Modèles",
   "provider.settings.modelsDescription": {
     one: "{shown} modèle sur {count} apparaît dans le sélecteur de modèle.",
@@ -248,17 +275,10 @@ export const messages = {
   "provider.settings.modelShow": "Afficher {name} ({id}) dans le sélecteur de modèle",
   "provider.settings.modelsNoMatch": "Aucun modèle ne correspond à votre recherche.",
   "provider.settings.modelsLoadFailed": "Impossible de charger les modèles de ce serveur.",
-  "provider.settings.download": "Téléchargement",
-  "provider.settings.downloadedCli": "CLI {name}",
-  "provider.settings.downloadDetail": {
-    one: "{version} · 1 version · {size}",
-    other: "{version} · {count} versions · {size}",
-  },
-  "provider.settings.downloadVersions": { one: "1 version · {size}", other: "{count} versions · {size}" },
-  "provider.settings.downloadAgain": "Quand vous activez {name}, OpenBot télécharge à nouveau sa CLI.",
-  "provider.settings.removeDownloadConfirm": "Supprimer {size} ?",
-  "provider.settings.removeDownloadKeeps": "Les comptes, les connexions et les agents restent.",
-  "provider.settings.removeDownload": "Supprimer le téléchargement",
-  "provider.settings.removingDownload": "Suppression…",
+  "provider.settings.deleteTitle": "Supprimer {name}",
+  "provider.settings.deleteOn":
+    "Désactive {name} et supprime la CLI qu'OpenBot a téléchargée. Les comptes, les connexions et les agents restent.",
+  "provider.settings.deleteOff":
+    "Supprime la CLI qu'OpenBot a téléchargée pour {name} ({size}). Les comptes, les connexions et les agents restent.",
   "provider.settings.removeDownloadFailed": "Impossible de supprimer le téléchargement.",
 } as const satisfies PartialTranslation<typeof source>;

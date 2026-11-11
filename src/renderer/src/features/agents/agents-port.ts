@@ -30,6 +30,7 @@ export interface AgentsPort {
     | "getRuntimeSnapshot"
     | "setAgentHidden"
     | "archiveInactiveAgents"
+    | "setAgentNotificationLevel"
     | "setAvatar"
     | "updateAgent"
     | "updateAgentAdminSettings"

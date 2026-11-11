@@ -13,7 +13,7 @@ import { type DynamicRecord, isBoolean, isNumber, isString } from "@openbot/cont
 import { sourceText } from "@openbot/i18n/source";
 import { Cause, Effect } from "effect";
 import { type AccountAttribution, requestFirstTouch } from "./account-attribution";
-import { type AuthService, AuthServiceError, readAnalyticsAnswer } from "./auth-service";
+import { type AuthService, AuthServiceError, readAnalyticsAnswer, readChatColor } from "./auth-service";
 import { AvatarUploadError, readAvatarUpload, removeAccountAvatar, storeAccountAvatar } from "./avatar-storage";
 import { BILLING_UNAVAILABLE_STATE, BillingError, type BillingService } from "./billing-service";
 import { companySignInApiOrigin } from "./canonical-redirect";
@@ -47,10 +47,12 @@ export interface BrowserApiServices {
     | "authenticate"
     | "enforceTeamInviteRateLimit"
     | "updateAnalytics"
+    | "updateChatColor"
     | "updateName"
     | "updateAvatar"
     | "listAccountSessions"
     | "revokeAccountSession"
+    | "createServerClaimForUser"
   >;
   remote: Pick<
     RemoteControlPlane,
@@ -400,6 +402,12 @@ const handleAccount = Effect.fn("BrowserApi.handleAccount")(function* (
       return yield* new AuthServiceError(400, "invalid_analytics_preference", "The analytics setting is not valid.");
     return json(yield* services.auth.updateAnalytics(token, answer));
   }
+  if (path === "v1/me/chat-color" && request.method === "PUT") {
+    const chatColor = readChatColor(yield* readJsonObject(request));
+    if (chatColor === undefined)
+      return yield* new AuthServiceError(400, "invalid_chat_color", "The chat color is not valid.");
+    return json(yield* services.auth.updateChatColor(token, chatColor));
+  }
   if (path === AVATAR_PATH && request.method === "PUT") {
     return yield* Effect.gen(function* () {
       const upload = yield* readAvatarUpload(request);
@@ -410,6 +418,9 @@ const handleAccount = Effect.fn("BrowserApi.handleAccount")(function* (
     return json(yield* removeAccountAvatar(services.auth, services.avatarBucket(), token, user));
   if (path === "v1/me/sessions" && request.method === "GET")
     return json({ sessions: yield* services.auth.listAccountSessions(token) });
+  // The install command of a self-hosted server. Never log the claim.
+  if (path === "v2/server-claims" && request.method === "POST")
+    return json(yield* services.auth.createServerClaimForUser(user.id));
   if (path.startsWith("v1/me/billing") || path.startsWith("v1/me/license"))
     return yield* handleBilling(request, path, user, services);
   // A session ID is a UUID, so the segment needs no decoding; the service refuses any other value.

@@ -2,12 +2,15 @@
 // higgsfield servers". An agent saved an http MCP server that asks for a sign-in OpenBot does not
 // hold. OpenBot gives such a row to the provider as written, the server answers 401, and Antigravity
 // ends every turn with "The MCP server 'higgsfield' failed to initialize". Other providers start
-// without that server. Runs the real Antigravity driver over a fake server that acts as 1.4.4 does.
+// without that server. Runs the real Antigravity driver for CLI 1.5.4 over a fake that sends the
+// failure as 1.4.4 does, a form that OpenBot still accepts.
 // Cases: the turn resumes the session without the server and answers, the server is reported as a
 // drop, a new session gets the server again (a sign-in or a fix can have changed it) and leaves it
 // out the same way, and a failed server that OpenBot did not give
 // (the user's own `mcp_config.json`) stays the turn's error. A last case sends the failure message
 // before the stderr line: the turn still goes on, and the message is not shown as an answer.
+// From #7785: the user's own `mcp_config.json` has a server with the name of one that OpenBot gives.
+// The CLI then starts only its own entry, so OpenBot's server travels as `openbot_<name>`.
 // `bun run test:antigravity-mcp-load-failure`. Writes
 // .openbot-build/antigravity-mcp-load-failure-e2e/report.json.
 import assert from "node:assert/strict";
@@ -37,12 +40,15 @@ interface Report {
   requests?: LogEntry[];
   drops?: McpServerDrop[];
   stdoutFirstDeltas?: string[];
+  ownNames?: string[] | undefined;
   error?: string;
 }
 
 const root = await mkdtemp(join(tmpdir(), "openbot-antigravity-mcp-load-failure-e2e-"));
 const report: Report = { passed: false, turns: {} };
 const clients: AgentClient[] = [];
+// The driver reads and writes the sign-in in the Gemini home. Keep it off the user's `~/.gemini`.
+process.env.GEMINI_HOME = join(root, "gemini");
 
 function httpServer(id: string, name: string, url: string): McpServerConfig {
   return {
@@ -61,7 +67,7 @@ function httpServer(id: string, name: string, url: string): McpServerConfig {
 }
 
 try {
-  const executable = join(root, "agy", "bin", "agy_acp_server");
+  const executable = join(root, "agy", "bin", "antigravity");
   const workspace = join(root, "workspace");
   const release = join(root, "release");
   const log = join(root, "requests.jsonl");
@@ -74,7 +80,7 @@ try {
     httpServer("higgsfield", "higgsfield", "https://mcp.higgsfield.example/mcp"),
     httpServer("docs", "docs", "https://docs.example/mcp"),
   ];
-  const cli: AgentCliInfo = { executable, version: "1.4.4", source: "managed" };
+  const cli: AgentCliInfo = { executable, version: "1.5.4", source: "managed" };
   const client = requireProviderDriver("antigravity").createClient(cli, 20_000, {
     apiKey: () => null,
     customProviders: () => [],
@@ -120,6 +126,8 @@ try {
   report.turns.foreign = foreign;
   assert.equal(foreign.status, "failed", "The turn fails.");
   assert.match(foreign.error ?? "", /cloudflare/u, "The error names the server.");
+  // The server's own reason is runtime output, such as a traceback with a path (#7046).
+  assert.doesNotMatch(foreign.error ?? "", /Unauthorized|Fix the MCP server/u, "The error has no raw server output.");
 
   const requests = await readJsonl<LogEntry>(log);
   report.requests = requests;
@@ -131,9 +139,16 @@ try {
   assert.ok(opened[1]?.names?.includes("higgsfield"), "A new session gets the server again.");
   const resumed = sessionsOf("session/resume");
   assert.deepEqual(
-    resumed.map((request) => request.sessionId),
+    resumed.slice(0, 2).map((request) => request.sessionId),
     [opened[0]?.sessionId, opened[1]?.sessionId],
     "Each failed turn resumes its own session once.",
+  );
+  // Only one idle thread keeps its process, so the first thread can stop when the second goes idle.
+  // Its next turn then resumes its session one more time.
+  assert.deepEqual(
+    resumed.slice(2).map((request) => request.sessionId),
+    resumed.length > 2 ? [opened[0]?.sessionId] : [],
+    "Only the released first thread resumes again.",
   );
   assert.ok(!resumed[0]?.names?.includes("higgsfield"), "The resumed session does not get the failed server.");
   assert.ok(resumed[0]?.names?.includes("docs"), "The resumed session keeps the other servers.");
@@ -150,13 +165,13 @@ try {
   );
 
   // 4. The failure message comes before the stderr line.
-  const stdoutFirst = join(root, "agy-stdout-first", "bin", "agy_acp_server");
+  const stdoutFirst = join(root, "agy-stdout-first", "bin", "antigravity");
   await installFakeAgent(stdoutFirst, "antigravity-mcp-load-failure", {
     FAKE_LOG: join(root, "stdout-first.jsonl"),
     FAKE_STDOUT_FIRST: "1",
   });
   const late = requireProviderDriver("antigravity").createClient(
-    { executable: stdoutFirst, version: "1.4.4", source: "managed" },
+    { executable: stdoutFirst, version: "1.5.4", source: "managed" },
     20_000,
     { apiKey: () => null, customProviders: () => [], mcpServers: () => servers },
   );
@@ -173,6 +188,41 @@ try {
   assert.equal(lateTurn.error, null, "The turn has no error when the message comes first.");
   assert.equal(lateTurn.reply, "OK", "The turn answers when the message comes first.");
   assert.deepEqual(deltas, ["OK"], "The failure message is not shown as an answer.");
+
+  // 5. The CLI's own files name `docs` (user file) and `notes` (workspace file).
+  await mkdir(join(root, "gemini", "config"), { recursive: true });
+  await writeFile(join(root, "gemini", "config", "mcp_config.json"), JSON.stringify({ mcpServers: { docs: {} } }));
+  const ownWorkspace = join(root, "own-workspace");
+  await mkdir(join(ownWorkspace, ".agents"), { recursive: true });
+  await writeFile(join(ownWorkspace, ".agents", "mcp_config.json"), JSON.stringify({ mcpServers: { notes: {} } }));
+  const ownLog = join(root, "own.jsonl");
+  const ownExecutable = join(root, "agy-own", "bin", "antigravity");
+  await installFakeAgent(ownExecutable, "antigravity-mcp-load-failure", { FAKE_LOG: ownLog, FAKE_RELEASE: release });
+  const own = requireProviderDriver("antigravity").createClient(
+    { executable: ownExecutable, version: "1.5.4", source: "managed" },
+    20_000,
+    {
+      apiKey: () => null,
+      customProviders: () => [],
+      mcpServers: () => [
+        httpServer("docs", "docs", "https://docs.example/mcp"),
+        httpServer("notes", "notes", "https://notes.example/mcp"),
+        httpServer("wiki", "wiki", "https://wiki.example/mcp"),
+      ],
+    },
+  );
+  clients.push(own);
+  own.start();
+  const ownThread = await startThread(own, { cwd: ownWorkspace });
+  const ownTurn = await runTurn(own, ownThread, { text: "Reply with OK only.", timeoutMs: 30_000 });
+  report.turns.ownNames = ownTurn;
+  assert.equal(ownTurn.reply, "OK", "The turn answers.");
+  const ownNames = (await readJsonl<LogEntry>(ownLog)).find((request) => request.names?.includes("wiki"))?.names;
+  report.ownNames = ownNames;
+  for (const name of ["openbot_docs", "openbot_notes", "wiki"]) {
+    assert.ok(ownNames?.includes(name), `The session gets ${name}.`);
+  }
+  assert.ok(!ownNames?.includes("docs") && !ownNames?.includes("notes"), "No server has a name from the CLI's files.");
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

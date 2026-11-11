@@ -98,6 +98,7 @@ export const messages = {
   "workflow.model.providerModels": "Modèles {name}",
   "workflow.model.effort": "Effort : {name}",
   "workflow.model.effortRange": "{from}–{to}",
+  "workflow.model.auto": "Auto",
 
   "workflow.llm.title": "LLM",
   "workflow.llm.name": "étape LLM",
@@ -163,6 +164,10 @@ export const messages = {
 
   "workflow.output.title": "Sortie",
   "workflow.output.name": "sortie",
+  "workflow.output.channel.openbot": "OpenBot",
+  "workflow.output.channel.search": "Rechercher des canaux",
+  "workflow.output.postsAs": "Publie comme",
+  "workflow.output.postsAsNote": "Une note ; aucune tâche ne démarre",
   "workflow.output.target.file": "Fichier",
   "workflow.output.target.notify": "Notification",
   "workflow.output.path": "Chemin du fichier",

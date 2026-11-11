@@ -80,6 +80,18 @@ export const messages = {
   "customProvider.model.contextWindowPlaceholder": "Токены",
   "customProvider.model.maxOutput": "Максимальный вывод модели {number}",
   "customProvider.model.maxOutputPlaceholder": "Токены",
+  "customProvider.model.efforts": "Уровень усилий модели {number}",
+  "customProvider.model.effortsLabel": "Уровень усилий",
+  "customProvider.model.effortsHintOpenCode":
+    "Выберите уровни усилий, которые принимает каждая модель. Без выбора OpenCode предлагает Низкое, Среднее и Высокое.",
+  "customProvider.model.effortsHintPi":
+    "Выберите уровни усилий, которые принимает каждая модель. Без выбора модель не рассуждает.",
+  "customProvider.model.inputs": "Входные данные модели {number}",
+  "customProvider.model.inputsLabel": "Принимает",
+  "customProvider.model.inputImage": "Изображения",
+  "customProvider.model.inputPdf": "PDF",
+  "customProvider.model.inputsHint": "Выберите, что каждая модель может читать помимо текста.",
+  "customProvider.model.foundValuesHint": "Некоторые значения получены от эндпоинта. Вы можете их изменить.",
   "customProvider.model.remove": "Удалить модель {number}",
   "customProvider.model.add": "Добавить модель",
   "customProvider.headers": "Заголовки",
@@ -101,7 +113,11 @@ export const messages = {
     other: "Эндпоинт сообщает о {count} модели. Выберите модели для добавления.",
   },
   "customProvider.discovery.empty": "Эндпоинт не сообщает о моделях. Добавьте ID моделей самостоятельно.",
-  "customProvider.discovery.label": "Модели, о которых сообщает эндпоинт",
+  "customProvider.discovery.choose": "Выбрать модели",
+  "customProvider.discovery.search": "Поиск моделей",
+  "customProvider.discovery.selectAll": "Выбрать все",
+  "customProvider.discovery.deselectAll": "Снять выбор",
+  "customProvider.discovery.noMatch": "Нет моделей по вашему запросу.",
 
   "customProvider.preset.title": "Добавить провайдера или агента",
   "customProvider.preset.description": "Выберите локальный сервер моделей, эндпоинт или агента ACP.",
@@ -126,6 +142,7 @@ export const messages = {
   },
 
   "customProvider.detected.title": "Найдено на этом компьютере",
+  "customProvider.detected.titleServer": "Найдено на сервере",
   "customProvider.detected.scanning": "Ищем локальные модели и агентов.",
   "customProvider.detected.scanAgain": "Сканировать снова",
   "customProvider.detected.empty": "OpenBot не нашёл ни локального сервера моделей, ни агента ACP.",
@@ -151,6 +168,8 @@ export const messages = {
   "customProvider.detection.enabled": "Искать локальные модели и агентов",
   "customProvider.detection.enabledDescription":
     "OpenBot проверяет адреса Ollama и LM Studio по умолчанию и ищет известных агентов ACP в вашем PATH.",
+  "customProvider.detection.enabledDescriptionServer":
+    "Сервер проверяет адреса Ollama и LM Studio по умолчанию и ищет известных агентов ACP в своём PATH.",
   "customProvider.detection.addresses": "Другие адреса серверов моделей",
   "customProvider.detection.address.label": "Адрес {number}",
   "customProvider.detection.address.remove": "Удалить адрес {number}",
@@ -171,6 +190,7 @@ export const messages = {
   "customProvider.acp.agentIdHint": "Строчные буквы, цифры или дефисы. Позже изменить его нельзя.",
   "customProvider.acp.command": "Команда",
   "customProvider.acp.commandHint": "Программа для запуска. OpenBot ищет её в вашем PATH.",
+  "customProvider.acp.commandHintServer": "Программа для запуска. Сервер ищет её в своём PATH.",
   "customProvider.acp.args": "Аргументы",
   "customProvider.acp.argsHint": "Разделяйте аргументы пробелами. Аргумент с пробелами возьмите в кавычки.",
   "customProvider.acp.usagePrompt": "Команда использования",
@@ -198,6 +218,9 @@ export const messages = {
   "customProvider.acp.trustTitle": "Эта команда выполняется на вашем компьютере",
   "customProvider.acp.trustDescription":
     "OpenBot запускает её от имени вашей учётной записи. Агент может читать и изменять файлы и выполнять команды. Добавляйте только того агента, которому доверяете.",
+  "customProvider.acp.hostTrustTitle": "Эта команда выполняется на сервере",
+  "customProvider.acp.hostTrustDescription":
+    "OpenBot запускает её от имени учётной записи сервера. Агент может читать и изменять файлы на сервере и выполнять там команды. Добавляйте только того агента, которому доверяете.",
   "customProvider.acp.submit": "Добавить агента",
   "customProvider.acp.editTitle": "Изменить своего агента ACP",
   "customProvider.acp.submitEdit": "Сохранить агента",
@@ -215,6 +238,7 @@ export const messages = {
 
   "customProvider.agents.title": "Свои агенты",
   "customProvider.agents.description": "Агенты ACP, которые OpenBot запускает на этом компьютере.",
+  "customProvider.agents.hostDescription": "Агенты ACP, которые OpenBot запускает на компьютере сервера.",
   "customProvider.agents.empty": "Своих агентов пока нет.",
   "customProvider.agents.add": "Добавить агента",
   "customProvider.agents.restart": "Перезапустить агентов",

@@ -19,6 +19,9 @@ export const AgentTemplateInstall = lazy(() =>
 export const AgentUsagePanel = lazy(() =>
   import("./features/usage/AgentUsagePanel").then((module) => ({ default: module.AgentUsagePanel })),
 );
+export const LibraryPanel = lazy(() =>
+  import("./features/files/LibraryPanel").then((module) => ({ default: module.LibraryPanel })),
+);
 export const AccountLogin = lazy(() =>
   import("@openbot/ui/features/account/AccountLogin").then((module) => ({ default: module.AccountLogin })),
 );
@@ -39,6 +42,11 @@ export const AddServerDialog = lazy(() =>
 export const CreateLocalServerDialog = lazy(() =>
   import("@openbot/ui/features/servers/CreateLocalServerDialog").then((module) => ({
     default: module.CreateLocalServerDialog,
+  })),
+);
+export const InstallServerDialog = lazy(() =>
+  import("@openbot/ui/features/servers/InstallServerDialog").then((module) => ({
+    default: module.InstallServerDialog,
   })),
 );
 export const JoinServerDialog = lazy(() =>
@@ -66,6 +74,10 @@ export const MarketplaceModal = lazy(() =>
 );
 export const WorkflowsPage = lazy(() =>
   import("./features/workflows/WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })),
+);
+/** The canvas of the Workflows page without the desktop contexts, for the browser app. */
+export const WorkflowsCanvas = lazy(() =>
+  import("./features/workflows/WorkflowsCanvas").then((module) => ({ default: module.WorkflowsCanvas })),
 );
 export const ScheduleView = lazy(() =>
   import("./features/schedule/SchedulePanel").then((module) => ({ default: module.ScheduleView })),

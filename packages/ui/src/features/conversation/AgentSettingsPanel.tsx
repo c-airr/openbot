@@ -25,7 +25,6 @@ import {
   agentPermissionLevels,
   agentPermissionUpdate,
   agentQuickAcknowledgementEnabled,
-  type BrowserProfileSummary,
   type BusyMessageMode,
   type ClientAgentModelOption,
   type CustomAgentSummary,
@@ -43,7 +42,6 @@ import type { AppTextKey } from "@openbot/i18n";
 import {
   ArrowLeftRight,
   Bell,
-  Brain,
   Button,
   ConfirmDialog,
   Cpu,
@@ -61,6 +59,7 @@ import {
   ShieldCheck,
   Shuffle,
   SlidersHorizontal,
+  SlidingTabs,
   Switch,
   Text,
 } from "@openbot/ui";
@@ -68,15 +67,20 @@ import { normalizeAvatarFile } from "@openbot/ui/avatar-image";
 import {
   AVATAR_COLOR_CHOICES,
   AVATAR_EXPRESSIONS,
+  AVATAR_STYLES,
   type AvatarColorChoice,
+  type AvatarStyle,
+  avatarDefaultSeed,
   avatarHueForColor,
   avatarSeedForFace,
+  avatarStyleForSeed,
   bloubAvatarProfile,
   isAvatarColorChoice,
   SUPPORTED_AVATAR_SILHOUETTES,
   type SupportedAvatarSilhouetteId,
 } from "@openbot/ui/bloub-avatar";
-import { ProviderModelPicker, reasoningLabel } from "@openbot/ui/components/ProviderModelPicker";
+import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
+import { findModelOption } from "@openbot/ui/components/provider-accounts";
 import { ResizableTextarea } from "@openbot/ui/components/ResizableTextarea";
 import {
   SettingsField,
@@ -89,7 +93,11 @@ import {
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { InstructionsLimit, instructionsTooLong } from "@openbot/ui/features/agents/InstructionsLimit";
-import { type BrowserProfileChoice, BrowserProfileSelect } from "@openbot/ui/features/browser/BrowserProfileSelect";
+import {
+  type BrowserProfileChoice,
+  BrowserProfileSelect,
+  type BrowserProfileSelectProfile,
+} from "@openbot/ui/features/browser/BrowserProfileSelect";
 import { errorReference } from "@openbot/user-errors";
 import type { JSX } from "@solidjs/web";
 import {
@@ -106,6 +114,8 @@ import {
 import { useText } from "../../text";
 import { avatarColorChoiceLabel } from "../agents/avatar-hue-label";
 import { SERVER_NOTIFICATION_LEVEL_LABELS } from "../servers/ServerActionItems";
+import { AgentChatColorRow } from "../settings/ChatColorSetting";
+import { AgentDeleteHistoryDialog } from "./AgentDeleteHistoryDialog";
 import { type AgentFolderCalls, AgentFoldersPage, AgentFoldersRow, createAgentFolders } from "./AgentFolders";
 import { AgentNewChatDialog } from "./AgentNewChatDialog";
 import { BackupModelsPage } from "./BackupModels";
@@ -139,6 +149,12 @@ export interface AgentSettingsPanelProps {
   newChatEditable?: boolean;
   /** Whether the agent shows its plan before a long task. Local-only: the Team API does not carry it. */
   quickAcknowledgementEditable?: boolean;
+  /** Fast mode, as the model picker of the chat header shows it. */
+  fastMode?: boolean | undefined;
+  /** With `fastMode`, the Ultrafast tier in place of Fast. */
+  ultrafast?: boolean | undefined;
+  /** Without it, the model picker shows no Speed control. The picker shows it only for a model with a fast tier. */
+  onFastModeChange?: ((fastMode: boolean, ultrafast: boolean) => void) | undefined;
   /** The browser profile of the agent's tabs. Left out when the host cannot change it. */
   browserProfiles?: AgentBrowserProfileOptions | undefined;
   /** The user's own notification level for the agent. Left out when the server cannot keep it. */
@@ -155,6 +171,8 @@ export interface AgentSettingsPanelProps {
   folders?: AgentFolderCalls | undefined;
   /** Whether a usage limit holds this model and account now, for the backup models page. */
   usageLimited?: ((choice: AgentModelChoice) => boolean) | undefined;
+  /** Whether a provider error holds this model and account now, for the backup models page. */
+  providerFailed?: ((choice: AgentModelChoice) => boolean) | undefined;
   /** The app or host default an agent without its own busy-message setting follows. */
   defaultBusyMessageMode?: BusyMessageMode | undefined;
   /** The account defaults an agent without its own value follows. Absent for a remote agent. */
@@ -187,15 +205,25 @@ export interface AgentSettingsPanelProps {
   ) => Promise<boolean>;
   onSetAgentAvatar: (agentId: string, image: AvatarImageInput | null) => Promise<void>;
   /**
+   * Shows a failed save that the panel cannot show, because it closed or shows a different agent
+   * before the save ended. Without it, that failure shows nowhere.
+   */
+  onUnshownSaveError?: ((message: string) => void) | undefined;
+  /**
    * Starts a new chat with the agent after the user confirms. The agent forgets the messages before
    * it and keeps its setup. Left out when the host cannot do it.
    */
   onStartNewChat?: (() => Promise<void>) | undefined;
+  /**
+   * Deletes the messages of the agent's own chat after the user confirms, and the agent forgets them.
+   * Left out when the host cannot do it.
+   */
+  onDeleteHistory?: (() => Promise<void>) | undefined;
 }
 
 export interface AgentBrowserProfileOptions {
   /** The named profiles of the computer that runs the agent. Undefined while they load. */
-  profiles: readonly Pick<BrowserProfileSummary, "id" | "name" | "hue">[] | undefined;
+  profiles: readonly BrowserProfileSelectProfile[] | undefined;
   /**
    * The agent's choice, as its host gives it. The summary of an agent on a joined server does not
    * carry it; absent, the panel reads it from the agent.
@@ -296,6 +324,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   const { t, errorMessage, format } = useText();
   const agentDefaults = () => props.agentDefaults ?? DEFAULT_AGENT_DEFAULTS;
   const [newChatOpen, setNewChatOpen] = createSignal(false);
+  const [deleteHistoryOpen, setDeleteHistoryOpen] = createSignal(false);
   const [draft, setDraft] = createStore<AgentSettingsDraft>({
     avatar: {
       hue: null,
@@ -426,20 +455,15 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     });
   }
 
-  const selectedModel = createMemo(() =>
-    props.modelOptions.find(
-      (option) => option.provider === draft.runtime.provider && option.id === draft.runtime.model,
-    ),
-  );
-  const reasoningOptions = createMemo(() => selectedModel()?.supportedReasoningEfforts ?? ["medium" as const]);
-  // The provider has no reasoning setting for this model, and the `medium` it lists is never sent.
-  const reasoningSetByProvider = () => selectedModel()?.reasoningEffortConfigurable === false;
   /** The agent's provider when this build does not know it: its runtime rows cannot change. */
   const agentForeignProvider = () => foreignProvider(props.agent.provider);
   /** The provider whose capabilities apply. A foreign agent leaves `draft.runtime.provider` stale. */
   const knownProvider = () => (agentForeignProvider() === undefined ? draft.runtime.provider : undefined);
   /** The shape, eyes and automatic colour that the saved seed draws. */
   const avatarFace = createMemo(() => bloubAvatarProfile(draft.avatar.seed, null));
+  /** Plush or flat. The saved seed says which, so every app that knows styles draws the same one. */
+  const avatarStyle = createMemo(() => avatarStyleForSeed(draft.avatar.seed));
+  const avatarResetSeed = createMemo(() => avatarDefaultSeed(props.agent.id, avatarStyle()));
   const avatarColorSelected = (choice: AvatarColorChoice) =>
     isAvatarColorChoice(choice, draft.avatar.hue, draft.avatar.color);
   const automaticColorSelected = () => draft.avatar.hue === null && draft.avatar.color === null;
@@ -547,8 +571,10 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   });
 
   onCleanup(() => {
-    if (lastAgentId) flushDirtyTextFields(lastAgentId);
+    // First, so the saves below do not read `props.agent`: the parent's <Show> that holds it is
+    // already closed and throws on the read, which lost an edit closed with Escape (#6205).
     disposed = true;
+    if (lastAgentId) flushDirtyTextFields(lastAgentId);
   });
 
   async function saveAgentPatch(
@@ -560,11 +586,16 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       await props.onUpdateAgent(agentId, updates);
       return true;
     } catch (error) {
-      if (!disposed && props.agent.id === agentId) {
-        setSaveError(errorMessage(error, t("agentSettings.saveFailed")), error);
-      }
+      reportSaveError(agentId, error);
       return false;
     }
+  }
+
+  /** Shows a failed save under the form, or outside the panel when the form shows something else now. */
+  function reportSaveError(agentId: string, error: unknown, fallback = t("agentSettings.saveFailed")): void {
+    const message = errorMessage(error, fallback);
+    if (!disposed && props.agent.id === agentId) setSaveError(message, error);
+    else props.onUnshownSaveError?.(message);
   }
 
   function textSaveRequest(
@@ -669,14 +700,14 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       if (!saved && props.agent.id === agentId) setSaveError(t("agentSettings.saveFailed"));
       return saved;
     } catch (error) {
-      if (props.agent.id === agentId) {
-        setSaveError(errorMessage(error, t("agentSettings.saveFailed")), error);
-      }
+      reportSaveError(agentId, error);
       return false;
     }
   }
 
+  // The blur that a closing panel causes comes after its cleanup, which saved the field already.
   function saveName(): void {
+    if (disposed) return;
     const value = draft.fields.name.trim() || t("agent.setup.nameFallback");
     setDraft((state) => {
       state.fields.name = value;
@@ -685,6 +716,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   }
 
   function saveTitle(): void {
+    if (disposed) return;
     const value = draft.fields.title.trim();
     setDraft((state) => {
       state.fields.title = value;
@@ -693,6 +725,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   }
 
   function saveDescription(): void {
+    if (disposed) return;
     cancelInstructionsSaveTimer();
     queueTextSave(textSaveRequest("description", props.agent.id));
   }
@@ -703,11 +736,12 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       state.avatar.uploadBusy = true;
       state.saveError = null;
     });
+    const agentId = props.agent.id;
     try {
-      await props.onSetAgentAvatar(props.agent.id, image);
+      await props.onSetAgentAvatar(agentId, image);
       return true;
     } catch (error) {
-      setSaveError(errorMessage(error, t("agentSettings.avatar.saveFailed")), error);
+      reportSaveError(agentId, error, t("agentSettings.avatar.saveFailed"));
       return false;
     } finally {
       setDraft((state) => {
@@ -722,11 +756,12 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       state.avatar.uploadBusy = true;
       state.saveError = null;
     });
+    const agentId = props.agent.id;
     try {
       const image = await normalizeAvatarFile(file);
-      await props.onSetAgentAvatar(props.agent.id, image);
+      await props.onSetAgentAvatar(agentId, image);
     } catch (error) {
-      setSaveError(errorMessage(error, t("agentSettings.avatar.processFailed")), error);
+      reportSaveError(agentId, error, t("agentSettings.avatar.processFailed"));
     } finally {
       setDraft((state) => {
         state.avatar.uploadBusy = false;
@@ -735,48 +770,55 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     }
   }
 
-  async function selectGeneratedAvatar(seed: string): Promise<void> {
+  /**
+   * Saves a generated face. The automatic colour comes from the seed, so a face on the automatic colour
+   * that the new seed would colour differently keeps `color` as a chosen one. Back on the agent's own
+   * seed, a hue that only kept the colour of that seed is automatic again.
+   */
+  async function selectGeneratedAvatar(seed: string, color: string): Promise<void> {
+    const seedColor = bloubAvatarProfile(seed, null).color;
+    let hue: AvatarHue | null | undefined;
+    if (automaticColorSelected() && seedColor !== color) hue = avatarHueForColor(color) ?? undefined;
+    else if (
+      seed === props.agent.id &&
+      draft.avatar.color === null &&
+      draft.avatar.hue === avatarHueForColor(seedColor)
+    ) {
+      hue = null;
+    }
     if (avatarUrl() && !(await setCustomAvatar(null))) return;
     setDraft((state) => {
       state.avatar.seed = seed;
+      if (hue !== undefined) state.avatar.hue = hue;
     });
-    await saveAgentPatch({ avatarSeed: seed });
+    await saveAgentPatch(hue === undefined ? { avatarSeed: seed } : { avatarSeed: seed, avatarHue: hue });
   }
 
-  /**
-   * Draws the chosen shape and eyes, and keeps the rest of the face. The automatic colour comes from
-   * the seed and changes with the eyes, so a face on the automatic colour keeps its colour as a
-   * chosen one.
-   */
+  /** Draws the chosen shape, eyes or style, and keeps the rest of the face. */
   async function selectAvatarFace(change: {
     shape?: SupportedAvatarSilhouetteId;
     expression?: ExpressionId;
+    style?: AvatarStyle;
   }): Promise<void> {
     const current = avatarFace();
-    const seed = avatarSeedForFace(props.agent.id, {
-      shape: change.shape ?? current.shape,
-      expression: change.expression ?? current.expression,
-    });
-    const keptHue =
-      automaticColorSelected() && bloubAvatarProfile(seed, null).color !== current.color
-        ? avatarHueForColor(current.color)
-        : null;
-    if (avatarUrl() && !(await setCustomAvatar(null))) return;
-    setDraft((state) => {
-      state.avatar.seed = seed;
-      if (keptHue !== null) state.avatar.hue = keptHue;
-    });
-    await saveAgentPatch(keptHue === null ? { avatarSeed: seed } : { avatarSeed: seed, avatarHue: keptHue });
+    const face = { shape: change.shape ?? current.shape, expression: change.expression ?? current.expression };
+    const style = change.style ?? avatarStyle();
+    // The agent's own plush face is its ID, so Plush after Flat saves the seed that the agent had.
+    const own = bloubAvatarProfile(props.agent.id, null);
+    const seed =
+      style === "plush" && own.shape === face.shape && own.expression === face.expression
+        ? props.agent.id
+        : avatarSeedForFace(props.agent.id, face, style);
+    await selectGeneratedAvatar(seed, current.color);
   }
 
   async function selectModel(
     nextModel: AgentModelId,
     nextProvider: AgentProviderId,
     accountId: string | null | undefined,
+    preferredEffort?: AgentReasoningEffort,
   ): Promise<void> {
-    const option = props.modelOptions.find(
-      (candidate) => candidate.provider === nextProvider && candidate.id === nextModel,
-    );
+    const option = findModelOption(props.modelOptions, props.agentStatus.providers, nextProvider, nextModel);
     if (!option) return;
     // A plain copy, not `snapshot`: a snapshot of an unmodified subtree is the store's own object,
     // which the write below would mutate, leaving nothing to roll back to.
@@ -786,12 +828,12 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       reasoningEffort: draft.runtime.reasoningEffort,
     };
     const agentId = props.agent.id;
+    // An effort chosen on the model's tab before the model, else the agent's effort when the model has it.
+    const preferred = preferredEffort ?? previous.reasoningEffort;
     const settings: AgentRuntimeSettings = {
       model: nextModel,
       provider: nextProvider,
-      reasoningEffort: option.supportedReasoningEfforts.includes(previous.reasoningEffort)
-        ? previous.reasoningEffort
-        : option.defaultReasoningEffort,
+      reasoningEffort: option.supportedReasoningEfforts.includes(preferred) ? preferred : option.defaultReasoningEffort,
     };
     setDraft((state) => {
       state.runtime.provider = settings.provider;
@@ -910,10 +952,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     };
   const ownModelName = () => {
     const own = ownModel();
-    return (
-      props.modelOptions.find((option) => option.provider === own.provider && option.id === own.model)?.name ??
-      own.model
-    );
+    return findModelOption(props.modelOptions, props.agentStatus.providers, own.provider, own.model)?.name ?? own.model;
   };
 
   const backupModelsSummary = () => {
@@ -1140,25 +1179,48 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     <div class="avatar-editor-divider" />
                     <div class="avatar-editor-heading">
                       <span>{t("agentSettings.avatar.shape")}</span>
-                      <div class="avatar-editor-actions">
-                        <Show when={draft.avatar.seed !== props.agent.id}>
+                      <div class="avatar-editor-heading-end">
+                        <SlidingTabs.Root
+                          value={avatarStyle()}
+                          onChange={(value) => {
+                            const style = AVATAR_STYLES.find((option) => option === value);
+                            if (style && style !== avatarStyle()) void selectAvatarFace({ style });
+                          }}
+                        >
+                          <SlidingTabs.List class="avatar-style-tabs" aria-label={t("agentSettings.avatar.style")}>
+                            <SlidingTabs.Trigger value="plush">
+                              {t("agentSettings.avatar.stylePlush")}
+                            </SlidingTabs.Trigger>
+                            <SlidingTabs.Trigger value="flat">
+                              {t("agentSettings.avatar.styleFlat")}
+                            </SlidingTabs.Trigger>
+                          </SlidingTabs.List>
+                        </SlidingTabs.Root>
+                        <div class="avatar-editor-actions">
+                          <Show when={draft.avatar.seed !== avatarResetSeed()}>
+                            <IconButton
+                              variant="outline"
+                              type="button"
+                              label={t("agentSettings.avatar.resetToId")}
+                              onClick={() =>
+                                void selectGeneratedAvatar(
+                                  avatarResetSeed(),
+                                  bloubAvatarProfile(props.agent.id, null).color,
+                                )
+                              }
+                            >
+                              <RotateCcw aria-hidden="true" />
+                            </IconButton>
+                          </Show>
                           <IconButton
                             variant="outline"
                             type="button"
-                            label={t("agentSettings.avatar.resetToId")}
-                            onClick={() => void selectGeneratedAvatar(props.agent.id)}
+                            label={t("agentSettings.avatar.shuffle")}
+                            onClick={() => void selectAvatarFace(randomAvatarFace(avatarFace()))}
                           >
-                            <RotateCcw aria-hidden="true" />
+                            <Shuffle aria-hidden="true" />
                           </IconButton>
-                        </Show>
-                        <IconButton
-                          variant="outline"
-                          type="button"
-                          label={t("agentSettings.avatar.shuffle")}
-                          onClick={() => void selectAvatarFace(randomAvatarFace(avatarFace()))}
-                        >
-                          <Shuffle aria-hidden="true" />
-                        </IconButton>
+                        </div>
                       </div>
                     </div>
                     <fieldset class="avatar-face-grid avatar-shape-grid" aria-label={t("agentSettings.avatar.shapes")}>
@@ -1343,43 +1405,17 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   disabledReason={t("agentSettings.runtime.modelUnavailable")}
                   accountChoice
                   providerAccountId={agentNextProviderAccountId(props.agent)}
-                  onChange={(nextModel, provider, accountId) => void selectModel(nextModel, provider, accountId)}
-                />
-                <Select<AgentReasoningEffort>
-                  class="agent-settings-runtime-select"
-                  options={reasoningOptions()}
-                  value={draft.runtime.reasoningEffort}
-                  disabled={reasoningSetByProvider() || agentForeignProvider() !== undefined}
-                  onChange={(nextReasoning) => {
-                    if (!nextReasoning || nextReasoning === draft.runtime.reasoningEffort) return;
-                    void selectReasoning(nextReasoning);
+                  onChange={(nextModel, provider, accountId, effort) =>
+                    void selectModel(nextModel, provider, accountId, effort)
+                  }
+                  reasoningEffort={draft.runtime.reasoningEffort}
+                  onReasoningEffortChange={(effort) => {
+                    if (effort !== draft.runtime.reasoningEffort) void selectReasoning(effort);
                   }}
-                  itemComponent={(item) => (
-                    <SelectItem item={item.item}>{reasoningLabel(item.item.rawValue)}</SelectItem>
-                  )}
-                >
-                  <SelectTrigger
-                    class="agent-settings-runtime-row"
-                    aria-label={t("agentSettings.runtime.reasoningLabel")}
-                  >
-                    <span class="settings-link-icon">
-                      <Brain aria-hidden="true" />
-                    </span>
-                    <span class="agent-settings-runtime-label">{t("agentSettings.runtime.reasoning")}</span>
-                    <SelectValue<AgentReasoningEffort>>
-                      {(state) => {
-                        if (reasoningSetByProvider()) {
-                          return t("agentSettings.runtime.reasoningSetByProvider", {
-                            provider: agentProviderName(draft.runtime.provider),
-                          });
-                        }
-                        const effort = state.selectedOption();
-                        return effort ? reasoningLabel(effort) : t("agentSettings.runtime.selectReasoning");
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent />
-                </Select>
+                  fastMode={props.fastMode}
+                  ultrafast={props.ultrafast}
+                  onFastModeChange={props.onFastModeChange}
+                />
               </SettingsLinkGroup>
               <Show when={props.backupModelsEditable}>
                 <SettingsLinkGroup inset>
@@ -1391,6 +1427,16 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     onClick={() => openPage("backup-models")}
                   />
                 </SettingsLinkGroup>
+              </Show>
+              {/* Keyed, so a popup that is open when the agent changes saves to the agent it opened for. */}
+              <Show when={props.agent.id} keyed>
+                {(agentId) => (
+                  <AgentChatColorRow
+                    agentName={props.agent.name}
+                    value={props.agent.chatColor ?? null}
+                    onChange={(chatColor) => void saveAgentPatch({ chatColor }, agentId)}
+                  />
+                )}
               </Show>
               {props.links}
               <SettingsLinkGroup inset title={t("agentSettings.groups.rules")}>
@@ -1534,6 +1580,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   modelOptions: props.modelOptions,
                   providers: props.agentStatus.providers,
                   limited: props.usageLimited,
+                  failed: props.providerFailed,
                 }}
                 onChange={(next) => void saveBackupModels(next)}
               />
@@ -1640,6 +1687,24 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   </Button>
                 </div>
               </Show>
+              <Show when={props.onDeleteHistory}>
+                <div class="agent-settings-notifications">
+                  <div>
+                    <strong>{t("agentSettings.deleteHistory.title")}</strong>
+                    <span>{t("agentSettings.deleteHistory.description")}</span>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    type="button"
+                    aria-label={t("agentSettings.deleteHistory.confirm")}
+                    aria-haspopup="dialog"
+                    disabled={props.working}
+                    onClick={() => setDeleteHistoryOpen(true)}
+                  >
+                    {t("agentSettings.deleteHistory.button")}
+                  </Button>
+                </div>
+              </Show>
               <Show when={props.newChatEditable}>
                 <div class="agent-settings-notifications">
                   <div>
@@ -1703,6 +1768,16 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
               open={newChatOpen()}
               onClose={() => setNewChatOpen(false)}
               start={() => start()()}
+            />
+          )}
+        </Show>
+        <Show when={props.onDeleteHistory}>
+          {(remove) => (
+            <AgentDeleteHistoryDialog
+              agent={props.agent}
+              open={deleteHistoryOpen()}
+              onClose={() => setDeleteHistoryOpen(false)}
+              remove={() => remove()()}
             />
           )}
         </Show>

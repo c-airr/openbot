@@ -43,6 +43,8 @@ export interface ConversationTraceStep {
   endedAt: string | null;
   /** Set when the provider reported the item as failed or declined. */
   failed?: true | undefined;
+  /** On a failed tool step: the start of its error text, or the end of a command's output, with known secrets removed. */
+  error?: string | undefined;
 }
 
 export interface ConversationTurnTrace {
@@ -82,6 +84,7 @@ function isConversationTraceStep(value: unknown): value is ConversationTraceStep
     (value.command === undefined || isBoundedString(value.command, CONVERSATION_TRACE_TEXT_LIMIT)) &&
     (value.toolKind === undefined || isOneOf(CONVERSATION_TRACE_TOOL_KINDS, value.toolKind)) &&
     (value.detail === undefined || isBoundedString(value.detail, CONVERSATION_TRACE_TEXT_LIMIT)) &&
+    (value.error === undefined || isBoundedString(value.error, CONVERSATION_TRACE_TEXT_LIMIT)) &&
     (value.recipientAgentIds === undefined ||
       (Array.isArray(value.recipientAgentIds) &&
         value.recipientAgentIds.length <= INPUT_LIMITS.messageRecipients &&
