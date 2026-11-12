@@ -132,27 +132,25 @@ function usageRow(
       resetsAtLabel: formatUsageReset(window.resetsAt, text),
     };
   };
-  // Cursor's total comes first, as the Cursor CLI shows it, and the two windows of its plan follow.
-  const cursorTotal = provider === "cursor" ? limit?.tertiary : undefined;
+  // Fork: Cursor keeps its two plan windows on the rail and the card. The split-plan total
+  // (tertiary) stays out, so the two windows keep their rings and bars.
   const reported = limit
-    ? cursorTotal
-      ? [cursorTotal, ...reportedUsageWindows({ primary: limit.primary, secondary: limit.secondary })]
+    ? provider === "cursor"
+      ? reportedUsageWindows({ primary: limit.primary, secondary: limit.secondary })
       : reportedUsageWindows(limit)
     : [];
   const ownWindows = reported.map((window) =>
     windowRow(
       window,
-      // window alone, with no total, is the whole plan.
-      window === cursorTotal
-        ? text.t("account.usage.window.total")
-        : provider === "cursor" && (cursorTotal || (limit?.primary && limit.secondary))
-          ? text.t(window === limit?.primary ? "account.usage.window.cursorModels" : "account.usage.window.otherModels")
-          : limit?.freeRequests
-            ? text.t("account.usage.window.freeRequests", {
-                remaining: limit.freeRequests.limit - limit.freeRequests.used,
-                limit: limit.freeRequests.limit,
-              })
-            : usageWindowLabel(window.windowDurationMins, text),
+      // One window alone is the whole plan.
+      provider === "cursor" && limit?.primary && limit?.secondary
+        ? text.t(window === limit?.primary ? "account.usage.window.cursorModels" : "account.usage.window.otherModels")
+        : limit?.freeRequests
+          ? text.t("account.usage.window.freeRequests", {
+              remaining: limit.freeRequests.limit - limit.freeRequests.used,
+              limit: limit.freeRequests.limit,
+            })
+          : usageWindowLabel(window.windowDurationMins, text),
     ),
   );
   // Antigravity limits each group of models apart, such as Gemini 4 Argon: one line per group, by
@@ -174,42 +172,40 @@ function usageRow(
           );
         })
       : ownWindows;
-  // The rail ring shows the near limits of every quota group, not one group's weekly window: the
-  // 5-hour window of each group, such as Gemini and Claude/GPT for Antigravity. The card below
+  // The rail ring shows the near limit of every quota group, not one group's weekly window: the
+  // 5-hour window of each group, such as Gemini and Claude/GPT for Antigravity. A group without a
+  // 5-hour window shows its binding window, so the rail keeps one ring per group. The card below
   // keeps every window of every group.
   const groupFiveHourWindows =
     groups.length > 1
       ? groups.flatMap((group) => {
-          const fiveHour = reportedUsageWindows(group).find(
+          const groupReported = reportedUsageWindows(group);
+          if (groupReported.length === 0) return [];
+          const fiveHour = groupReported.find(
             (window) => planLimitWindowKind(window.windowDurationMins).kind === "fiveHour",
           );
-          return fiveHour
-            ? [
-                windowRow(
-                  fiveHour,
-                  text.t("account.usage.window.group", {
-                    group: group.name,
-                    window: usageWindowLabel(fiveHour.windowDurationMins, text),
-                  }),
-                ),
-              ]
-            : [];
+          const picked =
+            fiveHour ??
+            groupReported.reduce((lowest, window) =>
+              usageRemainingPercent(window.usedPercent) < usageRemainingPercent(lowest.usedPercent) ? window : lowest,
+            );
+          return [
+            windowRow(
+              picked,
+              text.t("account.usage.window.group", {
+                group: group.name,
+                window: usageWindowLabel(picked.windowDurationMins, text),
+              }),
+            ),
+          ];
         })
       : [];
   // OpenCode's third window is a list line only: `secondary` already holds the long window that stops
-  // work first, and the ring has two tracks. Cursor's ring shows its total, or a window that is used up:
-  // the models of that window stop while the total still has some left.
-  const cursorSpent = ownWindows.filter(
-    (_, index) => cursorTotal && reported[index] !== cursorTotal && (reported[index]?.usedPercent ?? 0) >= 100,
-  );
+  // work first, and the ring has two tracks.
   const ringWindows =
     groupFiveHourWindows.length > 1
       ? groupFiveHourWindows
-      : cursorTotal
-        ? cursorSpent.length
-          ? cursorSpent
-          : ownWindows.filter((_, index) => reported[index] === cursorTotal)
-        : ownWindows.filter((_, index) => reported[index] !== limit?.tertiary);
+      : ownWindows.filter((_, index) => reported[index] !== limit?.tertiary);
   // The shortest window comes first, so on a tie the shorter window stops work first.
   const binding = ringWindows.reduce<AccountUsageWindowRow | null>(
     (lowest, window) => (lowest === null || window.remainingPercent < lowest.remainingPercent ? window : lowest),

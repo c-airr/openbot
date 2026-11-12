@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.68.2] - 2026-11-12
+
+Fork release (c-airr/openbot).
+
+### Fixed
+
+- The usage rail keeps two rings again. Cursor shows its two plan windows, without the
+  split-plan total, and Antigravity shows the 5-hour window of each group, Gemini and
+  Claude/GPT. The hover card keeps every window, with the weekly ones.
+
 ## [0.68.1] - 2026-11-12
 
 Fork release (c-airr/openbot).
