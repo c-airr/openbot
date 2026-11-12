@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.68.1] - 2026-11-12
+
+Fork release (c-airr/openbot).
+
+### Fixed
+
+- The sidebar New menu keeps only chats again: the "New agent" item that upstream 0.68.0
+  brought back is hidden whenever the app can make a chat. A client without chat creation,
+  the phone's web app, keeps it, since that is its only way to create anything.
+
 ## [0.68.0] - 2026-11-11
 
 ### Added

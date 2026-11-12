@@ -40,7 +40,10 @@ export function SidebarSearch() {
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content>
-              <Show when={props.createSupported !== false}>
+              {/* Fork: the desktop makes chats, never agents. Only a client without chat
+                  creation (the phone's web app) keeps an agent item, because it has no
+                  other way to create anything. */}
+              <Show when={props.createSupported !== false && !props.onCreateChat}>
                 <DropdownMenu.Item onSelectAfterClose={props.onCreateAgent}>
                   <Bot aria-hidden="true" />
                   {t("sidebar.new.agent")}
