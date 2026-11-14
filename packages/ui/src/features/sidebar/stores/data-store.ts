@@ -265,6 +265,9 @@ export function createSidebarDataStore(deps: {
   const filteredChats = createChatItems(
     () => ({ channels: filteredChannels(), agents: filteredAgents() }),
     (items) => {
+      // Fork: "recent" sorts each section by last activity alone, so the chat that was used last is
+      // at the top and an old one sinks, whatever the saved order and the unread marks say.
+      if (chatOrder() === "recent") return byRecent(items);
       if (chatOrder() !== "unread-first") return items;
       const recent = byRecent(items);
       return [

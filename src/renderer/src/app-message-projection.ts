@@ -242,7 +242,23 @@ export function toAgentMessages(
     thinkingByTurn.set(key, thinking);
     result.push(thinking);
   }
-  return result;
+  return promoteStepText(result);
+}
+
+/**
+ * Fork: an agent text that the host stored as a step shows as a message. The model writes its reply,
+ * then calls a tool (the chat naming tool always does), so the host closes that reply as "commentary"
+ * and the chat folded it into one thin steps line: the answer then read as lost history. A reasoning
+ * stream never comes here, because it is already folded into the thinking row of its turn.
+ */
+function promoteStepText(rows: AgentMessage[]): AgentMessage[] {
+  for (const row of rows) {
+    if (row.author !== "agent" || row.kind !== "text" || !row.body.trim()) continue;
+    // A note that still arrives stays a step until it is complete, so it does not grow as a bubble.
+    if (row.itemType !== "commentary" || row.streaming) continue;
+    delete row.itemType;
+  }
+  return rows;
 }
 
 export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boolean {

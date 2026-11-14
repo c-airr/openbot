@@ -19,8 +19,8 @@ import { createSidebarPendingStore } from "./stores/pending-store";
 
 export function createSidebarScope(props: SidebarProps) {
   const layoutMutable = () => props.layoutMutable !== false;
-  /** A chat drags only in the manual orders. "Unread first" sorts each section itself. */
-  const chatsDraggable = () => layoutMutable() && props.chatOrder !== "unread-first";
+  /** A chat drags only in the manual order. "Unread first" and "recent" sort each section itself. */
+  const chatsDraggable = () => layoutMutable() && props.chatOrder !== "unread-first" && props.chatOrder !== "recent";
   const scrollFades = createScrollFades({ stuck: ".sidebar-folder > header" });
 
   const { announce, announceError, reorderAnnouncement } = createSidebarAnnouncementStore();

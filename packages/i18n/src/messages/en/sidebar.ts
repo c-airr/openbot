@@ -24,6 +24,7 @@ export const messages = defineMessages("sidebar", {
   "sidebar.order.manual": "Manual",
   "sidebar.order.unreadGroup": "Unread in a group",
   "sidebar.order.unreadFirst": "Unread first in folders",
+  "sidebar.order.recent": "Recent conversation first",
   "sidebar.topbar.openSettings": "Open settings for {name}",
   "sidebar.topbar.localServer": "Local",
   "sidebar.resizer.compactWidth": "Compact ({width}px)",

@@ -43,15 +43,18 @@ export const SIDEBAR_HIDDEN_GROUP_OPEN_ID = "hidden-agents:open";
  *   back to their place when they are read.
  * - `unread-first`: each section shows its unread chats first, then the others, both by last
  *   activity. Chats do not drag in this order, because the order is not manual.
+ * - `recent`: each section shows its chats by last activity alone, the newest conversation on top,
+ *   read or not. Chats do not drag in this order either.
  *
  * Neither unread order moves a muted agent (`mutedAgentIds`): it stays in its place with its badge.
  */
-export type SidebarChatOrder = "manual" | "unread-group" | "unread-first";
+export type SidebarChatOrder = "manual" | "unread-group" | "unread-first" | "recent";
 
 export const SIDEBAR_CHAT_ORDERS = [
   "manual",
   "unread-group",
   "unread-first",
+  "recent",
 ] as const satisfies readonly SidebarChatOrder[];
 
 /** The name of each order, in the sidebar menu and in Settings. */
@@ -59,6 +62,7 @@ export const SIDEBAR_CHAT_ORDER_LABEL = {
   manual: "sidebar.order.manual",
   "unread-group": "sidebar.order.unreadGroup",
   "unread-first": "sidebar.order.unreadFirst",
+  recent: "sidebar.order.recent",
 } as const satisfies Record<SidebarChatOrder, AppTextKey>;
 
 export interface SidebarProps {

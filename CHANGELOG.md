@@ -6,6 +6,20 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+Fork work after 0.71.0.
+
+### Added
+
+- "Recent conversation first" in "Sort chats": each section shows its newest chat on top and an old
+  one sinks, read or not. It is now the default order for a sidebar with no saved choice.
+
+### Fixed
+
+- A reply that the agent wrote before it called a tool no longer disappears into the turn's steps.
+  Such a reply is stored as a step (the chat naming tool always follows it), so the chat folded the
+  whole turn into one thin line and the history read as lost. It now shows as a message again, and
+  only a reasoning stream stays a step.
+
 ## [0.71.0] - 2026-11-14
 
 ### Added

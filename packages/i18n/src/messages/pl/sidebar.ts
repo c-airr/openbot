@@ -25,6 +25,7 @@ export const messages = {
   "sidebar.order.manual": "Ręcznie",
   "sidebar.order.unreadGroup": "Nieprzeczytane w grupie",
   "sidebar.order.unreadFirst": "Nieprzeczytane najpierw w folderach",
+  "sidebar.order.recent": "Ostatnia rozmowa najpierw",
   "sidebar.topbar.openSettings": "Otwórz ustawienia: {name}",
   "sidebar.topbar.localServer": "Lokalny",
   "sidebar.resizer.compactWidth": "Kompaktowy ({width}px)",
