@@ -24,6 +24,12 @@ const CONNECT_TIMEOUT_MS = 1_000;
 const OP_HANDSHAKE = 0;
 const OP_FRAME = 1;
 
+/**
+ * The application id of this fork's Discord application, which gives the card its name and image. It is
+ * public: Discord shows it in every client that sends a presence. The config file can name another one.
+ */
+const DEFAULT_CLIENT_ID = "1571274964332453980";
+
 /** The card's first line: the app, with the word that tells this build from the release. */
 const APP_LINE = "OpenBot (fork)";
 
@@ -49,15 +55,16 @@ function socketPaths(): string[] {
   return Array.from({ length: 10 }, (_, index) => join(base, `discord-ipc-${index}`));
 }
 
-/** The config, or null when the file is missing or holds no application id. */
-async function readConfig(): Promise<PresenceConfig | null> {
+/** The config: the fork's own application id, or the one in the config file, which also sets an image. */
+async function readConfig(): Promise<PresenceConfig> {
   const text = await readFile(join(app.getPath("userData"), CONFIG_FILE), "utf8").catch(() => null);
-  if (text === null) return null;
-  const config = Option.getOrNull(decodeConfig(text));
+  const config = text === null ? null : Option.getOrNull(decodeConfig(text));
   const clientId = config?.clientId.trim() ?? "";
-  if (!/^\d{5,25}$/u.test(clientId)) return null;
   const largeImageKey = config?.largeImageKey?.trim();
-  return largeImageKey ? { clientId, largeImageKey } : { clientId };
+  return {
+    clientId: /^\d{5,25}$/u.test(clientId) ? clientId : DEFAULT_CLIENT_ID,
+    ...(largeImageKey ? { largeImageKey } : {}),
+  };
 }
 
 function encodeFrame(opcode: number, payload: unknown): Buffer {
@@ -121,7 +128,6 @@ class DiscordPresence {
 
   async update(input: DiscordPresenceInput): Promise<void> {
     this.#config ??= await readConfig();
-    if (!this.#config) return;
     this.#pending = input;
     if (!this.#ready) {
       if (Date.now() < this.#retryAt) return;

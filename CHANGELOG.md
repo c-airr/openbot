@@ -6,6 +6,17 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.71.2] - 2026-11-14
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- The Discord card works with no setup: the fork carries the application id of its own Discord
+  application, so the profile shows "OpenBot (fork)" from the first start. A file
+  `openbot-discord-presence-v1.json` is no longer needed; when it exists, its `clientId` and
+  `largeImageKey` still win.
+
 ## [0.71.1] - 2026-11-14
 
 Fork release (c-airr/openbot). The first release that merges upstream v0.71.0.
