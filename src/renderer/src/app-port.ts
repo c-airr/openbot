@@ -25,6 +25,8 @@ export interface AppPort {
   onChatWindows: OpenBotDesktopApi["onChatWindows"];
   /** Fork: the FreeLLMAPI budget of the rail. */
   getFreeLlmBudget: OpenBotDesktopApi["getFreeLlmBudget"];
+  /** Fork: the Discord Rich Presence card, from the provider and model of the open chat. */
+  setDiscordPresence: OpenBotDesktopApi["setDiscordPresence"];
   onQuitShortcutHint: OpenBotDesktopApi["onQuitShortcutHint"];
   setAppAppearancePreference: OpenBotDesktopApi["setAppAppearancePreference"];
   setAppInterfaceSizePreference: OpenBotDesktopApi["setAppInterfaceSizePreference"];

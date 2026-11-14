@@ -16,6 +16,7 @@ import {
   externalLinkAppName,
   GROK_BOT_EXPORT_URL,
   parseApplySessionImportInput,
+  parseDiscordPresenceInput,
   parseSaveSharedMemoryInput,
 } from "@openbot/contracts/ipc";
 import type { AppTranslate } from "@openbot/i18n";
@@ -32,6 +33,7 @@ import type { AppBehaviorService } from "../app-behavior-service";
 import type { AppearanceService } from "../appearance-service";
 import type { ApprovalAutomation } from "../approval-automation-store";
 import type { BusyMessageModePreferenceStore } from "../busy-message-mode-preference-store";
+import { setDiscordPresence } from "../discord-presence";
 import type { ExternalLinkOpener, ExternalLinkPreferenceStore } from "../external-link-opener";
 import { feedbackFacts } from "../feedback";
 import { readFreeLlmBudget } from "../freellm-budget";
@@ -355,6 +357,9 @@ export function appIpcHandlers({
       listImportableSessions: handler(() => listImportableSessions()),
       importSessions: payloadHandler(parseApplySessionImportInput, (input) => importSessions(service, input)),
       getFreeLlmBudget: handler(() => readFreeLlmBudget()),
+      setDiscordPresence: payloadHandler(parseDiscordPresenceInput, (input) => {
+        setDiscordPresence(input);
+      }),
       listSharedMemories: handler(() => service.sharedMemories.list()),
       saveSharedMemory: payloadHandler(parseSaveSharedMemoryInput, (input) =>
         service.sharedMemories.save(input.text, "manual", input.memoryId),

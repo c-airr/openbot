@@ -10,6 +10,10 @@ Fork work after 0.71.0.
 
 ### Added
 
+- Discord Rich Presence: the profile card shows "OpenBot (fork)", then the model and the provider of
+  the open chat, such as "Opus 5 5 Medium · high · Claude". It sends only those choices, never a chat
+  title, a file name or a message. It needs `openbot-discord-presence-v1.json` with a Discord
+  application `clientId` in the app data folder; without that file the app sends nothing.
 - "Recent conversation first" in "Sort chats": each section shows its newest chat on top and an old
   one sinks, read or not. It is now the default order for a sidebar with no saved choice.
 

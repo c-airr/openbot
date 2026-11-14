@@ -55,6 +55,7 @@ export * from "./ipc-conversations";
 export * from "./ipc-custom-agents";
 export * from "./ipc-custom-providers";
 export * from "./ipc-desktop-apis";
+export * from "./ipc-discord-presence";
 export * from "./ipc-dynamic-island";
 export * from "./ipc-endpoints";
 export * from "./ipc-events";

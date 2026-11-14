@@ -50,6 +50,7 @@ import {
   DEFAULT_AGENT_DEFAULTS,
   type DetectedAcpAgent,
   type DetectedModelServer,
+  type DiscordPresenceInput,
   type DiscoverModelsResult,
   decodeExternalLinkTarget,
   decodeScheduledUpdateRestart,
@@ -113,6 +114,7 @@ import {
   type NotificationPreference,
   type OnePasswordConnectorStatus,
   type ProviderDetectionSettings,
+  parseDiscordPresenceInput,
   parseGitHubConnectorRepositories,
   parseGitHubConnectorStatus,
   parseLinkAccountStatus,
@@ -509,6 +511,14 @@ export function decodeExternalLinkBrowserOrNull(value: unknown): ExternalLinkBro
 }
 
 export { decodeFreeLlmBudget, decodeImportableSessions, decodeSessionImportResult } from "@openbot/contracts/ipc";
+
+/**
+ * Fork: the renderer sends the Discord card, and main answers nothing. Only the fields the card shows
+ * cross the wire; the decoder drops anything else.
+ */
+export function decodeDiscordPresenceInput(value: unknown): DiscordPresenceInput {
+  return parseDiscordPresenceInput(value);
+}
 
 export function decodeSharedMemories(value: unknown): MemoryEntry[] {
   if (!Array.isArray(value) || !value.every(isMemoryEntry)) throw new Error("Invalid shared memories.");

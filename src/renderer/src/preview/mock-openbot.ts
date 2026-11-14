@@ -1427,6 +1427,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     getChatWindows: async () => [],
     listImportableSessions: async () => [],
     getFreeLlmBudget: async () => null,
+    setDiscordPresence: async () => undefined,
     importSessions: async () => ({ agentIds: [], failed: [] }),
     listSharedMemories: async () => [],
     saveSharedMemory: async ({ text }) => ({

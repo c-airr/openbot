@@ -10,6 +10,7 @@ import type {
   ResetAgentSessionSettingInput,
   SetAgentSessionSettingInput,
 } from "./ipc-agent-session-settings";
+import type { DiscordPresenceInput } from "./ipc-discord-presence";
 import type { FreeLlmBudget } from "./ipc-freellm-budget";
 import type { ServerAuditLog } from "./ipc-server-audit";
 import type {
@@ -840,6 +841,8 @@ export const IPC_ENDPOINTS = {
     importSessions: request<ApplySessionImportInput, SessionImportResult>()("app:import-sessions"),
     /** Fork: FreeLLMAPI budget, null without a local config file. */
     getFreeLlmBudget: request<undefined, FreeLlmBudget | null>()("app:get-freellm-budget"),
+    /** Fork: what the Discord Rich Presence card shows, sent when the open chat, model or work changes. */
+    setDiscordPresence: request<DiscordPresenceInput, void>()("app:set-discord-presence"),
     // Fork: the memories every chat gets.
     listSharedMemories: request<undefined, MemoryEntry[]>()("app:list-shared-memories"),
     saveSharedMemory: request<SaveSharedMemoryInput, MemoryEntry>()("app:save-shared-memory"),
