@@ -6,26 +6,6 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
-## [0.68.2] - 2026-11-12
-
-Fork release (c-airr/openbot).
-
-### Fixed
-
-- The usage rail keeps two rings again. Cursor shows its two plan windows, without the
-  split-plan total, and Antigravity shows the 5-hour window of each group, Gemini and
-  Claude/GPT. The hover card keeps every window, with the weekly ones.
-
-## [0.68.1] - 2026-11-12
-
-Fork release (c-airr/openbot).
-
-### Fixed
-
-- The sidebar New menu keeps only chats again: the "New agent" item that upstream 0.68.0
-  brought back is hidden whenever the app can make a chat. A client without chat creation,
-  the phone's web app, keeps it, since that is its only way to create anything.
-
 ## [0.71.0] - 2026-11-14
 
 ### Added
@@ -1307,6 +1287,26 @@ Fork release (c-airr/openbot).
   fails to load the open chat while the server still answers. Before, the app stopped waiting for
   some reads after 15 seconds, also when they only waited behind earlier answers. Now a read fails
   only when the server sends nothing for 15 seconds, or after one minute.
+
+## [0.68.2] - 2026-11-12
+
+Fork release (c-airr/openbot).
+
+### Fixed
+
+- The usage rail keeps two rings again. Cursor shows its two plan windows, without the
+  split-plan total, and Antigravity shows the 5-hour window of each group, Gemini and
+  Claude/GPT. The hover card keeps every window, with the weekly ones.
+
+## [0.68.1] - 2026-11-12
+
+Fork release (c-airr/openbot).
+
+### Fixed
+
+- The sidebar New menu keeps only chats again: the "New agent" item that upstream 0.68.0
+  brought back is hidden whenever the app can make a chat. A client without chat creation,
+  the phone's web app, keeps it, since that is its only way to create anything.
 
 ## [0.68.0] - 2026-11-11
 
