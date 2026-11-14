@@ -6,7 +6,9 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
-Fork work after 0.71.0.
+## [0.71.1] - 2026-11-14
+
+Fork release (c-airr/openbot). The first release that merges upstream v0.71.0.
 
 ### Added
 
@@ -16,6 +18,9 @@ Fork work after 0.71.0.
   application `clientId` in the app data folder; without that file the app sends nothing.
 - "Recent conversation first" in "Sort chats": each section shows its newest chat on top and an old
   one sinks, read or not. It is now the default order for a sidebar with no saved choice.
+- The upstream v0.71.0 release, with its 350 commits: pinch zoom, hosted servers from Leaseweb, media
+  credits on the rail, and the Antigravity quota reader that asks the Code Assist host as the desktop
+  app does.
 
 ### Fixed
 
@@ -23,6 +28,8 @@ Fork work after 0.71.0.
   Such a reply is stored as a step (the chat naming tool always follows it), so the chat folded the
   whole turn into one thin line and the history read as lost. It now shows as a message again, and
   only a reasoning stream stays a step.
+- The Antigravity usage card lists the 5-hour and weekly window of every quota group again, so the
+  Gemini plan shows four limits.
 
 ## [0.71.0] - 2026-11-14
 
