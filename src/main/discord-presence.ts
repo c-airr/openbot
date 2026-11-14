@@ -34,6 +34,12 @@ const DEFAULT_CLIENT_ID = "1571274964332453980";
 /** The card's first line: the app, with the word that tells this build from the release. */
 const APP_LINE = "OpenBot (fork)";
 
+/**
+ * The card's image: the fork's own icon in the public repository. Discord accepts an external image
+ * URL here and serves it from its own proxy, so the card needs no asset uploaded to the application.
+ */
+const LOGO_URL = "https://raw.githubusercontent.com/c-airr/openbot/main/build/icon-production.png";
+
 /** The config file: the application id, and the image key when the developer uploaded one. */
 const Config = Schema.Struct({
   clientId: Schema.String,
@@ -87,7 +93,8 @@ function presenceActivity(input: DiscordPresenceInput, config: PresenceConfig) {
   return {
     details: APP_LINE,
     ...(state ? { state: state.slice(0, 128) } : {}),
-    ...(config.largeImageKey ? { assets: { large_image: config.largeImageKey, large_text: APP_LINE } } : {}),
+    // The uploaded image of the config file wins; without one, the card shows the fork's own icon.
+    assets: { large_image: config.largeImageKey ?? LOGO_URL, large_text: APP_LINE },
     instance: false,
   };
 }
