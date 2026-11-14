@@ -85,8 +85,8 @@ const AgentActions = createSimpleContext({
     const { activeTurns, failedTurns, setActiveTurns, setFailedTurns, setQueues, setPendingPrompts } = useTurns();
     const { sidebarLayout, setSidebarLayout, applySidebarLayoutAction, removePinnedSidebarItemEverywhere } =
       useSidebar();
+    const { selectAgent, openCreatedAgent } = useNavigation();
     const { clearDirectSelection } = useDirectMessages();
-    const { selectAgent } = useNavigation();
     const [duplicatingSectionIds, setDuplicatingSectionIds] = createSignal<Set<string>>(new Set());
 
     const createModelSupported = () =>
@@ -129,9 +129,8 @@ const AgentActions = createSimpleContext({
       setAgentSetupError(null);
       try {
         const newAgent = addNewAgent(await requestNewAgent(submitted));
-        setAgentSetupOpen(false);
-        clearDirectSelection();
-        setActiveAgentId(newAgent.id);
+        // As a sidebar click does: the form and an open channel close, and the new chat opens.
+        openCreatedAgent(newAgent.id);
         const properties = analyticsAgentProperties(newAgent.id);
         analytics.track("agent_action", { action: "create", result: "succeeded", ...(properties ?? {}) });
       } catch (error) {

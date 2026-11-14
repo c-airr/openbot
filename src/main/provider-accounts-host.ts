@@ -19,8 +19,10 @@ export interface ProviderAccountsHostDependencies {
     | "listAgents"
     | "updateAgent"
     | "signInProviderAccountOnHost"
+    | "connectProviderAccountKey"
     | "renameProviderAccount"
     | "removeProviderAccount"
+    | "setProviderAccountPool"
   >;
   browser: Pick<BrowserHost, "openPrivate" | "privateTab" | "close">;
 }
@@ -93,6 +95,18 @@ export class ProviderAccountsHost {
     return { providers };
   }
 
+  /** The providers whose account pool is on, with the accounts left out and the account in use (`provider-account-pool-v1`). */
+  pools() {
+    const pools = (this.#dependencies.service.getStatus().providers ?? []).flatMap((row) =>
+      row.accounts && row.accountPool ? [{ provider: row.id, ...row.accountPool }] : [],
+    );
+    return { pools };
+  }
+
+  setPool(provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) {
+    return this.#dependencies.service.setProviderAccountPool(provider, enabled, leftOut).pipe(Effect.asVoid);
+  }
+
   /** The readings of the accounts after the first. The released usage routes give the provider's own. */
   readonly usage = Effect.fn("ProviderAccountsHost.usage")(function* (this: ProviderAccountsHost) {
     return yield* this.#dependencies.service.getProviderAccountUsage();
@@ -125,6 +139,11 @@ export class ProviderAccountsHost {
 
   signInStatus(provider: AgentProviderId) {
     return this.#pages.status(provider) ?? { tabId: null, result: { error: endedText(provider) } };
+  }
+
+  /** Gives an account its API key (`provider-account-keys-v1`): a new account when `accountId` is null. */
+  connectKey(provider: AgentProviderId, accountId: string | null, key: string) {
+    return this.#dependencies.service.connectProviderAccountKey(provider, accountId, key).pipe(Effect.asVoid);
   }
 
   /** The interrupt ends the sign-in, and a new account that did not sign in goes with it. */

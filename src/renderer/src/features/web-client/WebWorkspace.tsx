@@ -10,26 +10,31 @@ import {
   type AgentWaitsSnapshot,
   type AppInfo,
   type AvatarColor,
+  agentFastModeSettings,
   CHANNEL_CHATS_CAPABILITY,
   CHANNEL_TASK_CANCEL_CAPABILITY,
   type ChannelSummary,
   type ClientAgentModelOption,
   canAdministerServer,
   decodeAgentBackupModelSettings,
+  decodeAgentDefaultsOverview,
   decodeAgentFastModeSettings,
   decodeAgentHostSettings,
   decodeAgentNewChatSettings,
   decodeAgentPlanCardSettings,
-  decodeAgentTaskLimitSettings,
+  decodeAgentSpeedSettings,
+  decodeHostTurnLimits,
   LEGACY_RESPONSE_STYLE,
   type RoutineFields,
   type ServerConnectionState,
   type ServerSummary,
+  STORAGE_CAPABILITY,
 } from "@openbot/contracts/ipc";
 import type { PricingOrder } from "@openbot/contracts/license";
 import type { MarketplaceListingLink } from "@openbot/contracts/marketplace-links";
 import { AGENT_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-access-v1";
 import { AGENT_BACKUP_MODELS_ROUTES } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
+import { AGENT_DEFAULTS_ROUTES } from "@openbot/contracts/team-protocol/agent-defaults-v1";
 import { AGENT_FAST_MODE_ROUTES } from "@openbot/contracts/team-protocol/agent-fast-mode-v1";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
@@ -37,7 +42,7 @@ import { AGENT_IMPORT_V2_CAPABILITY } from "@openbot/contracts/team-protocol/age
 import { AGENT_NEW_CHAT_ROUTES } from "@openbot/contracts/team-protocol/agent-new-chat-v1";
 import { AGENT_NOTIFICATION_LEVELS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-notification-levels-v1";
 import { AGENT_PLAN_CARD_ROUTES } from "@openbot/contracts/team-protocol/agent-plan-card-v1";
-import { AGENT_TASK_LIMIT_ROUTES } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
+import { AGENT_SPEED_CAPABILITY, AGENT_SPEED_ROUTES } from "@openbot/contracts/team-protocol/agent-speed-v1";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
 import { AGENT_THREAD_FILES_CAPABILITY } from "@openbot/contracts/team-protocol/agent-thread-files-v1";
 import { AGENT_USAGE_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-usage-limit-v1";
@@ -67,11 +72,17 @@ import { DISCORD_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/disc
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_PERSONALITY_CAPABILITY } from "@openbot/contracts/team-protocol/host-personality-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
+import { HOST_RESTART_CAPABILITY } from "@openbot/contracts/team-protocol/host-restart-v1";
+import { HOST_TURN_LIMITS_ROUTES } from "@openbot/contracts/team-protocol/host-turn-limits-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
+import { INSTANCE_TRANSFER_CHUNKS_CAPABILITY } from "@openbot/contracts/team-protocol/instance-transfer-chunks-v1";
+import { INSTANCE_TRANSFER_FULL_COPY_CAPABILITY } from "@openbot/contracts/team-protocol/instance-transfer-full-copy-v1";
 import { INSTANCE_TRANSFER_CAPABILITY } from "@openbot/contracts/team-protocol/instance-transfer-v1";
 import { MCP_SIGN_IN_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
 import { MESSAGE_DELETE_CAPABILITY } from "@openbot/contracts/team-protocol/message-delete-v1";
+import { MESSAGE_PINS_CAPABILITY } from "@openbot/contracts/team-protocol/message-pins-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
+import { ROUTINE_FLOW_STOP_CAPABILITY } from "@openbot/contracts/team-protocol/routine-flow-stop-v1";
 import { ROUTINE_FLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/routine-flows-v1";
 import { ROUTINE_RECOVERY_CAPABILITY } from "@openbot/contracts/team-protocol/routine-recovery-v1";
 import { ROUTINE_RUN_PLACE_CAPABILITY } from "@openbot/contracts/team-protocol/routine-run-place-v1";
@@ -84,6 +95,7 @@ import { VAULT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/vault-
 import { VAULT_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v1";
 import { VAULT_V2_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v2";
 import { VAULT_V3_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v3";
+import { VAULT_V4_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v4";
 import { WEBHOOK_SENDER_SECRET_CAPABILITY } from "@openbot/contracts/team-protocol/webhook-sender-secret-v1";
 import { WEBHOOK_TESTS_CAPABILITY } from "@openbot/contracts/team-protocol/webhook-tests-v1";
 import { WHATSAPP_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-connector-v1";
@@ -115,6 +127,7 @@ import {
   getStorageUsage,
   listHostBackgroundProcesses,
   listHostedSites,
+  requestHostRestart,
   setHostAgentAccess,
   setHostAgentMemoryLimit,
   setHostBrowsingMemory,
@@ -198,6 +211,7 @@ import {
   AgentUsagePanel,
   RoutineFlowsCanvas,
   ScheduleView,
+  ServerLibrary,
   ServerOnboarding,
   ServerSettingsModal,
   TasksView,
@@ -218,7 +232,7 @@ import { createUsageRefreshPoll } from "../account/usage-refresh-poll";
 import { conversationThreads } from "../agent-threads/conversation-threads";
 import { type NewAgentDraft, newAgentInput } from "../agents/agent-create-input";
 import { type CreationPreference, resolveCreationModel } from "../agents/agent-creation-model";
-import { claimErrorToast, readableAgentError } from "../agents/agent-error-text";
+import { agentErrorDetails, claimErrorToast, readableAgentError } from "../agents/agent-error-text";
 import { withHostAccountUsage, withHostProfileAccount } from "../agents/host-provider-accounts";
 import { createRemoteAgentAdmin, updateRemoteAgent } from "../agents/remote-agent-admin";
 import type { ServerBrowserProfilesOptions } from "../browser/ServerBrowserProfilesPanel";
@@ -241,7 +255,11 @@ import type {
   ConversationThreads,
   PromptAnswerOptions,
 } from "../conversation/conversation-types";
-import { createAgentMessageDeleteAccess, readerCanDeleteMessage } from "../conversation/message-delete-access";
+import {
+  type AgentLevelsSource,
+  createAgentMessageDeleteAccess,
+  readerCanDeleteMessage,
+} from "../conversation/message-delete-access";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { trackUsageLimitShown, usageLimitAskFrom } from "../conversation/usage-limit-ask";
 import type { FilesPort } from "../files/files-port";
@@ -251,6 +269,7 @@ import type { ScheduleRoutine } from "../schedule/SchedulePanel";
 import { AddServerOverlay, type AddServerResume } from "../servers/AddServerOverlay";
 import { createHostedUpsellOffline, HostedServerUpsell } from "../servers/hosted-server-upsell-controller";
 import { saveRemoteFrameChannels } from "../servers/remote-workspace-frame";
+import type { HostAgentDefaultsCalls } from "../servers/ServerAgentsSection";
 import type { HostServerAuditCalls } from "../servers/ServerAuditSection";
 import type { HostBrowsingMemoryCalls } from "../servers/ServerBrowsingMemorySetting";
 import type { HostMemoryLimitCalls } from "../servers/ServerMemoryLimitSetting";
@@ -259,6 +278,7 @@ import type { HostAgentAccessCalls } from "../servers/ServerRolesSection";
 import type { ServerHostedSitesOptions, ServerSettingsSection } from "../servers/ServerSettingsModal";
 import type { HostSkillLearningCalls } from "../servers/ServerSkillLearningSetting";
 import type { HostTimezoneCalls } from "../servers/ServerTimezoneSetting";
+import type { HostTurnLimitsCalls } from "../servers/ServerTurnLimitsSetting";
 import type { HostUpdateCalls } from "../servers/ServerUpdatePanel";
 import {
   remoteAdminServer,
@@ -297,6 +317,7 @@ import {
   SettingsSearchField,
 } from "../window/SettingsPageFrame";
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
+import { createWorkflowMediaCredits } from "../workflows/workflow-media-credits";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
@@ -357,6 +378,8 @@ const PHONE_QUERY = "(max-width: 720px)";
 const QUEUE_EDIT_ACCOUNT_KEY = "openbot.web.queue-edit-account";
 /** Global search reads one routine list per agent; this many requests go to the host at the same time. */
 const SEARCH_ROUTINE_REQUESTS = 4;
+/** After the host answers, the first page load waits at most this long for the sidebar before its cover goes. */
+const SIDEBAR_WAIT_MS = 5000;
 
 function newAgentAvatar(): Pick<FirstAgentDraft, "avatarSeed" | "avatarHue" | "avatarColor"> {
   const { avatarSeed, avatarHue } = createFirstAgentDraft();
@@ -379,7 +402,7 @@ async function reportedFailure(send: () => Promise<unknown>, options: PromptAnsw
 }
 
 /** The pages of the connected host that cover the conversation. */
-type HostPageView = "usage" | "schedule" | "tasks" | "workflows";
+type HostPageView = "usage" | "schedule" | "tasks" | "workflows" | "library";
 
 type WebWorkspaceProps = {
   accountId: string;
@@ -631,6 +654,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         remoteDesktopAvailable: false,
         ...(host.memberLimit === undefined ? {} : { memberLimit: host.memberLimit }),
         ...(host.hosted === undefined ? {} : { hosted: host.hosted }),
+        ...(host.restartAvailable === undefined ? {} : { restartAvailable: host.restartAvailable }),
         ...(host.storageGb === undefined ? {} : { storageGb: host.storageGb }),
         compatibility: {
           localAppVersion: "web",
@@ -669,16 +693,27 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       loading: workspace.state.status === "connecting",
       hasContent: workspace.state.workspaceLoaded && !frameFirstLoad(),
     });
+  /**
+   * The first load of the page. Its cover stays over a saved frame too, and stays after the host answers
+   * until the sidebar is ready, so the user does not see the agents and channels load. It ends when the
+   * cover first goes.
+   */
+  const [pageLoad, setPageLoad] = createSignal(true);
   // As on desktop, the first load covers the whole window. A server that sleeps, updates or fails
   // shows its screen in the pane only.
   const fullWindowLoading = () =>
-    connectionShown() &&
-    // A saved frame stays on screen: the chat shows its history loader until the host answers.
-    !workspace.state.workspaceLoaded &&
-    !workspace.state.hostOffline &&
-    // The status is "offline" before the first attempt too; only a reported failure ends the cover.
-    !(workspace.state.status === "offline" && workspace.state.connectionError) &&
-    (connectionPhase() === "loading" || connectionPhase() === "connecting");
+    (connectionShown() &&
+      // After the page load, a saved frame stays on screen: the chat shows its history loader until the host answers.
+      (!workspace.state.workspaceLoaded || pageLoad()) &&
+      !workspace.state.hostOffline &&
+      // The status is "offline" before the first attempt too; only a reported failure ends the cover.
+      !(workspace.state.status === "offline" && workspace.state.connectionError) &&
+      (connectionPhase() === "loading" || connectionPhase() === "connecting")) ||
+    // The status check comes first: the sidebar state is defined after this point.
+    (pageLoad() && workspace.state.status === "online" && sidebarLoading());
+  createEffect(fullWindowLoading, (loading) => {
+    if (!loading) setPageLoad(false);
+  });
   // The full-window screen stays after the load ends, so its crew hop out before it goes. It mounts in
   // the first render, so the account screen in WebApp hands the pile to it and does not hop alone.
   const [loadingCover, setLoadingCover] = createSignal<boolean>(untrack(fullWindowLoading));
@@ -909,9 +944,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     await workspace.run(async () => {
       await select(agentId);
       if (workspace.state.selectedId !== agentId) return;
-      await workspace.openSearchMessage(messageId);
-      setMessageFocusRequest({ agentId, messageId, nonce: Date.now() });
+      await openSelectedMessage(agentId, messageId);
     });
+  }
+  /** Loads a message in the open agent's chat and scrolls to it. Resolves false when the chat does not have it. */
+  async function openSelectedMessage(agentId: string, messageId: string): Promise<boolean> {
+    if (workspace.state.selectedId !== agentId) return false;
+    const found = await workspace.openSearchMessage(messageId);
+    if (found) setMessageFocusRequest({ agentId, messageId, nonce: Date.now() });
+    return found;
   }
   /** The admin requests of the connected host. A call for another server is refused, not redirected. */
   function hostAdmin(serverId?: string): WebAdminRuntime {
@@ -1081,13 +1122,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             }),
           },
         }),
-      getAgentTaskLimit: (agentId, serverId) =>
-        hostRequest(serverId)("POST", AGENT_TASK_LIMIT_ROUTES.settings, decodeAgentTaskLimitSettings, { agentId }),
-      updateAgentTaskLimit: ({ agentId, taskLimit }, serverId) =>
-        hostRequest(serverId)("POST", AGENT_TASK_LIMIT_ROUTES.update, decodeAgentTaskLimitSettings, {
-          agentId,
-          taskLimit,
-        }),
       getAgentNewChat: (agentId, serverId) =>
         hostRequest(serverId)("POST", AGENT_NEW_CHAT_ROUTES.settings, decodeAgentNewChatSettings, { agentId }),
       updateAgentNewChat: ({ agentId, allowNewChat }, serverId) =>
@@ -1102,13 +1136,27 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           agentId,
           quickAcknowledgement,
         }),
-      getAgentFastMode: (agentId, serverId) =>
-        hostRequest(serverId)("POST", AGENT_FAST_MODE_ROUTES.settings, decodeAgentFastModeSettings, { agentId }),
-      updateAgentFastMode: ({ agentId, fastMode }, serverId) =>
-        hostRequest(serverId)("POST", AGENT_FAST_MODE_ROUTES.update, decodeAgentFastModeSettings, {
+      // `agent-speed-v1` carries Ultrafast; an older host keeps `agent-fast-mode-v1`, which has only Fast.
+      getAgentFastMode: async (agentId, serverId) =>
+        workspace.state.capabilities.includes(AGENT_SPEED_CAPABILITY)
+          ? agentFastModeSettings(
+              await hostRequest(serverId)("POST", AGENT_SPEED_ROUTES.settings, decodeAgentSpeedSettings, { agentId }),
+            )
+          : hostRequest(serverId)("POST", AGENT_FAST_MODE_ROUTES.settings, decodeAgentFastModeSettings, { agentId }),
+      updateAgentFastMode: async ({ agentId, fastMode, ultrafast }, serverId) => {
+        if (workspace.state.capabilities.includes(AGENT_SPEED_CAPABILITY))
+          return agentFastModeSettings(
+            await hostRequest(serverId)("POST", AGENT_SPEED_ROUTES.update, decodeAgentSpeedSettings, {
+              agentId,
+              speed: fastMode ? (ultrafast ? "ultrafast" : "fast") : "standard",
+            }),
+          );
+        if (ultrafast) throw new Error(t("error.agent.settingsLocalOnly"));
+        return hostRequest(serverId)("POST", AGENT_FAST_MODE_ROUTES.update, decodeAgentFastModeSettings, {
           agentId,
           fastMode,
-        }),
+        });
+      },
       getAgentAdminSettings: (agentId, serverId) =>
         runTeamEffect(
           getAgentAdminSettings(hostRequest(serverId), agentId).pipe(Effect.mapError((error) => error.cause)),
@@ -1129,9 +1177,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const busyMessageMode = remoteAgentAdmin.busyMessageMode();
     const backupModels = remoteAgentAdmin.backupModels();
     const usageLimitReturn = remoteAgentAdmin.usageLimitReturn();
-    const taskLimit = remoteAgentAdmin.taskLimit();
     const quickAcknowledgement = remoteAgentAdmin.quickAcknowledgement();
     const fastMode = remoteAgentAdmin.fastMode();
+    const ultrafast = remoteAgentAdmin.ultrafast();
     const computerUse = remoteAgentAdmin.computerUse();
     const allowNewChat = remoteAgentAdmin.allowNewChat();
     return agent
@@ -1142,9 +1190,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           ...(busyMessageMode ? { busyMessageMode } : {}),
           ...(backupModels ? { backupModels } : {}),
           ...(usageLimitReturn ? { usageLimitReturn } : {}),
-          ...(typeof taskLimit === "number" ? { taskLimit } : {}),
           ...(quickAcknowledgement === undefined ? {} : { quickAcknowledgement }),
-          ...(typeof fastMode === "boolean" ? { fastMode } : {}),
+          ...(typeof fastMode === "boolean" ? { fastMode, ultrafast } : {}),
           ...(computerUse === undefined ? {} : { computerUse }),
           ...(allowNewChat === undefined ? {} : { allowNewChat }),
         }
@@ -1265,7 +1312,29 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       };
     },
     githubConnector: githubPort,
+    attachmentMedia: runtime.attachmentMedia,
   });
+  // As on desktop: the rail shows the Sunra credits of the host while the Canvas page is open.
+  const mediaCredits = createWorkflowMediaCredits(
+    () => (page() === "workflows" && workspace.state.status === "online" ? (server()?.id ?? null) : null),
+    () => workflowHost.workflows.mediaCredits(),
+  );
+  const librarySupported = () => workspace.state.capabilities.includes(STORAGE_CAPABILITY);
+  // As the Tasks page: an older host has no storage routes and no Library button.
+  createEffect(
+    () => page() === "library" && workspace.state.status === "online" && !librarySupported(),
+    (unsupported) => {
+      if (unsupported) setHostPage(null);
+    },
+  );
+  /** The Library button of the page rail, only on a host with `storage-v1`. A named function, not a ternary prop. */
+  function libraryRailAction(): ((button: HTMLElement) => void) | undefined {
+    if (!librarySupported()) return undefined;
+    return (button) => {
+      const id = server()?.id;
+      if (id) void openHostPage(id, "library", button);
+    };
+  }
   /** The Workflows button of the page rail, only on a host with `workflows-v1`. A named function, not a ternary prop. */
   function workflowsRailAction(): (() => void) | undefined {
     if (!workflowsSupported()) return undefined;
@@ -1400,9 +1469,24 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       if (gone) setRestartRequest(null);
     },
   );
+  /**
+   * A self-hosted server restarts itself (`host-restart-v1`); only the open one, because the web client
+   * reaches no other host. The account service restarts a hosted server.
+   */
+  function restartsItself(serverId: string): boolean {
+    return (
+      !hostedServers.isHosted(serverId) &&
+      server()?.id === serverId &&
+      workspace.state.status === "online" &&
+      workspace.runtime.admin !== undefined &&
+      workspace.state.capabilities.includes(HOST_RESTART_CAPABILITY)
+    );
+  }
   async function restartHost(): Promise<void> {
     const hostId = restartRequest()?.hostId;
-    if (hostId) await hostedServers.calls.restart(hostId);
+    if (!hostId) return;
+    if (hostedServers.isHosted(hostId)) await hostedServers.calls.restart(hostId);
+    else await runTeamEffect(requestHostRestart(hostRequest(hostId)).pipe(Effect.mapError((error) => error.cause)));
   }
   createEffect(
     () => props.billingReturn,
@@ -1431,8 +1515,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const storageCalls: FilesPort = {
     agent: { listAgents: () => workspace.runtime.listAgents() },
     hostAdmin: machineCalls.hostAdmin,
+    // The web client has one server, so each host event is of the page's server.
+    onLibraryFoldersChanged: (_serverId, listener) =>
+      workspace.onHostEvent((event) => {
+        if (event.type === "library-folders-changed") listener();
+      }),
     storage: {
       getMachineMetrics: machineCalls.storage.getMachineMetrics,
+      getLibraryFolders: machineCalls.storage.getLibraryFolders,
+      changeLibraryFolders: machineCalls.storage.changeLibraryFolders,
       // The host names previews with the desktop `openbot-attachment:` scheme, as it does in chat.
       getUsage: async (input, serverId) => {
         if (input.scope === "channel" && !workspace.state.capabilities.includes(STORAGE_CHANNEL_CAPABILITY))
@@ -1488,13 +1579,28 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     download: (serverId) => hostAdmin(serverId).download,
     listAgents: () => workspace.runtime.listAgents(),
     saveFile,
+    fullCopy: () => instanceTransferFullCopy(),
+    sendsParts: () => workspace.state.capabilities.includes(INSTANCE_TRANSFER_CHUNKS_CAPABILITY),
   });
+  // The export in parts with each part chosen: chat history, channel messages, server preferences.
+  const instanceTransferFullCopy = () =>
+    workspace.state.capabilities.includes(INSTANCE_TRANSFER_CHUNKS_CAPABILITY) &&
+    workspace.state.capabilities.includes(INSTANCE_TRANSFER_FULL_COPY_CAPABILITY);
   // Only an owner or admin moves a whole server, and the host checks the role again.
   const instanceTransferEnabled = () =>
     workspace.state.capabilities.includes(INSTANCE_TRANSFER_CAPABILITY) &&
     canAdministerServer(workspace.state.host?.role);
   // A named function, not a ternary in the prop: the settings read the prop in a tracked effect.
-  const instanceTransferSettings = () => (instanceTransferEnabled() ? { calls: instanceTransferCalls } : undefined);
+  // No copy to another server: the browser client connects to one host, and only the desktop app
+  // holds the connections of two servers at the same time.
+  const instanceTransferSettings = () =>
+    instanceTransferEnabled()
+      ? {
+          calls: instanceTransferCalls,
+          history: instanceTransferFullCopy(),
+          fullCopy: instanceTransferFullCopy(),
+        }
+      : undefined;
   const memberUpdateAccess = () => !serverRoleCanAdminister(server());
   const hostUpdateCalls: HostUpdateCalls = {
     getReleaseStatus: async (serverId) =>
@@ -1529,6 +1635,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       runTeamEffect(getHostTimezone(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
     setTimezone: async (timezone, serverId) =>
       runTeamEffect(setHostTimezone(hostRequest(serverId), timezone).pipe(Effect.mapError((error) => error.cause))),
+  };
+  const hostTurnLimitsCalls: HostTurnLimitsCalls = {
+    getTurnLimits: async (serverId) =>
+      hostRequest(serverId)("POST", HOST_TURN_LIMITS_ROUTES.settings, decodeHostTurnLimits, {}),
+    setTurnLimits: async ({ turnLimit, agentTaskLimit }, serverId) =>
+      hostRequest(serverId)("POST", HOST_TURN_LIMITS_ROUTES.update, decodeHostTurnLimits, {
+        turnLimit,
+        agentTaskLimit,
+      }),
   };
   const hostPersonalityCalls: HostPersonalityCalls = {
     // A host before host-personality-v1 uses the classic prompt.
@@ -1624,6 +1739,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       accountUserId: props.accountId,
       onOwnComputer: false,
     });
+  /** The levels of a member on the connected host, for the messages and the Library folders that the member can change. */
+  const hostAgentLevels: Pick<AgentLevelsSource, "readLevels" | "onLevelsChanged"> = {
+    readLevels: (serverId) => hostAgentAccessCalls.getAgentAccess(serverId),
+    onLevelsChanged: (_serverId, listener) =>
+      workspace.onHostEvent((event) => {
+        if (event.type === "agent-access-changed") listener();
+      }),
+  };
   const messageDeleteSupported = () => workspace.state.capabilities.includes(MESSAGE_DELETE_CAPABILITY);
   const deletesAnyAgentMessage = createAgentMessageDeleteAccess({
     deletesAny: () => canAdministerServer(workspace.state.host?.role),
@@ -1633,11 +1756,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         return null;
       return messageDeleteSupported() && workspace.state.capabilities.includes(AGENT_ACCESS_CAPABILITY) ? hostId : null;
     },
-    readLevels: (serverId) => hostAgentAccessCalls.getAgentAccess(serverId),
-    onLevelsChanged: (_serverId, listener) =>
-      workspace.onHostEvent((event) => {
-        if (event.type === "agent-access-changed") listener();
-      }),
+    ...hostAgentLevels,
   });
   /** Whether the reader may delete `message` in the open agent's chat or side threads. */
   const canDeleteAgentMessage = (message: AgentMessage) =>
@@ -1649,11 +1768,37 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const agentId = workspace.state.selectedId;
     return agentId ? workspace.deleteMessage(agentId, messageId) : Promise.resolve();
   };
+  /** Pin and Unpin on the host. A host without `message-pins-v1` has none. */
+  const agentMessagePins = () => {
+    const { listPinnedMessages: list, setMessagePinned: set } = workspace.runtime;
+    if (!list || !set || !workspace.state.capabilities.includes(MESSAGE_PINS_CAPABILITY)) return undefined;
+    return {
+      list,
+      set,
+      subscribe: (agentId: string, changed: () => void) =>
+        workspace.onHostEvent((event) => {
+          if (event.type === "message-pins-changed" && event.agentId === agentId) changed();
+        }),
+    };
+  };
   /** The Delete action of the open agent's chat. A host without `message-delete-v1` has none. */
   const agentDeleteMessageAction = () => (messageDeleteSupported() ? deleteOpenAgentMessage : undefined);
   const hostServerAuditCalls: HostServerAuditCalls = {
     getAuditLog: async (serverId) =>
       runTeamEffect(getHostAuditLog(hostRequest(serverId)).pipe(Effect.mapError((error) => error.cause))),
+  };
+  /** Server Settings > Agents on a host with `agent-defaults-v1`. */
+  const hostAgentDefaultsCalls: HostAgentDefaultsCalls = {
+    getAgentDefaultsOverview: (serverId) =>
+      hostRequest(serverId)("POST", AGENT_DEFAULTS_ROUTES.settings, decodeAgentDefaultsOverview, {}),
+    updateAgentDefaultsOverview: (input, serverId) =>
+      hostRequest(serverId)("POST", AGENT_DEFAULTS_ROUTES.update, decodeAgentDefaultsOverview, { ...input }),
+    setAgentDefaultChoice: ({ agentIds, setting, choice }, serverId) =>
+      hostRequest(serverId)("POST", AGENT_DEFAULTS_ROUTES.choice, decodeAgentDefaultsOverview, {
+        agentIds,
+        setting,
+        choice,
+      }),
   };
   const [serverSettingsSection, setServerSettingsSection] = createSignal<ServerSettingsSection | null>(null);
   /** Set when the Marketplace asked for the form that adds an MCP server, until the MCP section opens it. */
@@ -1694,7 +1839,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onDelete: deleteHostedServer,
     canDelete: hostedServers.isHosted,
     onRestart: (hostId, trigger) => setRestartRequest({ hostId, trigger }),
-    canRestart: hostedServers.isHosted,
+    canRestart: (serverId) => hostedServers.isHosted(serverId) || restartsItself(serverId),
   } satisfies ServerActionCallbacks;
   // Each time the user enters a host that has a new version, the update dialog opens. A reconnect does not offer again.
   let entry: { id: string; offered: boolean } | null = null;
@@ -1749,6 +1894,25 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       : channelsListed()
         ? channels.state.channels
         : [];
+  // A host that does not answer a sidebar read does not keep the page load's cover.
+  const [sidebarWaitOver, setSidebarWaitOver] = createSignal(false);
+  createEffect(
+    () => pageLoad() && workspace.state.status === "online",
+    (waiting) => {
+      if (!waiting) return;
+      const timer = setTimeout(() => setSidebarWaitOver(true), SIDEBAR_WAIT_MS);
+      return () => clearTimeout(timer);
+    },
+  );
+  /** The host answered, and the sidebar still reads its order, hidden agents, unread counts or channels. */
+  function sidebarLoading(): boolean {
+    return (
+      !sidebarWaitOver() &&
+      (workspace.state.panelsLoading ||
+        // A failed channel list shows its error in the sidebar, so the cover does not wait for it.
+        (channelsSupported() && !routinesView() && !channels.state.listed && !channels.state.error))
+    );
+  }
   const savedChannelId = () => {
     const hostId = workspace.state.host?.hostId;
     return hostId ? (readChannelSelection()[props.accountId]?.[hostId] ?? null) : null;
@@ -1825,7 +1989,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const serverId = server()?.id;
       if (event.agentId && serverId) {
         const key = composerDraftKey({ agentId: event.agentId, serverId });
-        controller.setConversationErrors((current) => ({ ...current, [key]: readableAgentError(event.message) }));
+        const message = readableAgentError(event.message);
+        controller.setConversationErrors((current) => ({ ...current, [key]: message }));
+        // The general sentence hides the cause, so the user can copy it into a report (#6410).
+        const details = agentErrorDetails(event.message, message);
+        controller.setConversationErrorRuns((current) => {
+          if (details) return { ...current, [key]: { message, run: null, details } };
+          if (!(key in current)) return current;
+          const { [key]: _replaced, ...next } = current;
+          return next;
+        });
         return;
       }
       const description = readableAgentError(event.message);
@@ -1903,8 +2076,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       },
     ];
   });
-  const routineFlowsHost = webRoutineFlowsHost(workspace.runtime, workspace.onHostEvent, () =>
-    eventsEnabled() ? webhookRoutines : undefined,
+  const routineFlowsHost = webRoutineFlowsHost(
+    workspace.runtime,
+    workspace.onHostEvent,
+    () => (eventsEnabled() ? webhookRoutines : undefined),
+    () => workspace.state.capabilities.includes(ROUTINE_FLOW_STOP_CAPABILITY),
   );
   /** The host's Providers settings, which an owner or admin of the host can open. */
   const openProviderSettings = (trigger: HTMLElement) => {
@@ -1927,14 +2103,16 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return store ? { store, listAgents: async () => workspace.profiles() } : undefined;
   });
   // The Vault section, for an owner or admin of a host with `vault-v1`. The store follows the host id.
-  // With `vault-v2` it also keeps API keys, and with `vault-v3` two-step keys.
+  // With `vault-v2` it also keeps API keys, with `vault-v3` two-step keys, and with `vault-v4` the
+  // agents of each item.
   const vaultHostId = createMemo(() => {
     const current = server();
     return serverCanAdminister(current, VAULT_CAPABILITY) ? current?.id : undefined;
   });
   // A host that updates or rolls back keeps its id, so the store follows this capability too.
-  const vaultVersion = createMemo((): 1 | 2 | 3 => {
+  const vaultVersion = createMemo((): 1 | 2 | 3 | 4 => {
     const current = server();
+    if (serverCanAdminister(current, VAULT_V4_CAPABILITY)) return 4;
     if (serverCanAdminister(current, VAULT_V3_CAPABILITY)) return 3;
     return serverCanAdminister(current, VAULT_V2_CAPABILITY) ? 2 : 1;
   });
@@ -1946,7 +2124,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return {
       store: createVaultStore(webVaultCalls(() => hostRequest(), workspace.onHostEvent, version, vaultImport())),
       apiKeys: version > 1,
-      twoStep: version === 3,
+      twoStep: version >= 3,
+      listAgents: async () => workspace.profiles(),
     };
   });
   const openBrowserProfileSettings = (trigger: HTMLElement) => {
@@ -1980,17 +2159,48 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       if (channelOpenInRoutines) layout.setSidebarView("agents");
     },
   );
+  /**
+   * The agent whose chat the user marked unread from one message. Its chat does not mark itself read
+   * again until it opens again, as on the desktop.
+   */
+  const [heldUnreadAgentId, setHeldUnreadAgentId] = createSignal<string | null>(null);
   const readState = () => workspace.conversation()?.page?.readState;
+  const readsOpenChat = () =>
+    workspace.state.status === "online" &&
+    !agentFormOpen() &&
+    !channelOpen() &&
+    canMarkRead() &&
+    heldUnreadAgentId() !== workspace.state.selectedId;
+  /*
+   * The read state that the chat shows. The host counts a reply as unread until this tab marks it
+   * read, so each reply would move the unread line to it and the chat would jump. A reply that comes
+   * while the reader can read the loaded chat is read at once, as on the desktop: the chat keeps the
+   * line of its opening. The messages of the opening, of a time away and of Mark unread keep theirs.
+   */
+  const shownReadState = createMemo<{ visit: string; seen: boolean; unreadCount: number; firstUnread: string | null }>(
+    (previous) => {
+      const conversation = workspace.conversation();
+      const page = conversation?.page;
+      const visit = `${workspace.state.host?.hostId ?? ""}:${workspace.state.selectedId ?? ""}:${page?.threadId ?? ""}`;
+      const readable = readsOpenChat();
+      const seenBefore = previous?.visit === visit && previous.seen;
+      // A time away ends the visit's read: what comes next keeps its unread line.
+      const seen = readable && (seenBefore || (Boolean(page) && conversation?.loading === false));
+      if (seenBefore && readable) return { visit, seen, unreadCount: 0, firstUnread: null };
+      return {
+        visit,
+        seen,
+        unreadCount: page?.readState?.unreadCount ?? 0,
+        firstUnread: page?.readState?.firstUnreadMessageId ?? null,
+      };
+    },
+  );
   // Keyed on the newest loaded message, not on the read state: the host can count a message that
   // this page has not loaded yet, and marking the same message again would not clear it. Focus
   // coming back reads the page again.
   createEffect(
     () =>
-      (readState()?.unreadCount ?? 0) > 0 &&
-      !agentFormOpen() &&
-      !channelOpen() &&
-      canMarkRead() &&
-      heldUnreadAgentId() !== workspace.state.selectedId
+      (readState()?.unreadCount ?? 0) > 0 && readsOpenChat()
         ? (workspace.conversation()?.page?.messages.at(-1)?.id ?? null)
         : null,
     (unread) => {
@@ -2161,11 +2371,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       },
     };
   };
-  /**
-   * The agent whose chat the user marked unread from one message. Its chat does not mark itself read
-   * again until it opens again, as on the desktop.
-   */
-  const [heldUnreadAgentId, setHeldUnreadAgentId] = createSignal<string | null>(null);
   /**
    * Marks a chat unread. The open chat stays unread until it opens again; another chat marks itself
    * read only when it opens. A failure releases the hold.
@@ -2368,6 +2573,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         reportedFailure(() => workspace.approve({ requestId: item.requestId, decision }), options),
       contextStates: () => workspace.state.threadContextStates,
       onCompactContext: compactSelectedTaskContext(),
+      onOpenMainMessage: (messageId) => openSelectedMessage(agent.id, messageId),
     });
   });
   /** The thread that the conversation shows: the open side thread, or the agent's own chat. */
@@ -2566,11 +2772,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     showAgents();
     setCreating(true);
   }
-  /** The rail button of the page. The server settings open from the server menu, so no button is current. */
+  /**
+   * The rail button of the page. The server settings and the pricing page open from the server menu, so no button is
+   * current.
+   */
   const railPage = (): PageRailPage | null => {
     const current = page();
     if (current === "agents") return layout.sidebarView();
-    return current === "server-settings" ? null : current;
+    return current === "server-settings" || current === "pricing" ? null : current;
   };
   /** The settings page on screen, if any. */
   const settingsKind = (): SettingsKind | null =>
@@ -2610,6 +2819,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   /** The chat shows the loader of its history from the start, so the connect and the history load are one screen. */
   const frameConnecting = () =>
     connectionShown() &&
+    !fullWindowLoading() &&
     frameFirstLoad() &&
     agentChatOpen() &&
     (connectionPhase() === "loading" || connectionPhase() === "connecting");
@@ -2624,31 +2834,36 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     workspace.conversation()?.loading === true;
   const conversationError = () =>
     workspace.state.status === "online" ? (workspace.conversation()?.error ?? null) : null;
-  const connectionNotice = (cover = false) => (
-    <ServerConnectionNotice
-      name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
-      initial={cover || !workspace.state.workspaceLoaded || frameFirstLoad()}
-      ready={cover ? !fullWindowLoading() : undefined}
-      onExited={cover ? () => setLoadingCover(false) : undefined}
-      fullWindow={fullWindowLoading()}
-      screen={!frameConnecting()}
-      issue={workspace.state.hostedIssue}
-      start={workspace.state.hostedStart}
-      updateVersion={workspace.state.hostRestart?.version ?? null}
-      detail={connectionDetail()?.message ?? null}
-      reference={connectionDetail()?.reference ?? null}
-      phase={connectionPhase()}
-      remainingSeconds={
-        workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown"
-          ? workspace.state.recovery.remainingSeconds
-          : 0
-      }
-      busy={workspace.state.status === "connecting" || !workspace.state.host}
-      onRetry={() => void workspace.run(workspace.reconnect)}
-      onManage={() => setBillingOpen(true)}
-      upsell={offlineUpsell()}
-    />
-  );
+  /** While the page load waits for the sidebar, the host answered: the cover still loads, it does not reconnect. */
+  const coverPhase = () => (workspace.state.status === "online" ? "loading" : connectionPhase());
+  const connectionNotice = (cover = false) => {
+    const phase = cover ? coverPhase : connectionPhase;
+    return (
+      <ServerConnectionNotice
+        name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
+        initial={cover || !workspace.state.workspaceLoaded || frameFirstLoad()}
+        ready={cover ? !fullWindowLoading() : undefined}
+        onExited={cover ? () => setLoadingCover(false) : undefined}
+        fullWindow={fullWindowLoading()}
+        screen={!frameConnecting()}
+        issue={workspace.state.hostedIssue}
+        start={workspace.state.hostedStart}
+        updateVersion={workspace.state.hostRestart?.version ?? null}
+        detail={connectionDetail()?.message ?? null}
+        reference={connectionDetail()?.reference ?? null}
+        phase={phase()}
+        remainingSeconds={
+          workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown"
+            ? workspace.state.recovery.remainingSeconds
+            : 0
+        }
+        busy={workspace.state.status === "connecting" || !workspace.state.host}
+        onRetry={() => void workspace.run(workspace.reconnect)}
+        onManage={() => setBillingOpen(true)}
+        upsell={offlineUpsell()}
+      />
+    );
+  };
   return (
     <ConversationControllerProvider controller={controller}>
       <ChannelsControllerProvider controller={channels}>
@@ -2692,9 +2907,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 if (id) void openHostPage(id, "schedule", button);
               }}
               onWorkflows={workflowsRailAction()}
+              onLibrary={libraryRailAction()}
               onUsage={(button) => {
                 const id = server()?.id;
                 if (id) void openHostPage(id, "usage", button);
+              }}
+              mediaCredits={mediaCredits()}
+              onMediaCredits={(provider) => {
+                setSuggestedApp({ appId: provider, connect: false });
+                openMarketplace();
               }}
               onMarketplace={workspace.state.status === "online" ? openMarketplace : undefined}
               onSettings={openAccountSettings}
@@ -2761,7 +2982,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               windowPage={page()}
               page={
                 <Show
-                  when={page() === "usage" || page() === "schedule" || page() === "workflows" ? server() : undefined}
+                  when={
+                    page() === "usage" || page() === "schedule" || page() === "workflows" || page() === "library"
+                      ? server()
+                      : undefined
+                  }
                   fallback={
                     <Show
                       when={settingsKind()}
@@ -2885,6 +3110,25 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                               self={account().name ?? undefined}
                             />
                           </Loading>
+                        </Show>
+                      </Match>
+                      <Match when={page() === "library"}>
+                        {/* Keyed: the page reads the files and folders of one server, as on desktop. */}
+                        <Show when={target().id} keyed>
+                          {(serverId) => (
+                            <Loading>
+                              <ServerLibrary
+                                serverId={serverId}
+                                server={server()}
+                                calls={() => storageCalls}
+                                levels={hostAgentLevels}
+                                onShowInChat={(agentId, messageId) => void openMessage(agentId, messageId)}
+                                onOpenUrl={(url) => void openWebLink(url)}
+                                mediaSource={runtime.attachmentMedia}
+                                opensFiles={false}
+                              />
+                            </Loading>
+                          )}
                         </Show>
                       </Match>
                       <Match when={page() === "schedule"}>
@@ -3099,9 +3343,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     onRefreshServers={workspace.retryHosts}
                     resume={hostedServers.addServer()?.resume}
                     license={licenseCalls}
+                    onOpenUrl={(url) => window.open(url, "_blank", "noopener")}
                     onClose={hostedServers.closeAddServer}
                     onOpenServer={(serverId) => {
                       hostedServers.closeAddServer();
+                      // Billing can open this dialog; the server opens in front of it.
+                      setBillingOpen(false);
                       selectServer(serverId);
                     }}
                     onContactUs={() => window.location.assign(HOSTED_SERVER_CONTACT_URL)}
@@ -3262,6 +3509,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         providers={providerSettings()}
                         hostUpdate={{ calls: hostUpdateCalls }}
                         hostTimezone={{ calls: hostTimezoneCalls }}
+                        hostTurnLimits={{ calls: hostTurnLimitsCalls }}
                         hostPersonality={{ calls: hostPersonalityCalls }}
                         hostMemoryLimit={{ calls: hostMemoryLimitCalls }}
                         memoryReview={{ calls: hostMemoryReviewCalls }}
@@ -3274,6 +3522,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         hostDefaultProvider={{ calls: providerAdmin.hostDefaultProviderCalls }}
                         agentAccess={{ calls: hostAgentAccessCalls, listAgents: () => workspace.runtime.listAgents() }}
                         serverAudit={{ calls: hostServerAuditCalls, listAgents: () => workspace.runtime.listAgents() }}
+                        agentDefaults={{
+                          calls: hostAgentDefaultsCalls,
+                          listAgents: () => workspace.runtime.listAgents(),
+                          onAgentsChanged: (listener) =>
+                            workspace.onHostEvent((event) => {
+                              if (event.type === "agents-changed") listener(workspace.state.host?.hostId ?? "");
+                            }),
+                        }}
                         browserProfiles={browserProfileSettings()}
                         vault={vaultSettings()}
                         // The providers of the host are its own, so there is no sign-in here.
@@ -3443,10 +3699,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     setAgentAvatar({ avatarSeed, avatarHue, avatarColor })
                   }
                   onClose={() => setCreating(false)}
-                  onSaved={async () => {
+                  onSaved={async (agentId) => {
                     await workspace.refresh();
                     setAgentAvatar(newAgentAvatar());
-                    setCreating(false);
+                    // The new agent opens, as on the desktop. `select` also closes the form.
+                    await select(agentId);
                   }}
                 />
               </Show>
@@ -3475,6 +3732,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       },
                       approvals: () => workspace.state.approvals,
                       takeovers: () => workspace.state.takeovers,
+                      prompts: () => workspace.state.prompts,
                       pausedAgentIds,
                     });
                     return (
@@ -3527,6 +3785,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         promptUiBlock={channelView.promptUiBlock()}
                         approval={channelView.approval()}
                         browserTakeover={channelView.browserTakeover()}
+                        // A member's Sign in card signs in as the agent chat's does (#6228).
+                        onOpenMcpSignIn={openMcpSignInFromChat()}
+                        mcpSignedIn={(mcpServerId) => serverSettings.state.mcpSignIns[mcpServerId]?.signedIn === true}
                         onSelectAgent={(id) => {
                           setMobilePane("conversation");
                           void select(id);
@@ -3656,8 +3917,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   messages={view.messages}
                   messageReferences={view.messageReferences()}
                   missingMessageReferences={view.missingMessageReferences()}
-                  unreadCount={readState()?.unreadCount ?? 0}
-                  firstUnreadMessageId={readState()?.firstUnreadMessageId ?? null}
+                  unreadCount={shownReadState().unreadCount}
+                  firstUnreadMessageId={shownReadState().firstUnread}
                   loaded={Boolean(workspace.conversation()?.page)}
                   hasOlder={workspace.conversation()?.page?.pageInfo.hasOlder}
                   unloadedHistory={unloadedHistory(workspace.conversation()?.page?.pageInfo)}
@@ -3734,15 +3995,19 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   sendToChannel={sendToChannel()}
                   onDeleteMessage={agentDeleteMessageAction()}
                   canDeleteMessage={canDeleteAgentMessage}
+                  messagePins={agentMessagePins()}
                   onLoadOlder={() => void workspace.older()}
-                  onLoadLatest={workspace.refresh}
+                  discontinuous={workspace.conversation()?.around === true}
+                  onLoadLatest={workspace.loadLatest}
                   onSearchMessages={async (query) => {
                     const id = workspace.state.selectedId;
                     if (!id) return { messageIds: [], total: 0 };
                     const result = await workspace.runtime.search(id, query);
                     return { messageIds: result.results.map((item) => item.message.id), total: result.total };
                   }}
-                  onOpenSearchMessage={workspace.openSearchMessage}
+                  onOpenSearchMessage={async (messageId) => {
+                    await workspace.openSearchMessage(messageId);
+                  }}
                   onTypingChange={setTyping}
                   onAnswerPrompt={view.answerPrompt}
                   onPromptResolutionPresented={(_agentId, turnId, requestId) =>
@@ -3752,7 +4017,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   onAlwaysAllowApproval={view.alwaysAllowApproval()}
                   agentAutoApproves={remoteAgentAdmin.autoApproves()}
                   remoteBackupModelsLoaded={remoteAgentAdmin.backupModels() !== undefined}
-                  remoteTaskLimitLoaded={remoteAgentAdmin.taskLimit() !== undefined}
                   remotePlanCardLoaded={remoteAgentAdmin.quickAcknowledgement() !== undefined}
                   remoteComputerUseLoaded={remoteAgentAdmin.computerUse() !== undefined}
                   remoteNewChatLoaded={remoteAgentAdmin.allowNewChat() !== undefined}

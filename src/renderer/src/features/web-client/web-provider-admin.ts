@@ -22,7 +22,9 @@ import {
   CUSTOM_PROVIDER_HARNESS_CAPABILITY,
   CUSTOM_PROVIDER_HARNESS_ROUTES,
 } from "@openbot/contracts/team-protocol/custom-provider-harness-v1";
+import { PROVIDER_ACCOUNT_KEYS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-keys-v1";
 import { PROVIDER_ACCOUNT_MODELS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-models-v1";
+import { PROVIDER_ACCOUNT_POOL_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   type ProviderAccountRelay,
   providerAccountRelay,
@@ -60,6 +62,7 @@ import {
   cancelProviderRuntime,
   checkProviderRuntimeUpdates,
   clearProviderApiKey,
+  connectProviderAccountKey,
   deleteCustomAgent,
   deleteCustomProvider,
   downloadProviderRuntime,
@@ -83,6 +86,7 @@ import {
   saveCustomAgent,
   saveCustomProvider,
   setHostProviderDefault,
+  setProviderAccountPool,
   setProviderApiKey,
   setProviderUse,
   signOutProvider,
@@ -165,6 +169,8 @@ function webProviderAdmin(
   accountRelay: () => ProviderAccountRelay | null,
   /** Whether the host has `provider-account-models-v1`. */
   accountModels: () => boolean,
+  /** Whether the host has `provider-account-pool-v1`. */
+  accountPools: () => boolean,
 ): ProviderAdminDesktopApi {
   return {
     startCodeLogin: async (provider, serverId) =>
@@ -253,7 +259,7 @@ function webProviderAdmin(
       ),
     accounts: async (serverId) =>
       runTeamEffect(
-        listProviderAccountsWithModels(request(serverId), accountModels()).pipe(
+        listProviderAccountsWithModels(request(serverId), accountModels(), accountPools()).pipe(
           Effect.mapError((error) => error.cause),
         ),
       ),
@@ -269,10 +275,14 @@ function webProviderAdmin(
       runTeamEffect(
         cancelProviderAccountSignIn(request(serverId), provider).pipe(Effect.mapError((error) => error.cause)),
       ),
+    connectAccountKey: async (input, serverId) =>
+      runTeamEffect(connectProviderAccountKey(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     renameAccount: async (input, serverId) =>
       runTeamEffect(renameProviderAccount(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     removeAccount: async (input, serverId) =>
       runTeamEffect(removeProviderAccount(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
+    setAccountPool: async (input, serverId) =>
+      runTeamEffect(setProviderAccountPool(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     hostDefaultProvider: async (serverId) =>
       knownHostDefault(
         await runTeamEffect(getHostProviderDefault(request(serverId)).pipe(Effect.mapError((error) => error.cause))),
@@ -392,6 +402,7 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
           : PROVIDERS_ADMIN_ROUTES,
     accountRelayOfServer,
     () => serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_MODELS_CAPABILITY),
+    () => serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_POOL_CAPABILITY),
   );
   const serverId = createMemo(() => remoteAdminServer(options.server(), "providers-v1")?.id);
   const runtimes = createProviderRuntimeStore(
@@ -584,6 +595,18 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
         : {}),
       ...(remoteAdminServer(options.server(), PROVIDER_SIGN_OUT_CAPABILITY)?.id === id
         ? { signOut: (provider: AgentProviderId) => changed(admin.signOut(provider, id)) }
+        : {}),
+      ...(remoteAdminServer(options.server(), PROVIDER_ACCOUNT_POOL_CAPABILITY)?.id === id
+        ? {
+            setPool: (provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) =>
+              changed(admin.setAccountPool({ provider, enabled, leftOut: [...leftOut] }, id)),
+          }
+        : {}),
+      ...(remoteAdminServer(options.server(), PROVIDER_ACCOUNT_KEYS_CAPABILITY)?.id === id
+        ? {
+            connectKey: (provider: AgentProviderId, accountId: string | null, key: string) =>
+              changed(admin.connectAccountKey({ provider, accountId, key }, id)),
+          }
         : {}),
     };
   });

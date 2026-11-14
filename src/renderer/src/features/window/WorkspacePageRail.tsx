@@ -1,4 +1,4 @@
-import { type FreeLlmBudget, isUpdateActivePhase } from "@openbot/contracts/ipc";
+﻿import { type FreeLlmBudget, isUpdateActivePhase } from "@openbot/contracts/ipc";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
 import { ServerMenu } from "@openbot/ui/features/servers/ServerMenu";
 import type { SidebarView } from "@openbot/ui/features/sidebar/sidebar-types";
@@ -19,6 +19,9 @@ import { useSettings } from "../settings/settings-context";
 import { useUpdates } from "../updates/updates-context";
 import { useWhatsNew } from "../updates/whats-new-context";
 import { usePlanLimitRows } from "../usage/plan-limit-rows";
+import { useUsage } from "../usage/usage-context";
+import { createWorkflowMediaCredits } from "../workflows/workflow-media-credits";
+import { desktopMediaCredits } from "../workflows/workflows-port";
 import { RailHelpMenu } from "./RailHelpMenu";
 import { useWindowPage } from "./window-page-context";
 
@@ -30,7 +33,8 @@ import { useWindowPage } from "./window-page-context";
 export function WorkspacePageRail(props: { hidden: boolean }) {
   const text = useText();
   const windowPage = useWindowPage();
-  const { openAppSettings, setSkillsMarketplaceOpen } = useSettings();
+  const { openAppSettings, setSkillsMarketplaceOpen, setPendingPluginSlug, setPendingPluginConnect } = useSettings();
+  const usage = useUsage();
   const updates = useUpdates();
   const layout = useLayout();
   const channels = useChannels();
@@ -61,6 +65,11 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
   void readFreeLlm();
   const freeLlmTimer = window.setInterval(readFreeLlm, 5 * 60_000);
   onCleanup(() => window.clearInterval(freeLlmTimer));
+  /** The Sunra credits of the server that the Canvas page shows. Other pages do not read them. */
+  const mediaCredits = createWorkflowMediaCredits(
+    () => (windowPage.page() === "workflows" ? usage.state.serverId : null),
+    desktopMediaCredits,
+  );
   const { customAgentUsage } = useCustomAgents();
   /** The custom agents run on this computer, so a joined server does not show their usage. */
   const localAgentUsage = () => (activeServer()?.kind === "local" ? customAgentUsage() : []);
@@ -78,7 +87,7 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
   const current = (): PageRailPage | null => {
     const page = windowPage.page();
     if (page === "agents") return layout.sidebarView();
-    return page === "server-settings" ? null : page;
+    return page === "server-settings" || page === "pricing" ? null : page;
   };
   return (
     <>
@@ -101,6 +110,13 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
               }
             : undefined;
         })()}
+        mediaCredits={mediaCredits()}
+        onMediaCredits={(provider) => {
+          windowPage.leavePricing();
+          setPendingPluginConnect(false);
+          setPendingPluginSlug(provider);
+          setSkillsMarketplaceOpen(true);
+        }}
         onAgents={() => showSidebarView("agents")}
         onRoutines={() => showSidebarView("routines")}
         // A joined server without workflows shows its notice on the page.
@@ -110,7 +126,10 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
         onUsage={windowPage.openUsage}
         // An older joined server has no storage routes, so it has no Library.
         onLibrary={serverHasStorage(activeServer()) ? windowPage.openLibrary : undefined}
-        onMarketplace={() => setSkillsMarketplaceOpen(true)}
+        onMarketplace={() => {
+          windowPage.leavePricing();
+          setSkillsMarketplaceOpen(true);
+        }}
         onSettings={(button) => (updateNotice() ? openAppSettings(button, "updates") : windowPage.openSettings(button))}
         settingsNotice={updateNotice()}
         logo={logo()}

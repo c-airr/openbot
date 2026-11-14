@@ -138,6 +138,7 @@ import {
   type VoiceStream,
   type VoiceStreamTranscript,
   type VoiceTranscriptionResult,
+  type WorkflowNotificationOpenedEvent,
 } from "@openbot/contracts/ipc";
 import {
   decodeList,
@@ -566,6 +567,11 @@ export function decodeNotificationOpenedEvent(value: unknown): NotificationOpene
     threadId: nullableString(opened, "threadId"),
     ...(opened.channelId === undefined ? {} : { channelId: requiredString(opened, "channelId") }),
   };
+}
+
+export function decodeWorkflowNotificationOpenedEvent(value: unknown): WorkflowNotificationOpenedEvent {
+  const opened = decodeRecord(value, "opened workflow notification");
+  return { serverId: requiredString(opened, "serverId"), workflowId: requiredString(opened, "workflowId") };
 }
 
 const VOICE_MODEL_PHASES: readonly VoiceModelStatus["phase"][] = ["missing", "downloading", "ready", "error"];

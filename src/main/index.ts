@@ -122,12 +122,14 @@ import { voiceIpcHandlers } from "./ipc/voice-handlers";
 import { workflowIpcHandlers } from "./ipc/workflow-handlers";
 import { KeepAwake } from "./keep-awake";
 import { stopAppImageCrashpadHandlerAtExit } from "./linux-appimage-crashpad";
+import { relaunchApp } from "./linux-appimage-relaunch";
 import { installLinuxDesktopEntry } from "./linux-desktop-entry";
-import { configureLinuxGpu } from "./linux-gpu-mode";
+import { configureLinuxGpu, readLinuxGpuMode } from "./linux-gpu-mode";
 import { configureLinuxPasswordStore } from "./linux-password-store";
 import {
   keepAboveAppsXWayland,
   restartOnXWaylandForAboveApps,
+  restartOnXWaylandForSoftwareRendering,
   restartOnXWaylandWithoutMonitor,
   setAboveAppsXWayland,
   takeXWaylandRestartMarker,
@@ -316,11 +318,18 @@ if (process.platform === "win32") app.setAppUserModelId("app.openbot.desktop");
 // XWayland. Before the single-instance lock, so that the new process can take it. A parent process or
 // systemd watches the process, the output and the input of a headless server, so it does not restart.
 // The agent dock and the Dynamic Island above other apps also start again on XWayland, when the user chose it.
+// Software rendering starts again on XWayland too: on Wayland the window can get no frame and never show (#8110).
 const startedOnXWayland = takeXWaylandRestartMarker(process.env, process.argv);
 if (
   app.isPackaged &&
   !(serverMode || hostedServer || localServerChildEnvironment) &&
   ((await Effect.runPromise(restartOnXWaylandForAboveApps(process.env, app.getPath("userData")))) ||
+    (await Effect.runPromise(
+      restartOnXWaylandForSoftwareRendering(
+        process.env,
+        !readLinuxGpuMode(app.getPath("userData"), false).hardwareAcceleration,
+      ),
+    )) ||
     (await Effect.runPromise(restartOnXWaylandWithoutMonitor(process.env))))
 )
   app.exit(0);
@@ -375,6 +384,8 @@ if (hasSingleInstanceLock) {
     logger.warn("The Wayland session had no monitor, so OpenBot uses XWayland until the next start.");
   if (startedOnXWayland === "above-apps")
     logger.info("The agent dock or the Dynamic Island shows above other apps, so OpenBot uses XWayland.");
+  if (startedOnXWayland === "software-rendering")
+    logger.info("Software rendering is on, so OpenBot uses XWayland: on Wayland its window can stay empty.");
 }
 // Linux: the GPU stays on until it fails on this computer (#992). `userData` has its final path here.
 configureLinuxGpu({
@@ -454,6 +465,8 @@ const remoteAccountGate = Semaphore.makeUnsafe(1);
 const macHapticFeedback = new MacHapticFeedback();
 let isQuitting = false;
 let shutdownStarted = false;
+/** The teardown ended, also by an error. Until then `before-quit` holds every quit request. */
+let shutdownDone = false;
 let systemSessionEnding = false;
 let systemSessionEndFlushStarted = false;
 let relaunchRequested = false;
@@ -611,6 +624,7 @@ const windows = createMainWindowController({
   quitFromShortcut: () => quitFor("shortcut"),
   workingAgents,
   quitGuard,
+  onHiddenWhileWorking: (hidden) => backgroundTray?.setHiddenWhileWorking(hidden),
 });
 
 let appIconColorImage: NativeImage | undefined;
@@ -759,6 +773,7 @@ function registerIpcHandlers({
   approvalAutomation,
   agentAdminSettings,
   agentHostSettings,
+  agentDefaultsSettings,
   agentFolders,
   agentInstructions,
   browserProfiles,
@@ -774,9 +789,11 @@ function registerIpcHandlers({
   skillLearning,
   browsingMemory,
   agentAccess,
+  mcpAccess,
   serverAudit,
   teamStore,
   serverTimezone,
+  hostTurnLimits,
   serverPersonality,
   promptCacheTtl,
   claudeUserSetup,
@@ -828,6 +845,7 @@ function registerIpcHandlers({
   cuaDriver,
   computerUsePermissionHelp,
   storageUsage,
+  libraryFoldersService,
   machineAlerts,
   trace,
   resourceMonitor,
@@ -985,6 +1003,7 @@ function registerIpcHandlers({
     }),
     ...teamIpcHandlers({
       host,
+      localServers,
       remoteDesktop,
       remoteServers,
       takePendingInvite: () => takePendingDeepLink("invite")?.url ?? null,
@@ -1006,6 +1025,7 @@ function registerIpcHandlers({
     ...agentAdminIpcHandlers({
       settings: agentAdminSettings,
       hostSettings: agentHostSettings,
+      defaultsSettings: agentDefaultsSettings,
       browserProfiles,
       skills,
       marketplaceAgents,
@@ -1016,6 +1036,7 @@ function registerIpcHandlers({
       host,
       remoteServers,
       serverTimezone,
+      hostTurnLimits,
       serverPersonality,
       agentMemoryLimit,
       memoryReview,
@@ -1053,6 +1074,7 @@ function registerIpcHandlers({
     }),
     ...mcpServerIpcHandlers({
       service,
+      mcpAccess,
       remoteServers,
       startToolRuntimes: () => {
         Effect.runFork(providerRuntimes.ensureToolRuntimes());
@@ -1070,6 +1092,7 @@ function registerIpcHandlers({
     }),
     ...storageIpcHandlers({
       storage: storageUsage,
+      libraryFolders: libraryFoldersService,
       machine: machineAlerts,
       providerRuntimes,
       mailbox,
@@ -1082,6 +1105,7 @@ function registerIpcHandlers({
     ...agentIpcHandlers({
       service,
       sidebarLayout,
+      libraryFolders: libraryFoldersService,
       sidebarPins,
       host,
       remoteServers,
@@ -1436,7 +1460,7 @@ if (!hasSingleInstanceLock) {
       const isLink = (value: string) => parseDeepLink(value, inviteLinkOptions) !== null;
       const link = argv.find(isLink);
       const args = process.argv.slice(1).filter((value) => !isLink(value));
-      app.relaunch({ args: link ? [...args, link] : args });
+      relaunchApp(app, link ? [...args, link] : args);
     }
   });
 
@@ -1986,8 +2010,13 @@ app.on("before-quit", (event) => {
       );
     return;
   }
-  if (shutdownStarted) return;
+  // The quit that follows the teardown.
+  if (shutdownDone) return;
   event.preventDefault();
+  // A second request while the teardown runs. Outside macOS, the close of the last window sends one
+  // through `window-all-closed` right after the first. Electron would end the process on it at
+  // once, in the middle of the teardown, and the next start would count an unclean exit.
+  if (shutdownStarted) return;
   void prepareForShutdown().finally(() => app.quit());
 });
 
@@ -2056,15 +2085,19 @@ async function prepareForShutdown(deadlineMs = SHUTDOWN_DEADLINE_MS): Promise<vo
   isQuitting = true;
   hideExceptionErrorBox();
   forceExitAfterShutdownDeadline(deadlineMs);
-  if (services) Effect.runFork(services.updater.stop());
-  await runCauseEffect(windows.flushMainWindowBounds()).catch((error) =>
-    logger.error("Unable to save the main window position:", toLogValue(error)),
-  );
-  // After the bounds are saved.
-  hideWindowsForQuit();
-  services?.dynamicIsland.destroy();
-  services?.agentDock.destroy();
-  macHapticFeedback.destroy();
-  await teardown.runAll();
-  runMarker?.clean();
+  try {
+    if (services) Effect.runFork(services.updater.stop());
+    await runCauseEffect(windows.flushMainWindowBounds()).catch((error) =>
+      logger.error("Unable to save the main window position:", toLogValue(error)),
+    );
+    // After the bounds are saved.
+    hideWindowsForQuit();
+    services?.dynamicIsland.destroy();
+    services?.agentDock.destroy();
+    macHapticFeedback.destroy();
+    await teardown.runAll();
+    runMarker?.clean();
+  } finally {
+    shutdownDone = true;
+  }
 }

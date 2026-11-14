@@ -1,0 +1,14 @@
+Merge upstream nightly-labs/openbot v0.71.0 into the fork
+
+350 upstream commits since 0.68.0. Conflicts resolved by keeping both sides:
+the fork's lean mode text, FreeLLMAPI rail button, chat-first menu, hidden
+provider emails, transcript subagents and compact helper, beside upstream's
+media credits rail row, subagent activity items, whole approvals, credits
+state and the rewritten Antigravity quota reader.
+
+The Antigravity reader now comes from upstream: it asks the daily Code Assist
+host with the desktop app's User-Agent, so Google sends the Gemini Models
+group and all its buckets, and the usage card lists every 5-hour and weekly
+window of every group again.
+
+Co-authored-by: OpenBot <335604065+openbotgit[bot]@users.noreply.github.com>

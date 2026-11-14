@@ -74,6 +74,21 @@ export function quietTeammateDelivery(delivery: QueueDelivery): boolean {
   );
 }
 
+/**
+ * The message that a teammate's answer replies to, when the answer wants no answer itself; null for
+ * any other delivery. When a quiet routine run of this agent sent that message, the turn continues
+ * the run, and nobody waits for it, as nobody waited for the run. Such a turn can end quiet, but
+ * only after a call to the no-update tool: without the call, its answer is a result (#8364).
+ */
+export function answeredRequestId(delivery: QueueDelivery): string | null {
+  return delivery.sender.kind === "agent" &&
+    delivery.sender.agentId !== delivery.recipientAgentId &&
+    delivery.expectsReply === false &&
+    delivery.replyToMessageId
+    ? delivery.replyToMessageId
+    : null;
+}
+
 /** Only the marker, with white space around it. The marker inside a longer text is a report. */
 export function isNoUpdateAnswer(text: string): boolean {
   const answer = text.trim();
@@ -119,6 +134,25 @@ export function settleQuietRoutineTurn(
   return !reported;
 }
 
+/**
+ * Settles the answers of a channel routine turn whose owner called the no-update tool (#7166). Each
+ * text answer becomes a quiet answer, which the channel shows as a step, so the run posts no message.
+ * Nothing goes: the channel already shows the turn's steps. A file, an image or a question is a
+ * report, and then nothing changes. Returns whether the turn is quiet.
+ */
+export function settleQuietChannelTurn(snapshot: ConversationSnapshot, turnId: string): boolean {
+  const answers = new Set(
+    snapshot.messages.filter(
+      (message) => message.author === "assistant" && message.turnId === turnId && !isWorkNote(message),
+    ),
+  );
+  if ([...answers].some((message) => !isTextAnswer(message))) return false;
+  for (const [index, message] of snapshot.messages.entries()) {
+    if (answers.has(message)) snapshot.messages[index] = { ...message, itemType: ROUTINE_QUIET_ANSWER_ITEM_TYPE };
+  }
+  return true;
+}
+
 /** A text answer of a quiet turn that says more than the marker. */
 export function keptQuietAnswer(message: ConversationMessage): boolean {
   return isTextAnswer(message) && message.text.trim() !== "" && !isNoUpdateAnswer(message.text);
@@ -130,7 +164,8 @@ export function isTextAnswer(message: ConversationMessage): boolean {
     !isWorkNote(message) &&
     message.itemType !== "question_prompt" &&
     !message.attachments?.length &&
-    !message.imageGeneration
+    !message.imageGeneration &&
+    !message.videoGeneration
   );
 }
 
@@ -148,6 +183,7 @@ function carriesContent(message: ConversationMessage): boolean {
     message.itemType === "question_prompt" ||
     message.text.trim() !== "" ||
     Boolean(message.attachments?.length) ||
-    Boolean(message.imageGeneration)
+    Boolean(message.imageGeneration) ||
+    Boolean(message.videoGeneration)
   );
 }
