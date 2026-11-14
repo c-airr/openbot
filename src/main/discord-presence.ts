@@ -4,11 +4,12 @@
 // Discord takes a presence over a local socket that its desktop app opens: `discord-ipc-0` to
 // `discord-ipc-9`, under `XDG_RUNTIME_DIR` or `TMPDIR` on Linux, `/tmp` on macOS, and as named pipes on
 // Windows. A frame is a little-endian header (opcode, length) and a JSON body. The first frame is a
-// handshake with the application id from `openbot-discord-presence-v1.json`; after Discord answers
-// READY, each `SET_ACTIVITY` frame replaces the card.
+// handshake with this fork's application id (a config file can name another one); after Discord answers
+// READY, each `SET_ACTIVITY` frame replaces the card. The socket has to stay open: Discord drops the
+// card when the pipe closes.
 //
-// A personal fork ships no application id, and the presence is decoration: without the config file, or
-// with Discord not running, every call does nothing and never keeps an agent waiting.
+// With Discord not running, every call does nothing and never keeps an agent waiting. A dropped pipe
+// retries on its own, because the card is not sent again until the open chat's model changes.
 
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -125,12 +126,15 @@ class DiscordPresence {
   #buffer: Buffer = Buffer.alloc(0);
   #pending: DiscordPresenceInput | null = null;
   #retryAt = 0;
+  #retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   async update(input: DiscordPresenceInput): Promise<void> {
     this.#config ??= await readConfig();
     this.#pending = input;
     if (!this.#ready) {
       if (Date.now() < this.#retryAt) return;
+      // A handshake already in flight publishes the card when READY arrives.
+      if (this.#socket && !this.#socket.destroyed) return;
       await this.#open();
       if (!this.#ready) return;
     }
@@ -158,13 +162,17 @@ class DiscordPresence {
       if (!socket) continue;
       this.#socket = socket;
       this.#buffer = Buffer.alloc(0);
-      socket.on("data", (chunk) => this.#receive(chunk));
-      socket.on("error", () => this.#close());
-      socket.on("close", () => this.#close());
+      socket.on("data", (chunk) => {
+        if (this.#socket !== socket) return;
+        this.#receive(chunk);
+      });
+      // Only this socket may drop the card. A previous pipe's close must not kill the new one.
+      socket.on("error", () => this.#close(socket));
+      socket.on("close", () => this.#close(socket));
       socket.write(encodeFrame(OP_HANDSHAKE, { v: 1, client_id: this.#config?.clientId }));
       return;
     }
-    this.#retryAt = Date.now() + RETRY_MS;
+    this.#armRetry();
   }
 
   #receive(chunk: Buffer): void {
@@ -184,26 +192,48 @@ class DiscordPresence {
     }
   }
 
-  #close(): void {
-    this.#socket?.destroy();
+  #close(socket: Socket): void {
+    if (this.#socket !== socket) return;
     this.#socket = null;
     this.#ready = false;
     this.#buffer = Buffer.alloc(0);
+    socket.destroy();
+    this.#armRetry();
+  }
+
+  /** Tries the same card again later. The renderer does not send it again until the model changes. */
+  #armRetry(): void {
     this.#retryAt = Date.now() + RETRY_MS;
+    const pending = this.#pending;
+    if (!pending || !(pending.model || pending.provider)) return;
+    if (this.#retryTimer) clearTimeout(this.#retryTimer);
+    this.#retryTimer = setTimeout(() => {
+      this.#retryTimer = null;
+      if (this.#pending !== pending) return;
+      void this.update(pending).catch(() => undefined);
+    }, RETRY_MS);
+    this.#retryTimer.unref();
   }
 }
 
 function connectSocket(path: string): Promise<Socket | null> {
   return new Promise((resolve) => {
     const socket = connect(path);
-    const settle = (result: Socket | null) => {
+    let settled = false;
+    const timer = setTimeout(() => finish(null), CONNECT_TIMEOUT_MS);
+    timer.unref();
+    // One result only. The timeout used to run after a successful connect and destroy the pipe,
+    // so Discord dropped the card about a second after it appeared.
+    const finish = (result: Socket | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       socket.removeAllListeners();
       if (!result) socket.destroy();
       resolve(result);
     };
-    socket.once("connect", () => settle(socket));
-    socket.once("error", () => settle(null));
-    setTimeout(() => settle(null), CONNECT_TIMEOUT_MS).unref();
+    socket.once("connect", () => finish(socket));
+    socket.once("error", () => finish(null));
   });
 }
 

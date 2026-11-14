@@ -6,6 +6,14 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.71.3] - 2026-11-14
+
+### Fixed
+
+- Discord Rich Presence no longer disappears a second after it appears. The connect timeout used to
+  destroy the pipe after a successful handshake, so Discord dropped the card; it now fires only when
+  the connect itself fails. A closed pipe also retries the card on its own.
+
 ## [0.71.2] - 2026-11-14
 
 Fork release (c-airr/openbot).
