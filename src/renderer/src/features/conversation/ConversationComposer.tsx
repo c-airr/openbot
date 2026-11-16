@@ -217,6 +217,10 @@ export function ConversationComposer() {
   const editorLocked = () =>
     !agentReady() &&
     !((props.agent || channel) && (props.agentStatus.phase === "starting" || props.agentStatus.phase === "restarting"));
+  // A start or a restart holds the message in the queue, so Send stays usable while the editor is
+  // open for typing. A blocked Send with no reason looked like a broken arrow (#fork).
+  const agentAcceptsSend = () =>
+    agentReady() || props.agentStatus.phase === "starting" || props.agentStatus.phase === "restarting";
   // Each chat gets its own queue panel. One shared panel animated the rows and the height of the
   // previous chat's queue into this one, and the chat jumped while it resized (#3770). The keyed
   // <Show> builds its child again only when the child function takes the key as a parameter.
@@ -468,7 +472,7 @@ export function ConversationComposer() {
         attachmentBusy() ||
         uploadFailed() ||
         submitting() ||
-        !agentReady() ||
+        !agentAcceptsSend() ||
         Boolean(providerUpdateRequired()) ||
         voicePhase() === "preparing" ||
         voicePhase() === "requesting" ||

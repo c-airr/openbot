@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.71.4] - 2026-11-16
+
+Fork release (c-airr/openbot).
+
+### Fixed
+
+- Send keeps working while the agent starts or restarts. The message box stayed open for typing in
+  those phases, but Send was disabled and a click returned without a word, so the arrow looked
+  broken. The message now waits in the queue until the agent is ready.
+
 ## [0.71.3] - 2026-11-14
 
 ### Fixed

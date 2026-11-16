@@ -984,9 +984,17 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       deps.stopVoiceRecording();
       return;
     }
-    // The editor stays open while the agent starts, but a send waits until it is ready.
-    if (phase !== "idle" || !deps.agentReady()) return;
+    // The editor stays open while the agent starts, so a send there waits in the queue instead of
+    // being dropped without a word: a stuck start used to leave Send dead with nothing on screen.
+    if (phase !== "idle" || !agentAcceptsSend()) return;
     void submitMessage();
+  }
+
+  /** A start or a restart is short, and the queue holds the message until the agent is ready. */
+  function agentAcceptsSend(): boolean {
+    if (deps.agentReady()) return true;
+    const status = deps.props.agentStatus.phase;
+    return status === "starting" || status === "restarting";
   }
 
   /** An ACP provider has no steer request, so its queued messages wait for the turn to end (#3689). */
@@ -1000,7 +1008,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
    * An agent whose provider cannot steer keeps the message queued, so Send now always follows.
    */
   function steerComposer(): void {
-    if (deps.attachmentBusy() || deps.uploadFailed() || deps.voicePhase() !== "idle" || !deps.agentReady()) return;
+    if (deps.attachmentBusy() || deps.uploadFailed() || deps.voicePhase() !== "idle" || !agentAcceptsSend()) return;
     const hostSteers =
       agentSteers() && (deps.props.agent?.busyMessageMode ?? deps.props.defaultBusyMessageMode) === "steer";
     void submitMessage(undefined, undefined, undefined, undefined, !hostSteers);
