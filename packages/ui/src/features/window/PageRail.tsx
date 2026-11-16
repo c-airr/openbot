@@ -68,11 +68,12 @@ function RailButton(props: {
 const RING = { size: 34, stroke: 2.25, spacing: 4.5 };
 
 /**
- * The limits of one provider as concentric rings: the outer ring is the longest window, the inner
- * ring the shortest. Each arc shows how much is left, in the tone of that window. The hover card
- * shows the windows with their reset times. `shared` are the readings that count the same quota, such
- * as Cursor on a merged Grok plan: the card lists them, with no ring of their own. The ring draws the
- * reading with the least left, so a shared reading that runs out first still shows.
+ * The limits of one provider as concentric rings, outermost first as the row reports them: for a
+ * provider with quota groups, the group's own 5-hour window outside and the next group's inside.
+ * Each arc shows how much is left, in the tone of that window. The hover card shows every window,
+ * weekly ones included, with their reset times. `shared` are the readings that count the same quota,
+ * such as Cursor on a merged Grok plan: the card lists them, with no ring of their own. The ring
+ * draws the reading with the least left, so a shared reading that runs out first still shows.
  */
 function UsageRings(props: {
   row: AccountUsageProviderRow;
@@ -91,7 +92,9 @@ function UsageRings(props: {
     });
   const ringRow = () =>
     rows().reduce((lowest, row) => ((row.remainingPercent ?? 100) < (lowest.remainingPercent ?? 100) ? row : lowest));
-  const windows = () => [...ringRow().ringWindows].reverse().slice(0, 2);
+  // The row reports its ring windows outermost first, so a provider with quota groups keeps its own
+  // group's 5-hour window on the outside and the next group's inside.
+  const windows = () => ringRow().ringWindows.slice(0, 2);
   const outerRadius = (RING.size - RING.stroke) / 2;
   return (
     <RailButton

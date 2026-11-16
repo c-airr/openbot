@@ -6,6 +6,16 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.71.5] - 2026-11-16
+
+Fork release (c-airr/openbot).
+
+### Changed
+
+- The usage rings next to Gemini show its two 5-hour limits: the Gemini Models window outside and the
+  Claude and GPT window inside, in the provider's own order. The weekly windows of both groups stay
+  in the card that opens on hover.
+
 ## [0.71.4] - 2026-11-16
 
 Fork release (c-airr/openbot).

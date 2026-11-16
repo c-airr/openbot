@@ -50,8 +50,9 @@ export interface AccountUsageProviderRow {
    */
   windows: AccountUsageWindowRow[];
   /**
-   * The windows that the rail ring draws, the shortest first: the reading's own, or for a provider
-   * that names quota groups the 5-hour window of each group, so the ring shows near limits only.
+   * The windows that the rail ring draws, outermost first: the reading's own, or for a provider that
+   * names quota groups the 5-hour window of each group in the provider's order, so the ring shows
+   * near limits only. Every weekly window stays in the hover card.
    */
   ringWindows: AccountUsageWindowRow[];
   /** `false` for a provider that has no usage reading, so a missing amount is not a failure. */
@@ -202,11 +203,16 @@ function usageRow(
       : [];
   // OpenCode's third window is a list line only: `secondary` already holds the long window that stops
   // work first, and the ring has two tracks.
+  // The ring windows come outermost first. A provider with several quota groups draws each group's
+  // 5-hour window, in the provider's order: Antigravity's own Gemini window outside, the Claude and
+  // GPT window inside, so the two 5-hour limits are the rings and every weekly window stays in the
+  // hover card. One group keeps the longest window outside, as before.
   const ringWindows =
     groupFiveHourWindows.length > 1
       ? groupFiveHourWindows
-      : ownWindows.filter((_, index) => reported[index] !== limit?.tertiary);
-  // The shortest window comes first, so on a tie the shorter window stops work first.
+      : ownWindows.filter((_, index) => reported[index] !== limit?.tertiary).reverse();
+  // The window that stops work first, and on a tie the group that comes first, so its ring and chip
+  // carry the lowest limit.
   const binding = ringWindows.reduce<AccountUsageWindowRow | null>(
     (lowest, window) => (lowest === null || window.remainingPercent < lowest.remainingPercent ? window : lowest),
     null,
