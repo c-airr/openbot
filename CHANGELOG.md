@@ -6,6 +6,21 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.71.6] - 2026-11-18
+
+### Fixed
+
+- A hidden chat answers a message again. The 0.71.0 merge brought back the older rule that held the
+  queue of a hidden agent until the user restored it, so a message sent to a chat that the fork
+  archived after three days stayed "queued" forever and the chat looked busy. A chat past three days
+  now works as any other. A `/compact` helper whose window passed still does not start.
+
+### Changed
+
+- The Discord card now shows the OpenBot icon. It comes from the fork's public repository as an
+  external image URL, so no asset has to be uploaded to the Discord application. An uploaded image
+  key in `openbot-discord-presence-v1.json` still wins.
+
 ## [0.71.5] - 2026-11-16
 
 Fork release (c-airr/openbot).

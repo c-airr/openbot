@@ -32,7 +32,7 @@ import {
 } from "./delivery-content";
 import type { DuplicationGate } from "./duplication-gate";
 import { handoffHasHistory } from "./handoff-history";
-import { COMPACT_HELPER } from "./history-tools";
+import { COMPACT_HELPER, COMPACT_HELPER_MAX_AGE_MS } from "./history-tools";
 import type { MailboxSync } from "./mailbox-sync";
 import type { MemoryHold } from "./memory-hold";
 import type { PlanContinuation } from "./plan-continuation";
@@ -402,9 +402,14 @@ export class DrainScheduler {
       this.#lanesOf(agentId).some((other) => other.taskId !== taskId && this.#laneRunning(other))
     )
       return "agent-client-changing";
-    // A hidden agent finishes the turn that runs. Its queued messages wait until the user restores it.
-    // Fork: a /compact helper is hidden from its start and must still run its one task.
-    if (agent?.hiddenAt !== undefined && !COMPACT_HELPER.test(agent.description)) return "hidden";
+    // Fork: a hidden agent keeps working (#7825 in upstream), so its queued messages start as any
+    // other agent's do. The older clause that held them until the user restored the agent came back
+    // with the 0.71.0 merge and left a message of a hidden chat queued forever (#fork).
+    // A /compact helper past its window can apply nothing, so its stale message must not start.
+    if (agent?.hiddenAt !== undefined) {
+      const helper = COMPACT_HELPER.exec(agent.description);
+      if (helper && Date.now() - Number(helper[1]) > COMPACT_HELPER_MAX_AGE_MS) return "hidden";
+    }
     // No turn starts on a provider that waits for a sign-in, so its messages wait for the sign-in
     // rather than fail (#4326). The provider runtime schedules the drain again when it is signed in.
     if (
