@@ -52,8 +52,8 @@ const CHEAP_RANK: readonly RegExp[] = [
 ];
 
 /**
- * The cheapest model of a provider that still has room: prefers Gemini, then OpenRouter
- * (Nemotron, free models, MiMo), then small Flash/Lite/Haiku/DeepSeek models.
+ * The cheapest model of a provider that still has room: prefers Gemini, then free OpenRouter
+ * models, then small Flash/Lite/Haiku/DeepSeek models.
  * Strictly avoids any GPT / Codex / OpenAI models so the user's free tier quota is never spent on compaction.
  * Returns `null` if no non-GPT model matches or has quota.
  */
@@ -66,10 +66,13 @@ export function cheapestCompactModel(
       .filter((row) => row.remainingPercent !== null && row.remainingPercent <= 0)
       .map((row) => row.provider),
   );
-  // Strictly filter out all GPT/Codex models and exhausted providers. Allow OpenRouter.
+  // The OpenRouter reading counts free requests. It cannot show whether a paid model can answer.
   const usable = models.filter(
     (model): model is CompactAgentModel =>
-      isAgentProvider(model.provider) && !isGptModel(model) && !exhausted.has(model.provider),
+      isAgentProvider(model.provider) &&
+      !isGptModel(model) &&
+      !exhausted.has(model.provider) &&
+      (model.provider !== "openrouter" || model.id.endsWith(":free") || model.id === "openrouter/free"),
   );
 
   // 1. Preferred chain (Gemini -> Nemotron -> MiMo -> OpenRouter :free)

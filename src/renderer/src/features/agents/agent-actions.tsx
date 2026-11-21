@@ -3,22 +3,29 @@ import { AGENT_WELCOME_CAPABILITY, TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@o
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
 import type { AgentProfile } from "@openbot/ui/data";
-import { AgentDeleteUndoToast, startUndoCountdown } from "@openbot/ui/features/agents/AgentDeleteUndoToast";
+import {
+  AGENT_DELETE_UNDO_MS,
+  AgentDeleteUndoToast,
+  startUndoCountdown,
+  type UndoCountdown,
+} from "@openbot/ui/features/agents/AgentDeleteUndoToast";
 import type { FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { duplicateSection as duplicateSectionWith } from "@openbot/ui/features/sidebar/duplicate-section";
 import { currentText } from "@openbot/ui/text";
-import { createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
 import { toAgentProfile, withoutAgent } from "../../app-message-projection";
 import { createStoredProfile } from "../../app-stored-values";
 import { useNavigation } from "../../navigation";
+import { usePlatform } from "../../platform";
 import { createScopeGuard } from "../../scope-lifetime";
 import { createSimpleContext } from "../../simple-context";
 import { useTurns } from "../../turns";
 import { useAgentThreads } from "../agent-threads/agent-threads-context";
 import { useConversation } from "../conversation/conversation-context";
-import { agentConversationKey } from "../conversation/conversation-keys";
+import { useConversationController } from "../conversation/conversation-controller-context";
+import { agentConversationKey, composerDraftKey } from "../conversation/conversation-keys";
 import { conversationPort } from "../conversation/conversation-port";
 import { useDirectMessages } from "../conversation/direct-messages-context";
 import { useServers } from "../servers/servers-context";
@@ -27,8 +34,9 @@ import { type NewAgentDraft, newAgentInput } from "./agent-create-input";
 import { attentionAgentId, withoutAttention } from "./agent-runtime-snapshot";
 import { useAgents } from "./agents-context";
 import { agentsPort } from "./agents-port";
-import { clearCompacting, compactHook, compacting, markCompacting } from "./compact-hook";
+import { type CompactRun, clearCompacting, compactHook, compacting, markCompacting } from "./compact-hook";
 import { cheapestCompactModel } from "./compact-model";
+import { forgetPendingAgentDelete, readPendingAgentDeletes, rememberPendingAgentDelete } from "./pending-agent-deletes";
 
 /**
  * Creating, editing, duplicating and deleting an agent.
@@ -57,6 +65,7 @@ const AgentActions = createSimpleContext({
     const {
       agentList,
       modelOptions,
+      agentListSettled,
       setAgentList,
       agentSetupOpen,
       setAgentSetupOpen,
@@ -81,6 +90,7 @@ const AgentActions = createSimpleContext({
       applyOwnAgentLevels,
     } = useAgents();
     const { initializeConversation, removeConversation } = useConversation();
+    const { conversationErrors } = useConversationController();
     const threads = useAgentThreads();
     const { activeTurns, failedTurns, setActiveTurns, setFailedTurns, setQueues, setPendingPrompts } = useTurns();
     const { sidebarLayout, setSidebarLayout, applySidebarLayoutAction, removePinnedSidebarItemEverywhere } =
@@ -99,26 +109,11 @@ const AgentActions = createSimpleContext({
       return agentsPort().agent.createAgent(newAgentInput(draft, createModelSupported(), welcomeSupported()));
     }
 
-    /** Synchronous, so a caller that also selects the agent does both in the same update. */
     function addNewAgent(stored: ClientAgentSummary): AgentProfile {
       const newAgent = createStoredProfile(toAgentProfile(stored));
       setAgentList((current) => [newAgent, ...current.filter((item) => item.id !== newAgent.id)]);
       initializeConversation(newAgent.id);
       return newAgent;
-    }
-
-    /** An agent made from another view, such as the routine canvas: the user stays where they are. */
-    async function createAgentInPlace(draft: Parameters<typeof requestNewAgent>[0]) {
-      const analytics = desktopAnalytics.scope();
-      try {
-        const newAgent = addNewAgent(await requestNewAgent(draft));
-        const properties = analyticsAgentProperties(newAgent.id);
-        analytics.track("agent_action", { action: "create", result: "succeeded", ...(properties ?? {}) });
-        return newAgent;
-      } catch (error) {
-        analytics.track("agent_action", { action: "create", result: "failed", failure_code: "create_failed" });
-        throw error;
-      }
     }
 
     async function createAgent(draft: FirstAgentDraft = agentSetupDraft()) {
@@ -129,7 +124,6 @@ const AgentActions = createSimpleContext({
       setAgentSetupError(null);
       try {
         const newAgent = addNewAgent(await requestNewAgent(submitted));
-        // As a sidebar click does: the form and an open channel close, and the new chat opens.
         openCreatedAgent(newAgent.id);
         const properties = analyticsAgentProperties(newAgent.id);
         analytics.track("agent_action", { action: "create", result: "succeeded", ...(properties ?? {}) });
@@ -274,11 +268,13 @@ const AgentActions = createSimpleContext({
       }
       const parent = agentList().find((candidate) => candidate.id === agentId);
       if (!parent) return;
+      const serverId = activeServerId();
       setCreatingAgent(true);
       try {
         const usage = await agentsPort()
-          .providerAdmin.accountUsage(activeServerId())
+          .providerAdmin.accountUsage(serverId)
           .catch(() => null);
+        if (!scopeIsCurrent() || activeServerId() !== serverId) return;
         const cheap = cheapestCompactModel(modelOptions(), usage);
         const { t } = currentText();
         if (!cheap) {
@@ -297,28 +293,31 @@ const AgentActions = createSimpleContext({
           welcomeSupported(),
         );
         const { provider: _p, model: _m, reasoningEffort: _r, ...safeInput } = input;
+        const startedAt = Date.now();
         const helper = addNewAgent(
-          await agentsPort().agent.createAgent({
-            ...safeInput,
-            provider: cheap.model.provider,
-            model: cheap.model.id,
-            ...(cheap.reasoningEffort ? { reasoningEffort: cheap.reasoningEffort } : {}),
-            // "compact:<start>" lets the hidden helper run its queue and makes a late briefing refused.
-            description: `compact:${Date.now()} parent:${agentId}`,
-            initialMessage:
-              "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. Do not write the briefing in this chat: pass it to openbot.apply_compact as summary, once. Then answer with one short line.",
-          }),
+          await agentsPort().agent.createAgent(
+            {
+              ...safeInput,
+              provider: cheap.model.provider,
+              model: cheap.model.id,
+              ...(cheap.reasoningEffort ? { reasoningEffort: cheap.reasoningEffort } : {}),
+              // "compact:<start>" lets the hidden helper run its queue and makes a late briefing refused.
+              description: `compact:${startedAt} parent:${agentId}`,
+              initialMessage:
+                "Compact the parent chat. Read all of it with openbot.parent_history_read, page by page, newest first. Then write one briefing that another AI model can continue from: the goal, decisions made, the current state, files and commands that matter, open tasks, and the user's preferences. Be concrete and keep it under 1500 words. Do not write the briefing in this chat: pass it to openbot.apply_compact as summary, once. Then answer with one short line.",
+            },
+            serverId,
+          ),
         );
         // No sidebar section: the helper stays out of every section, and it is hidden at once so
         // the user never sees it, not even in the Hidden group.
-        const serverId = activeServerId();
         try {
           const snapshot = await agentsPort().agent.setAgentHidden({ agentId: helper.id, hidden: true }, serverId);
           applyUserHiddenAgents(snapshot.agents);
         } catch {
           // The watcher still deletes the helper when it is done; it only stays visible until then.
         }
-        markCompacting(agentId, { helperId: helper.id, serverId, startedAt: Date.now() });
+        markCompacting(agentId, { helperId: helper.id, serverId, startedAt });
         actionToast.success(t("composer.compact.started", { model: cheap.model.name }));
       } catch (error) {
         const { t, errorMessage } = currentText();
@@ -352,12 +351,11 @@ const AgentActions = createSimpleContext({
       if (parentIds.length === 0) return;
       for (const parentId of parentIds) {
         const run = compacting()[parentId];
-        if (!run) continue;
+        if (!run || run.serverId !== activeServerId()) continue;
         try {
-          if (Date.now() - run.startedAt > COMPACT_TIMEOUT_MS) {
-            await finishCompactRun(parentId, false);
-            continue;
-          }
+          const helperPage = await conversationPort()
+            .agent.readConversationPage({ agentId: run.helperId, anchor: { type: "latest" }, limit: 5 }, run.serverId)
+            .catch(() => null);
           const parentPage = await conversationPort()
             .agent.readConversationPage({ agentId: parentId, anchor: { type: "latest" }, limit: 10 }, run.serverId)
             .catch(() => null);
@@ -365,28 +363,28 @@ const AgentActions = createSimpleContext({
             (message) =>
               message.itemType === CONTEXT_RESET_ITEM_TYPE &&
               message.status === "completed" &&
-              Date.parse(message.createdAt) > run.startedAt,
+              Date.parse(message.createdAt) >= run.startedAt,
           );
-          const helperPage = await conversationPort()
-            .agent.readConversationPage({ agentId: run.helperId, anchor: { type: "latest" }, limit: 5 }, run.serverId)
-            .catch(() => null);
+          if (marked) {
+            await finishCompactRun(parentId, run, true);
+            continue;
+          }
           const helperMessages = (helperPage?.messages ?? []).filter(
-            (message) => message.author === "assistant" && Date.parse(message.createdAt) > run.startedAt,
+            (message) => message.author === "assistant" && Date.parse(message.createdAt) >= run.startedAt,
           );
           // Only the final answer ends the helper: its thinking notes are complete messages too.
           const helperDone = helperMessages.some(
             (message) => message.itemType === "final_answer" && message.status !== "streaming",
           );
-          if (marked) await finishCompactRun(parentId, true);
+          const elapsed = Date.now() - run.startedAt;
+          const helperWorking = helperMessages.length > 0 || (activeTurns()[run.helperId] ?? null) !== null;
           // The marker is written before the helper answers, so a finished helper without one failed.
-          else if (helperDone) await finishCompactRun(parentId, false);
-          else if (failedTurns()[run.helperId]) await finishCompactRun(parentId, false);
-          else {
-            const helperWorking = helperMessages.length > 0 || (activeTurns()[run.helperId] ?? null) !== null;
-            if (!helperWorking && Date.now() - run.startedAt > COMPACT_IDLE_MS) {
-              await finishCompactRun(parentId, false);
-            }
-          }
+          if (
+            elapsed > COMPACT_TIMEOUT_MS ||
+            (parentPage && (helperDone || failedTurns()[run.helperId])) ||
+            (parentPage && !helperWorking && elapsed > COMPACT_IDLE_MS)
+          )
+            await finishCompactRun(parentId, run, false);
         } catch {
           // The next tick tries again; the timeout bounds the wait.
         }
@@ -394,22 +392,23 @@ const AgentActions = createSimpleContext({
     }
 
     /** Fork: ends one /compact run: the helper is deleted and the parent notice goes away. */
-    async function finishCompactRun(parentId: string, ok: boolean) {
-      const run = compacting()[parentId];
+    async function finishCompactRun(parentId: string, run: CompactRun, ok: boolean) {
+      if (compacting()[parentId] !== run) return;
+      const description = conversationErrors()[composerDraftKey({ agentId: run.helperId, serverId: run.serverId })];
       clearCompacting(parentId);
-      if (run) {
-        try {
-          await agentsPort().agent.deleteAgent(run.helperId, run.serverId);
-        } catch {
-          // A helper whose turn still runs refuses the delete; it stays hidden, out of sight.
-        }
+      try {
+        await agentsPort().agent.deleteAgent(run.helperId, run.serverId);
+      } catch {
+        // A helper whose turn still runs refuses the delete; it stays hidden.
+      }
+      if (scopeIsCurrent() && activeServerId() === run.serverId) {
         setAgentList((current) => current.filter((candidate) => candidate.id !== run.helperId));
         threads.forgetAgent(run.helperId);
         removeConversation(run.helperId);
       }
       const { t } = currentText();
       if (ok) actionToast.success(t("composer.compact.done"));
-      else actionToast.error(t("composer.compact.failed"));
+      else actionToast.error(t("composer.compact.failed"), description ? { description } : undefined);
     }
 
     async function startChatInFolder() {
@@ -445,7 +444,6 @@ const AgentActions = createSimpleContext({
       setSettingsRequest({ agentId, nonce: Date.now() });
     }
 
-    /** Copies one agent into the roster and the layout, and leaves the selection alone. `null`: the scope ended. */
     async function copyAgent(agentId: string) {
       const result = await agentsPort().agent.duplicateAgent(agentId);
       if (!scopeIsCurrent()) return null;
@@ -490,7 +488,6 @@ const AgentActions = createSimpleContext({
       }
     }
 
-    /** Copies a custom section and each of its agents. The user stays on the agent that is open. */
     async function duplicateSection(sectionId: string): Promise<void> {
       if (agentSetupOpen() && creatingAgent()) return;
       if (!activeServerSupportsCapability("agent-duplication") || !activeServerSupportsCapability("sidebar-layout")) {
@@ -506,7 +503,6 @@ const AgentActions = createSimpleContext({
             agentIds: agentList()
               .filter((agent) => !hidden.has(agent.id))
               .map((agent) => agent.id),
-            // The agent's own Duplicate item waits too: the host refuses a second copy of one agent.
             duplicateAgent: async (agentId) => {
               if (!scopeIsCurrent()) return null;
               setDuplicatingAgentIds((current) => new Set(current).add(agentId));
@@ -521,7 +517,6 @@ const AgentActions = createSimpleContext({
                 });
               }
             },
-            // A server switch during the call ends the chain: the next call would reach the other server.
             mutateLayout: async (action) => {
               if (!scopeIsCurrent()) return null;
               const layout = await applySidebarLayoutAction(action);
@@ -546,20 +541,33 @@ const AgentActions = createSimpleContext({
       }
     }
 
-    /**
-     * Deletes that wait for the undo time to end, by agent. A server switch ends this scope, and with it
-     * the time to undo: each delete then runs at once, against the server it was made on.
-     */
     const pendingDeletes = new Map<string, () => void>();
     onCleanup(() => {
       for (const commit of [...pendingDeletes.values()]) commit();
     });
 
-    /**
-     * The agent leaves the roster at once, and a toast offers Undo. Main deletes the agent only when the
-     * time is over, so an undo has nothing to restore. If the app quits before then, the agent stays.
-     */
-    async function deleteAgent(agentId: string) {
+    let pendingDeletesResumed = Boolean(usePlatform().chatWindow);
+    createEffect(
+      () => (!pendingDeletesResumed && agentListSettled() ? agentList().map((agent) => agent.id) : null),
+      (listedIds) => {
+        if (!listedIds || pendingDeletesResumed) return;
+        pendingDeletesResumed = true;
+        const serverId = untrack(activeServerId);
+        for (const [agentId, savedAt] of Object.entries(readPendingAgentDeletes(serverId))) {
+          if (!listedIds.includes(agentId)) {
+            forgetPendingAgentDelete(serverId, agentId);
+            continue;
+          }
+          const resume = () => {
+            if (scopeIsCurrent() && readPendingAgentDeletes(serverId)[agentId] === savedAt)
+              void deleteAgent(agentId, true);
+          };
+          window.setTimeout(resume, Math.max(0, savedAt + AGENT_DELETE_UNDO_MS - Date.now()));
+        }
+      },
+    );
+
+    async function deleteAgent(agentId: string, resumed = false) {
       if (agentSetupOpen() && creatingAgent()) return;
       if (pendingDeletes.has(agentId)) return;
       const agent = agentList().find((candidate) => candidate.id === agentId);
@@ -569,7 +577,6 @@ const AgentActions = createSimpleContext({
       const properties = analyticsAgentProperties(agentId);
       const marketplaceAgent = Boolean(agent.marketplaceSource);
       const wasActive = activeAgentId() === agentId;
-      // Read before the roster changes: a read after a write returns the old value until the flush.
       const others = agentList().filter((candidate) => candidate.id !== agentId);
       const userHidden = userHiddenAgentIds();
       const nextAgentId = (others.find((candidate) => !userHidden.has(candidate.id)) ?? others[0])?.id ?? "";
@@ -578,22 +585,24 @@ const AgentActions = createSimpleContext({
       const showAgent: () => void = hidden;
       if (wasActive) setActiveAgentId(nextAgentId);
       setSettingsRequest((current) => (current?.agentId === agentId ? null : current));
+      rememberPendingAgentDelete(serverId, agentId);
 
       const toastId = `agent-delete-${serverId}-${agentId}`;
       let settled = false;
-      /** Undo and delete each end the same wait, so only the first of them runs. */
+      let countdown: UndoCountdown | null = null;
       function settle(): boolean {
         if (settled) return false;
         settled = true;
-        countdown.stop();
+        countdown?.stop();
         pendingDeletes.delete(agentId);
-        // A scope cleanup can call this, and a write to the Toaster from there stops the reactive system.
         queueMicrotask(() => toast.dismiss(toastId));
         return true;
       }
 
       function undo(): void {
-        if (!settle() || !scopeIsCurrent()) return;
+        if (!settle()) return;
+        forgetPendingAgentDelete(serverId, agentId);
+        if (!scopeIsCurrent()) return;
         showAgent();
         if (wasActive) setActiveAgentId(agentId);
       }
@@ -616,15 +625,11 @@ const AgentActions = createSimpleContext({
 
       async function commit(): Promise<void> {
         if (!settle()) return;
-        // Before the wait: a server switch reads the stored pins when the next scope starts. If the delete
-        // fails, the agent comes back without its pin.
         removePinnedSidebarItemEverywhere({ kind: "agent", id: agentId });
         try {
           await agentsPort().agent.deleteAgent(agentId, serverId);
           forgetDeletedAgent();
         } catch (error) {
-          // A step after the delete can fail, such as the sidebar write. Main then no longer has the
-          // agent, and putting it back would show an agent that comes back only until a restart.
           const stillListed = await agentsPort()
             .agent.listAgents(serverId)
             .then(
@@ -655,12 +660,19 @@ const AgentActions = createSimpleContext({
             description: errorMessage(error, t("sidebar.delete.failed")),
             report: { operation: "agent", source: "action", cause_code: classifyFailure(error) },
           });
+        } finally {
+          forgetPendingAgentDelete(serverId, agentId);
         }
       }
 
-      const countdown = startUndoCountdown(() => void commit());
+      if (resumed) {
+        void commit();
+        return;
+      }
+      const undoCountdown = startUndoCountdown(() => void commit());
+      countdown = undoCountdown;
       pendingDeletes.set(agentId, () => void commit());
-      toast(() => <AgentDeleteUndoToast agent={agent} countdown={countdown} onUndo={undo} />, {
+      toast(() => <AgentDeleteUndoToast agent={agent} countdown={undoCountdown} onUndo={undo} />, {
         id: toastId,
         duration: Number.POSITIVE_INFINITY,
         unstyled: true,
@@ -670,21 +682,14 @@ const AgentActions = createSimpleContext({
       });
     }
 
-    /** The Undo toasts of hides on this server. A server switch removes them with this scope. */
     const hideToastIds = new Set<string>();
     onCleanup(() => {
       const ids = [...hideToastIds];
-      // A write to the Toaster from a scope cleanup stops the reactive system.
       queueMicrotask(() => {
         for (const id of ids) toast.dismiss(id);
       });
     });
 
-    /**
-     * Hides or restores an agent. The sidebar moves the agent at once, and the server's answer then
-     * replaces the hidden list. If the server refuses, only this agent goes back. The open chat stays
-     * open: the user can read it, and the sidebar shows the agent in its Hidden group.
-     */
     async function setAgentHiddenByUser(agentId: string, hidden: boolean): Promise<void> {
       if (agentSetupOpen() && creatingAgent()) return;
       const agent = agentList().find((candidate) => candidate.id === agentId);
@@ -723,11 +728,6 @@ const AgentActions = createSimpleContext({
       }
     }
 
-    /**
-     * Mutes an agent for the user, or gives it the server level again. The menu shows the change at
-     * once, and the server's answer then replaces the levels. If the server refuses, the level of
-     * this agent goes back. The server keeps the level for all devices of the user.
-     */
     async function setAgentMuted(agentId: string, muted: boolean): Promise<void> {
       const previous = ownAgentLevels().get(agentId) ?? null;
       const level = muted ? "nothing" : null;
@@ -764,7 +764,6 @@ const AgentActions = createSimpleContext({
       startSubagent,
       compactChat,
       importSessions,
-      createAgentInPlace,
       editAgent,
       duplicateAgent,
       duplicateSection,

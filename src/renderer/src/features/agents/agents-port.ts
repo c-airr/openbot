@@ -1,9 +1,5 @@
 import type { OpenBotDesktopApi } from "@openbot/contracts/ipc";
 
-/**
- * What the agents domain reaches in main: agent records, their models and read state, and the agent
- * event stream.
- */
 export interface AgentsPort {
   agent: Pick<
     OpenBotDesktopApi["agent"],
@@ -19,6 +15,8 @@ export interface AgentsPort {
     | "updateAgentNewChat"
     | "getAgentPlanCard"
     | "updateAgentPlanCard"
+    | "getAgentBuiltinMemory"
+    | "updateAgentBuiltinMemory"
     | "getAgentFastMode"
     | "updateAgentFastMode"
     | "listAgents"
@@ -26,6 +24,7 @@ export interface AgentsPort {
     | "listModels"
     | "onEvent"
     | "getRuntimeSnapshot"
+    | "listPendingPrompts"
     | "setAgentHidden"
     | "archiveInactiveAgents"
     | "setAgentNotificationLevel"
@@ -33,7 +32,6 @@ export interface AgentsPort {
     | "updateAgent"
     | "updateAgentAdminSettings"
   >;
-  /** The accounts of a joined server's providers, which its released agent routes do not carry. */
   providerAdmin: Pick<OpenBotDesktopApi["providerAdmin"], "accounts" | "accountUsage">;
   /** Fork: asks for a project folder. */
   chooseFolder: OpenBotDesktopApi["chooseFolder"];
@@ -42,7 +40,6 @@ export interface AgentsPort {
   importSessions: OpenBotDesktopApi["importSessions"];
 }
 
-/** Read on each call: tests and stories replace `window.openbot` per case. */
 export function agentsPort(): AgentsPort {
   return window.openbot;
 }

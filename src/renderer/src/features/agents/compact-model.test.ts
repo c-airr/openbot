@@ -46,6 +46,15 @@ describe("compact-model", () => {
     expect(pick?.model.provider).toBe("openrouter");
   });
 
+  it("skips a paid OpenRouter Gemini model when a free model can compact the chat", () => {
+    const paid = fakeModel({ id: "google/gemini-3.8-flash", provider: "openrouter" });
+    const deepseek = fakeModel({ id: "deepseek-v41-flash-1017", provider: "opencode" });
+    const models = [paid, fakeModel({ id: "nvidia/nemotron-3.5-super-vl:free", provider: "openrouter" }), deepseek];
+    expect(cheapestCompactModel(models, null)?.model.id).toBe("nvidia/nemotron-3.5-super-vl:free");
+    expect(cheapestCompactModel([paid, deepseek], null)?.model.id).toBe(deepseek.id);
+    expect(cheapestCompactModel([paid], null)).toBeNull();
+  });
+
   it("returns null when only GPT models are available", () => {
     const models = [
       fakeModel({ id: "gpt-4o", name: "GPT-4o", provider: "codex" }),

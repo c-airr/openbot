@@ -7,6 +7,7 @@ import { Bot, Button, Download, DropdownMenu, FolderPlus, Hash, MessageSquare } 
 import { Show } from "solid-js";
 import { Brain } from "../../icons";
 import { useText } from "../../text";
+import { SidebarFilterMenu } from "./SidebarFilterMenu";
 import { PlusIcon, SearchIcon } from "./SidebarIcons";
 import { useSidebarScope } from "./sidebar-scope";
 
@@ -28,6 +29,7 @@ export function SidebarSearch() {
         <SearchIcon />
         <span class="sidebar-search-placeholder">{t("common.search")}</span>
       </Button>
+      <SidebarFilterMenu />
       <Show when={props.createSupported !== false || props.onCreateChannel || layoutMutable()}>
         <DropdownMenu.Root placement="bottom-end" gutter={4}>
           <DropdownMenu.Trigger
