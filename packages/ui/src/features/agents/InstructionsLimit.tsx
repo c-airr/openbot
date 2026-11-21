@@ -19,7 +19,7 @@ export function InstructionsLimit(props: {
   /** Omitted, the limit of an agent's description. */
   limit?: number;
   /** The error over the limit. Omitted, it names the instructions. */
-  tooLong?: "agent.instructions.tooLong" | "agent.description.tooLong";
+  tooLong?: "agent.instructions.tooLong" | "agent.description.tooLong" | "error.agent.initialMessageTooLong";
 }): JSX.Element {
   const { t, format } = useText();
   const max = () => props.limit ?? INPUT_LIMITS.agentDescription;

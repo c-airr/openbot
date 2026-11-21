@@ -222,10 +222,10 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
   const [canScrollSuggestionsForward, setCanScrollSuggestionsForward] = createSignal(false);
   const [draggingSuggestions, setDraggingSuggestions] = createSignal(false);
   const chat = () => props.mode === "chat";
+  const purposeTooLong = () =>
+    instructionsTooLong(props.value.purpose, chat() ? INPUT_LIMITS.messageText : INPUT_LIMITS.agentDescription);
   const canSubmit = () =>
-    Boolean((chat() ? props.value.purpose : props.value.name).trim()) &&
-    !instructionsTooLong(props.value.purpose) &&
-    !props.submitting;
+    Boolean((chat() ? props.value.purpose : props.value.name).trim()) && !purposeTooLong() && !props.submitting;
   const displayName = () => props.value.name.trim() || t("agent.setup.nameFallback");
 
   function updateSuggestionFades(): void {
@@ -549,7 +549,7 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
                 rows={3}
                 autofocus
                 aria-label={t("agent.chat.message")}
-                invalid={instructionsTooLong(props.value.purpose)}
+                invalid={purposeTooLong()}
                 placeholder={t("agent.chat.messagePlaceholder")}
                 disabled={props.submitting}
                 onValueChange={(purpose) => updateDraft({ purpose })}
@@ -576,7 +576,7 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
                 <Textarea
                   value={props.value.purpose}
                   rows={2}
-                  invalid={instructionsTooLong(props.value.purpose)}
+                  invalid={purposeTooLong()}
                   placeholder={t("agent.setup.purposePlaceholder")}
                   disabled={props.submitting}
                   onValueChange={(purpose) => updateDraft({ purpose })}
@@ -662,6 +662,14 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
               </IconButton>
             </Show>
           </div>
+
+          <Show when={chat()}>
+            <InstructionsLimit
+              text={props.value.purpose}
+              limit={INPUT_LIMITS.messageText}
+              tooLong="error.agent.initialMessageTooLong"
+            />
+          </Show>
 
           <Show when={props.error}>
             {(error) => (

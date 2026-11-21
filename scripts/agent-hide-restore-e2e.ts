@@ -52,7 +52,7 @@ const at = (time: string) => new Date(`${DAY}T${time}:00.000Z`);
 const root = await mkdtemp(join(tmpdir(), "openbot-agent-hide-"));
 const userData = join(root, "user-data");
 const home = join(root, "home");
-const fakeCodex = join(root, "codex");
+const fakeCodex = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
 const fakeLog = join(root, "codex.jsonl");
 
 // Before the service modules load: the Codex process and the stores read the home folder.
@@ -88,7 +88,7 @@ const answer = (message) => {
     case "plugin/list": return write({ id: message.id, result: { marketplaces: [] } });
     case "config/read": return write({ id: message.id, result: config });
     case "config/batchWrite": return write({ id: message.id, result: {} });
-    case "thread/start": return write({ id: message.id, result: { thread: { id: "thread-" + (++threads), turns: [] } } });
+    case "thread/start": return write({ id: message.id, result: { thread: { id: "thread-" + process.pid + "-" + (++threads), turns: [] } } });
     case "thread/resume": return write({ id: message.id, result: { thread: { id: params.threadId, turns: [] } } });
     case "thread/unsubscribe": return write({ id: message.id, result: { status: "Unsubscribed" } });
     case "thread/turns/list":
@@ -130,7 +130,12 @@ process.stdin.on("data", (chunk) => {
   }
 });
 `;
-await writeFile(fakeCodex, FAKE_CODEX, { mode: 0o755 });
+if (process.platform === "win32") {
+  await writeFile(join(root, "codex.cjs"), FAKE_CODEX);
+  await writeFile(fakeCodex, '@node "%~dp0codex.cjs" %*\r\n');
+} else {
+  await writeFile(fakeCodex, FAKE_CODEX, { mode: 0o755 });
+}
 
 const { AgentService } = await import("../src/backend/agent-service");
 const { AgentStore } = await import("../src/backend/agent-store");
@@ -647,6 +652,78 @@ try {
     const read = await hidden(AGENT_HIDDEN_ROUTES.read, setup.memberToken, {});
     assert.deepEqual(hiddenIds(read.body), []);
     return { hidden: [] };
+  });
+
+  await step("a new message restores an inactive chat in its original thread", async () => {
+    const { agents, database } = current();
+    const agent = await runCauseEffect(
+      agents.createAgentProfile({
+        name: "Dormant chat",
+        description: "",
+        avatarSeed: "dormant",
+        avatarHue: null,
+      }),
+    );
+    async function send(agentId: string, message: string): Promise<void> {
+      const sent = await call("POST", TEAM_API_ROUTES.agent.messages(agentId), {
+        token: setup.memberToken,
+        body: { text: message },
+      });
+      assert.equal(sent.status, 202, `The message returned ${sent.status}.`);
+      const deliveries = record(sent.body, "receipt").deliveries;
+      assert.ok(Array.isArray(deliveries));
+      const deliveryId = text(record(deliveries[0], "delivery").id, "delivery ID");
+      await waitFor(() => current().mailbox.getDelivery(deliveryId)?.delivery.status === "completed");
+    }
+    await send(agent.id, "Before inactivity");
+    const before = agents.listAgents().find((entry) => entry.id === agent.id);
+    assert.ok(before?.threadId && before.updatedAt);
+
+    setSystemTime(new Date("2031-05-09T12:30:00.000Z"));
+    const archived = await runCauseEffect(agents.archiveInactiveAgents({ exceptAgentIds: [] }));
+    assert.deepEqual(snapshotIds(archived), [agent.id]);
+
+    // Earlier builds kept the chat hidden even if a message updated its activity time.
+    const legacy = await runCauseEffect(
+      agents.createAgentProfile({ name: "Previously hidden", description: "", avatarSeed: "legacy", avatarHue: null }),
+    );
+    database.replaceAgents(
+      "e2e:legacy-inactive-chat",
+      database
+        .listAgents()
+        .map((entry) =>
+          entry.id === legacy.id
+            ? { ...entry, hiddenAt: "2031-05-08T12:30:00.000Z", updatedAt: "2031-05-08T13:00:00.000Z" }
+            : entry,
+        ),
+      "agent.hidden",
+    );
+
+    await stopHost();
+    host = await startHost();
+    socket = await openEvents(setup.memberToken);
+    const visible = nextHiddenEvent(socket);
+    await send(agent.id, "After inactivity");
+    assert.deepEqual(
+      (await visible).agents.map((entry) => entry.agentId),
+      [legacy.id],
+    );
+    const roster = current().agents.listAgents();
+    const restored = roster.find((entry) => entry.id === agent.id);
+    assert.ok(restored?.updatedAt && restored.updatedAt > before.updatedAt);
+    assert.equal(restored.threadId, before.threadId);
+    assert.equal(restored.hiddenAt, undefined);
+    const legacyVisible = nextHiddenEvent(socket);
+    await send(legacy.id, "After the update");
+    assert.deepEqual((await legacyVisible).agents, []);
+    const read = await hidden(AGENT_HIDDEN_ROUTES.read, setup.memberToken, {});
+    assert.deepEqual(hiddenIds(read.body), []);
+
+    socket.close();
+    await stopHost();
+    host = await startHost();
+    assert.deepEqual(snapshotIds(current().agents.listHiddenAgents()), []);
+    return { threadId: restored.threadId, legacyRestored: true };
   });
 
   report.passed = true;

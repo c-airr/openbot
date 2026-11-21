@@ -464,6 +464,8 @@ export interface CreateAgentInput {
   /** See `AgentSummary.avatarColor`. The store sets `avatarHue` to the nearest hue of the colour. */
   avatarColor?: AvatarColor | null;
   initialMessage: string;
+  /** Fork: the first message of a chat is written by the user and is visible in the history. */
+  showInitialMessage?: boolean;
   /**
    * The provider and model the agent starts on, applied before the initial message is queued.
    * Absent, the backend picks its starting default. A provider change after the first message is

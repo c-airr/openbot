@@ -14,6 +14,7 @@ import {
   AGENT_SESSION_SETTINGS_ROUTES,
 } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
 import { AGENT_SPEED_CAPABILITY, AGENT_SPEED_ROUTES } from "@openbot/contracts/team-protocol/agent-speed-v1";
+import { AGENT_WELCOME_CAPABILITY } from "@openbot/contracts/team-protocol/agent-welcome-v1";
 import {
   BROWSER_SECRET_VAULT_CAPABILITY,
   BROWSER_SECRET_VAULT_ROUTES,
@@ -820,18 +821,21 @@ export function agentIpcHandlers({
           ),
       }),
       createAgent: scopedHandler(parseCreateAgent, {
-        // The renderer always sends a setup message to its own host.
         local: (parsed) =>
-          runCauseEffect(service.createAgent(parsed, undefined, undefined, host.conversationSender(), true)),
+          runCauseEffect(
+            service.createAgent(parsed, undefined, undefined, host.conversationSender(), !parsed.showInitialMessage),
+          ),
         remote: async (parsed, serverId) => {
           // The released route keeps the nearest hue. The exact colour goes on `agent-colors-v1` after it.
           // The released route does not carry the account either, so it goes on `provider-accounts-v1`
           // after it. A host without that capability starts the agent on the provider's own sign-in.
-          const { avatarColor, providerAccountId, ...input } = parsed;
+          const { avatarColor, providerAccountId, showInitialMessage, ...input } = parsed;
           const created = await runCauseEffect(
             remoteServers.request(serverId, TEAM_API_ROUTES.agents.all, decodeAgentSummary, {
               method: "POST",
               body: input,
+              // The released capability makes this request's first message a hidden setup message.
+              ...(showInitialMessage ? { omitCapability: AGENT_WELCOME_CAPABILITY } : {}),
             }),
           );
           const agent = await withCreatedAgentAccount(serverId, created, providerAccountId);

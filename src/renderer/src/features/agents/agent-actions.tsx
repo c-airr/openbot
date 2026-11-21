@@ -161,6 +161,7 @@ const AgentActions = createSimpleContext({
           await agentsPort().agent.createAgent({
             ...input,
             initialMessage: message,
+            showInitialMessage: true,
             ...(message ? {} : { blank: true }),
             ...(folder ? { workspaceFolder: folder } : {}),
           }),

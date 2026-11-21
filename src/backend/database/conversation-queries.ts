@@ -58,6 +58,31 @@ const SIDE_THREAD_EXCLUSION = `${CHANNEL_THREAD_EXCLUSION}
 const ARCHIVED_SIDE_THREAD_EXCLUSION = `${CHANNEL_THREAD_EXCLUSION}
              AND message.thread_id NOT IN (SELECT thread_id FROM projection_agent_threads WHERE archived_at IS NOT NULL)`;
 
+// Before the fork distinguished its New chat prompt from agent setup, it stored that prompt as
+// agent_welcome. Recover only the first user message of a main chat with the fork's description.
+// The genuine setup text has a fixed English opening, including when the UI uses another language.
+const LEGACY_CHAT_PROMPT = `CASE WHEN item_type = '${AGENT_WELCOME_ITEM_TYPE}' AND author = 'user' THEN
+  message_id = (
+    SELECT oldest.message_id FROM projection_thread_messages oldest
+    WHERE oldest.thread_id = projection_thread_messages.thread_id
+    ORDER BY oldest.created_at, oldest.ordinal, oldest.message_id LIMIT 1
+  )
+  AND (
+    SELECT instr(json_extract(prompt.message_json, '$.text'), 'OpenBot sent this setup message when the user created you.') != 1
+    FROM projection_thread_messages prompt
+    WHERE prompt.thread_id = projection_thread_messages.thread_id
+      AND prompt.message_id = projection_thread_messages.message_id
+  )
+  AND EXISTS (
+    SELECT 1 FROM projection_threads owner
+    JOIN projection_agents agent ON agent.agent_id = owner.agent_id AND agent.thread_id = owner.thread_id
+    WHERE owner.thread_id = projection_thread_messages.thread_id
+      AND json_extract(agent.agent_json, '$.description') = 'Chat'
+  )
+  ELSE 0 END`;
+const VISIBLE_ITEM_TYPE = `CASE WHEN (${LEGACY_CHAT_PROMPT}) THEN NULL ELSE item_type END`;
+const VISIBLE_MESSAGE_JSON = `CASE WHEN (${LEGACY_CHAT_PROMPT}) THEN json_remove(message_json, '$.itemType') ELSE message_json END`;
+
 /**
  * Every read of a thread's messages: the whole snapshot, one anchored page, a page's supported
  * cursor, and a text search across the thread.
@@ -87,7 +112,7 @@ export class ConversationQueries {
     const rows = databaseRows(
       this.#core.connection
         .prepare(
-          `SELECT message_json FROM projection_thread_messages
+          `SELECT ${VISIBLE_MESSAGE_JSON} AS message_json FROM projection_thread_messages
            WHERE thread_id = ? ORDER BY created_at, ordinal, message_id`,
         )
         .all(threadId),
@@ -234,7 +259,7 @@ export class ConversationQueries {
     return databaseRows(
       this.#core.connection
         .prepare(
-          `SELECT message_json FROM projection_thread_messages
+          `SELECT ${VISIBLE_MESSAGE_JSON} AS message_json FROM projection_thread_messages
            WHERE thread_id = ? AND message_id IN (${placeholders})
            AND thread_id IN (SELECT thread_id FROM projection_threads WHERE agent_id = ?)
            ORDER BY created_at, ordinal, message_id`,
@@ -317,9 +342,9 @@ export class ConversationQueries {
       const referenceRows = databaseRows(
         this.#core.connection
           .prepare(
-            `SELECT message_id, message_json FROM projection_thread_messages
+            `SELECT message_id, ${VISIBLE_MESSAGE_JSON} AS message_json FROM projection_thread_messages
              WHERE thread_id = ? AND message_id IN (${placeholders})
-             ${conversationMarkerSqlFilter(options)}`,
+             ${conversationMarkerSqlFilter(options, VISIBLE_ITEM_TYPE)}`,
           )
           .all(threadId, ...referenceIds),
       );
@@ -369,7 +394,7 @@ export class ConversationQueries {
     const next = databaseRow(
       this.#core.connection
         .prepare(
-          `${ORDERED_THREAD_MESSAGES}
+          `${ORDERED_VISIBLE_THREAD_MESSAGES}
            SELECT 1 AS found FROM ordered
            WHERE (${ORDER_KEY_COLUMNS}) > (?, ?, ?, ?, ?, ?, ?)
            ${conversationMarkerSqlFilter(options)}
@@ -409,7 +434,7 @@ export class ConversationQueries {
     const row = databaseRow(
       this.#core.connection
         .prepare(
-          `${ORDERED_THREAD_MESSAGES}
+          `${ORDERED_VISIBLE_THREAD_MESSAGES}
            SELECT message_id FROM ordered
            WHERE (${ORDER_KEY_COLUMNS}) <= (?, ?, ?, ?, ?, ?, ?)
              ${conversationMarkerSqlFilter(options)}
@@ -566,7 +591,7 @@ export class ConversationQueries {
       databaseRows(
         this.#core.connection
           .prepare(
-            `SELECT message_id, message_json FROM projection_thread_messages
+            `SELECT message_id, ${VISIBLE_MESSAGE_JSON} AS message_json FROM projection_thread_messages
              WHERE thread_id = ? AND message_id IN (${rows.map(() => "?").join(", ")})`,
           )
           .all(threadId, ...rows.map((row) => requiredStringColumn(row, "message_id"))),
@@ -586,7 +611,7 @@ export class ConversationQueries {
       const rows = databaseRows(
         this.#core.connection
           .prepare(
-            `${ORDERED_THREAD_MESSAGES}
+            `${ORDERED_VISIBLE_THREAD_MESSAGES}
              SELECT ${ORDER_KEY_COLUMNS} FROM ordered
              WHERE 1 = 1 ${routineFilter}
              ORDER BY ${ORDER_KEY_DESC} LIMIT ?`,
@@ -600,7 +625,7 @@ export class ConversationQueries {
       const rows = databaseRows(
         this.#core.connection
           .prepare(
-            `${ORDERED_THREAD_MESSAGES}
+            `${ORDERED_VISIBLE_THREAD_MESSAGES}
              SELECT ${ORDER_KEY_COLUMNS} FROM ordered
              WHERE (${ORDER_KEY_COLUMNS}) < (?, ?, ?, ?, ?, ?, ?)
              ${routineFilter}
@@ -613,7 +638,7 @@ export class ConversationQueries {
     const anchorRow = databaseRow(
       this.#core.connection
         .prepare(
-          `${ORDERED_THREAD_MESSAGES}
+          `${ORDERED_VISIBLE_THREAD_MESSAGES}
            SELECT ${ORDER_KEY_COLUMNS} FROM ordered
            WHERE message_id = ? ${routineFilter}`,
         )
@@ -624,7 +649,7 @@ export class ConversationQueries {
     const newerRows = databaseRows(
       this.#core.connection
         .prepare(
-          `${ORDERED_THREAD_MESSAGES}
+          `${ORDERED_VISIBLE_THREAD_MESSAGES}
            SELECT ${ORDER_KEY_COLUMNS} FROM ordered
            WHERE (${ORDER_KEY_COLUMNS}) > (?, ?, ?, ?, ?, ?, ?)
            ${routineFilter}
@@ -644,7 +669,7 @@ export class ConversationQueries {
     const olderRows = databaseRows(
       this.#core.connection
         .prepare(
-          `${ORDERED_THREAD_MESSAGES}
+          `${ORDERED_VISIBLE_THREAD_MESSAGES}
            SELECT ${ORDER_KEY_COLUMNS} FROM ordered
            WHERE (${ORDER_KEY_COLUMNS}) <= (?, ?, ?, ?, ?, ?, ?)
            ${routineFilter}
@@ -689,9 +714,10 @@ export class ConversationQueries {
     const row = databaseRow(
       this.#core.connection
         .prepare(
-          `${ORDERED_THREAD_MESSAGES}
+          `${ORDERED_VISIBLE_THREAD_MESSAGES}
            SELECT COUNT(*) AS older_count,
-             (SELECT created_at FROM projection_thread_messages WHERE thread_id = ? ${routineFilter}
+             (SELECT created_at FROM projection_thread_messages WHERE thread_id = ?
+              ${conversationMarkerSqlFilter(exclusions, VISIBLE_ITEM_TYPE)}
               ORDER BY created_at, ordinal, message_id LIMIT 1) AS oldest_at
            FROM ordered
            WHERE (${ORDER_KEY_COLUMNS}) < (?, ?, ?, ?, ?, ?, ?)
@@ -712,10 +738,15 @@ export class ConversationQueries {
  * reads only its range. Pages, cursors and read state use this one order. The one parameter is the
  * thread id.
  */
-export const ORDERED_THREAD_MESSAGES = `WITH ordered AS (
-  SELECT created_at, ordinal, message_id, author, item_type, group_start, group_first, group_id, turn_rank
+function orderedThreadMessages(itemType: string): string {
+  return `WITH ordered AS (
+  SELECT created_at, ordinal, message_id, author, ${itemType} AS item_type, group_start, group_first, group_id, turn_rank
   FROM projection_thread_messages WHERE thread_id = ?
 )`;
+}
+
+export const ORDERED_THREAD_MESSAGES = orderedThreadMessages("item_type");
+const ORDERED_VISIBLE_THREAD_MESSAGES = orderedThreadMessages(VISIBLE_ITEM_TYPE);
 export const ORDER_KEY_COLUMNS = "group_start, group_first, group_id, turn_rank, created_at, ordinal, message_id";
 export const ORDER_KEY_DESC =
   "group_start DESC, group_first DESC, group_id DESC, turn_rank DESC, created_at DESC, ordinal DESC, message_id DESC";
@@ -794,9 +825,9 @@ function pageKeyValues(cursor: ConversationPageCursor): [string, number, string,
 }
 
 /** A new agent's setup message (`agent-welcome-v1`) is for the agent only, so no page or read state has it. */
-function conversationMarkerSqlFilter(exclusions: ConversationMarkerExclusions): string {
+function conversationMarkerSqlFilter(exclusions: ConversationMarkerExclusions, itemType = "item_type"): string {
   return [
-    `AND COALESCE(item_type, '') != '${AGENT_WELCOME_ITEM_TYPE}'`,
+    `AND COALESCE(${itemType}, '') != '${AGENT_WELCOME_ITEM_TYPE}'`,
     exclusions.excludeRoutineEvents
       ? `AND COALESCE(item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'`
       : "",

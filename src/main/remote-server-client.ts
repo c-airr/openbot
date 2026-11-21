@@ -68,6 +68,7 @@ export interface RemoteHostRequestTransport {
       body?: unknown;
       preserveSemanticTags?: boolean | undefined;
       agentCreateModel?: boolean | undefined;
+      omitCapability?: TeamCurrentCapability | undefined;
       timeoutMs?: number | undefined;
     },
   ) => Effect.Effect<unknown, RemoteWorkflowError>;
@@ -122,6 +123,7 @@ export interface RemoteServerClientOptions {
 export interface RemoteRequestInit {
   method?: string;
   body?: unknown;
+  omitCapability?: TeamCurrentCapability;
   timeoutMs?: number;
 }
 
@@ -182,7 +184,7 @@ export class RemoteServerClient {
         // A host without the capability drops the fields in its frozen projection and starts the
         // agent on its own default, so the pair is only encoded for hosts that read it.
         agentCreateModel: this.supportsAgentCreateModel(path, init, compatibility.capabilities),
-        ...this.requestProtocol(compatibility),
+        ...this.requestProtocol(compatibility, init.omitCapability),
       }).pipe(
         Effect.mapError(
           (failure) =>
@@ -292,7 +294,10 @@ export class RemoteServerClient {
   }).bind(this);
 
   /** The negotiated protocol and this app's capabilities, as `requestJson` wants them. */
-  requestProtocol(compatibility: ServerCompatibility): {
+  requestProtocol(
+    compatibility: ServerCompatibility,
+    omitCapability?: TeamCurrentCapability,
+  ): {
     protocol?: number | undefined;
     appVersion?: string | undefined;
     capabilities?: readonly TeamCurrentCapability[] | undefined;
@@ -303,7 +308,9 @@ export class RemoteServerClient {
     return {
       ...(protocol === null ? {} : { protocol }),
       ...(appVersion === null ? {} : { appVersion }),
-      ...(appVersion ? { capabilities: teamCapabilitiesForProtocol(protocol) } : {}),
+      ...(appVersion
+        ? { capabilities: teamCapabilitiesForProtocol(protocol).filter((capability) => capability !== omitCapability) }
+        : {}),
       preserveSemanticTags: supportsTeamSemanticTags(compatibility.capabilities),
     };
   }
@@ -615,7 +622,7 @@ export class RemoteServerClient {
     this: RemoteServerClient,
     serverId: string,
     path: string,
-    init: { method?: string; body?: unknown; preserveSemanticTags?: boolean; agentCreateModel?: boolean } = {},
+    init: Parameters<RemoteHostRequestTransport["request"]>[2] = {},
   ): Effect.fn.Return<unknown, RemoteWorkflowError> {
     return yield* Effect.gen({ self: this }, function* () {
       return yield* this.#requireTransport().request(serverId, path, init);

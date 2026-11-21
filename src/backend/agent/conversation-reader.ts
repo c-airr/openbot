@@ -6,6 +6,7 @@ import type {
   ConversationReadState,
   ConversationSearchPage,
 } from "@openbot/contracts/ipc";
+import { AGENT_WELCOME_ITEM_TYPE } from "@openbot/contracts/ipc";
 import { Effect, Schema } from "effect";
 import type { AgentStore } from "../agent-store";
 import { type ConversationMarkerExclusions, ConversationReadStore } from "../conversation-read-store";
@@ -55,11 +56,21 @@ export class ConversationReader {
       // keeps only a bounded recent view after this transient response is built, so this read does
       // not turn a large chat into a long-lived process cache.
       const persisted = this.#store.database.readConversation(agentId, agent.threadId);
+      const firstStored = persisted.messages[0];
       const live = this.#conversation.snapshot(agentId);
       const snapshot = live?.activeTurnId ? mergeConversationSnapshots(persisted, live) : persisted;
       this.#mailboxSync.syncMailboxMessages(snapshot);
       this.#conversation.setSnapshot(agentId, snapshot);
-      return structuredClone(snapshot);
+      const result = structuredClone(snapshot);
+      const first = result.messages[0];
+      // The stored transcript recovers old fork prompts. The mailbox can still hold their original tag.
+      if (
+        first?.itemType === AGENT_WELCOME_ITEM_TYPE &&
+        firstStored?.id === first.id &&
+        firstStored.itemType === undefined
+      )
+        delete first.itemType;
+      return result;
     });
   }, Effect.uninterruptible);
 

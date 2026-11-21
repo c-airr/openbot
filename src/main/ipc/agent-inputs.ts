@@ -249,6 +249,10 @@ export function parseCreateAgent(value: unknown): CreateAgentInput {
         : requireString(value.initialMessage, "initialMessage", INPUT_LIMITS.messageText),
   };
   if (value.blank === true) result.blank = true;
+  if (value.showInitialMessage !== undefined) {
+    if (!isBoolean(value.showInitialMessage)) throw new Error("showInitialMessage must be a boolean.");
+    result.showInitialMessage = value.showInitialMessage;
+  }
   if (value.workspaceFolder !== undefined) {
     const folder = requireString(value.workspaceFolder, "workspaceFolder", INPUT_LIMITS.path);
     if (!isAbsolute(folder)) throw new Error("The project folder must be an absolute path.");

@@ -759,7 +759,7 @@ export class TeamWebRtcHostPeer {
             "Content-Type": uploaded?.mimeType ?? input.contentType ?? "application/json",
             "OpenBot-Protocol-Version": String(protocol),
             "OpenBot-App-Version": this.#appVersion,
-            "OpenBot-Capabilities": [...this.#peerCapabilities].join(","),
+            "OpenBot-Capabilities": [...peerCapabilities].join(","),
             ...(this.#localSessionId ? { "X-OpenBot-WebRTC-Session": this.#localSessionId } : {}),
           },
           ...(requestBody === undefined ? {} : { body: requestBody }),

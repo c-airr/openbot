@@ -196,6 +196,7 @@ import type { SectionTeammates } from "./agent/developer-instructions";
 import { DrainScheduler } from "./agent/drain-scheduler";
 import { DuplicationGate, toAgentDuplicationFailed } from "./agent/duplication-gate";
 import type { FailureContext, FailureSignal } from "./agent/failure-signal";
+import { COMPACT_HELPER } from "./agent/history-tools";
 import { type AgentHostedSites, HostedSiteCoordinator } from "./agent/hosted-site-coordinator";
 import { ImageGenRuntime } from "./agent/image-gen-runtime";
 import {
@@ -285,7 +286,7 @@ import {
   type HistoryThread,
   type ImportHistoryThreadInput,
 } from "./agent-history-transfer";
-import type { AgentStore } from "./agent-store";
+import { type AgentStore, INACTIVE_ARCHIVE_MS } from "./agent-store";
 import { type AgentTaskBranchFailed, AgentTasks } from "./agent-tasks/agent-tasks";
 import { type AgentThreadRecord, AgentThreadStore } from "./agent-threads/agent-thread-store";
 import { AgentWaitStore } from "./agent-waits/agent-wait-store";
@@ -562,8 +563,6 @@ const USER_SEND_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_SECTION_TEAMMATES = 32;
 /** How long an archive waits for the provider to end the turn that it stopped. After it, the archive is refused. */
 const TASK_STOP_WAIT_MS = 15_000;
-/** Fork: chats and subagents untouched this long are hidden, so the sidebar shows only live work. */
-const INACTIVE_ARCHIVE_MS = 3 * 24 * 60 * 60 * 1000;
 /**
  * How long after a list that lacks an agent's model a `catalog.partialListAtStart` provider is asked
  * again. Grok 1.0.70 has its whole catalogue about a second after it starts on an expired sign-in.
@@ -3461,14 +3460,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly setAgentHidden = Effect.fn("AgentService.setAgentHidden")(function* (
     this: AgentService,
     input: SetAgentHiddenInput,
+    reason: "manual" | "inactivity" = "manual",
   ) {
     const changed = yield* lifecycleStep("set agent hidden", () => {
       if (!this.listAgents().some((agent) => agent.id === input.agentId)) {
         throw new Error(sourceText("error.agent.unknown", { id: input.agentId }));
       }
-      if (this.#store.isHidden(input.agentId) === input.hidden) return false;
-      this.#store.setHidden(input.agentId, input.hidden ? new Date().toISOString() : null);
-      return true;
+      return this.#store.setHidden(input.agentId, input.hidden ? new Date().toISOString() : null, reason);
     });
     const snapshot = this.listHiddenAgents();
     if (!changed) return snapshot;
@@ -3513,7 +3511,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     });
     let snapshot = this.listHiddenAgents();
     for (const agentId of candidates) {
-      snapshot = yield* this.setAgentHidden({ agentId, hidden: true });
+      snapshot = yield* this.setAgentHidden({ agentId, hidden: true }, "inactivity");
     }
     return snapshot;
   }).bind(this);
@@ -6542,8 +6540,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // A task message shows in the task's row until its turn starts, not in the agent's own chat.
     if (!task) this.#mailboxSync.syncMailboxMessages(snapshot);
     // The setup message is hidden, so the agent's welcome is the first preview.
-    if (!task && !welcome)
-      yield* this.#store
+    if (!task && !welcome) {
+      const restored = yield* this.#store
         .updatePreview(
           agent.id,
           displayMessageReferences(
@@ -6552,14 +6550,20 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             agentNamesById(this.#store.list()),
             { fileHeadings: false },
           ) || delivery.delivery.attachments.map((item) => item.name).join(", "),
+          !COMPACT_HELPER.test(agent.description),
         )
         .pipe(
           // The message is already queued: a failed preview write must not leave it without a drain,
           // and a retry with the same id returns the stored receipt without one.
           Effect.catch((failure) =>
-            Effect.sync(() => this.#emitError("message_preview_failed", failure.cause, agent.id)),
+            Effect.sync(() => {
+              this.#emitError("message_preview_failed", failure.cause, agent.id);
+              return false;
+            }),
           ),
         );
+      if (restored) this.#emit({ type: "hidden-agents-changed", agents: this.listHiddenAgents().agents });
+    }
     // Fork: a chat still called "New chat" takes its name from the user's first message, so the list
     // never shows a row of "New chat"; the model can rename it later with name_chat.
     const chatName = !task && DEFAULT_CHAT_NAMES.has(agent.name) ? chatNameFrom(input.text) : "";

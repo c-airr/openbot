@@ -2,7 +2,7 @@ import { generateKeyPairSync, randomBytes, sign, verify } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { AgentEvent, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
-import { teamCapabilitiesForProtocol } from "@openbot/contracts/team-protocol/current";
+import { type TeamCurrentCapability, teamCapabilitiesForProtocol } from "@openbot/contracts/team-protocol/current";
 import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contracts/team-protocol/optional-events";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import { addSkillSuggestionNames } from "@openbot/contracts/team-protocol/skill-learning-v1";
@@ -465,6 +465,7 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
       body?: unknown;
       preserveSemanticTags?: boolean | undefined;
       agentCreateModel?: boolean | undefined;
+      omitCapability?: TeamCurrentCapability | undefined;
       timeoutMs?: number | undefined;
     } = {},
   ): Effect.fn.Return<TeamProtocolV2Json | undefined, RemoteWorkflowError> {
@@ -485,6 +486,7 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
       contentType?: string | undefined;
       preserveSemanticTags?: boolean | undefined;
       agentCreateModel?: boolean | undefined;
+      omitCapability?: TeamCurrentCapability | undefined;
       timeoutMs?: number | undefined;
       fileProgress?: RemoteFileProgress | undefined;
       /** Gets the bytes of a binary body that the host confirmed. */
@@ -551,11 +553,9 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
                         : { preserveSemanticTags: init.preserveSemanticTags }),
                       ...(init.agentCreateModel === undefined ? {} : { agentCreateModel: init.agentCreateModel }),
                     }),
-              capabilities: [
-                ...teamCapabilitiesForProtocol(
-                  path === "/v1/compatibility" ? undefined : this.#hostProtocols.get(hostId),
-                ),
-              ],
+              capabilities: teamCapabilitiesForProtocol(
+                path === "/v1/compatibility" ? undefined : this.#hostProtocols.get(hostId),
+              ).filter((capability) => capability !== init.omitCapability),
               ...(bodyTransferId ? { bodyTransferId } : {}),
               ...(init.contentType ? { contentType: init.contentType } : {}),
             },

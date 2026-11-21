@@ -83,7 +83,8 @@ import { isPathInside } from "./path-containment";
 import { isRecord } from "./protocol";
 import { StoredStateFailure, storedIO, storedSync } from "./stored-state-effects";
 
-type StoredAgent = AgentSummary & { access: AgentAccess; computerUse: boolean };
+type HiddenReason = "manual" | "inactivity";
+type StoredAgent = AgentSummary & { access: AgentAccess; computerUse: boolean; hiddenReason?: HiddenReason };
 type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access" | "computerUse"> & {
   avatarUrl?: string | null;
   provider?: AgentProviderId;
@@ -124,7 +125,7 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   usageLimitReturn?: AgentUsageLimitReturn;
   // Present only while a turn or task still runs on the previous provider.
   pendingRuntime?: AgentPendingRuntime;
-  // Present only while a user hides the agent. Absent on every agent stored before hiding existed.
+  // Present only while the agent is hidden.
   hiddenAt?: string;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
@@ -161,6 +162,7 @@ const LEGACY_AVATAR_COLORS = [
 ] as const;
 
 const NEW_AGENT_PREVIEW = "No messages yet";
+export const INACTIVE_ARCHIVE_MS = 3 * 24 * 60 * 60 * 1000;
 /** The longest agent preview the store keeps; a longer text is cut to it. */
 const AGENT_PREVIEW_MAX_LENGTH = 180;
 const DEFAULT_AGENT_MODEL: AgentModelId = "gpt-6-luna";
@@ -352,7 +354,7 @@ export class AgentStore {
   }, Effect.uninterruptible).bind(this);
 
   list(): AgentSummary[] {
-    return this.#state.agents.map((agent) => ({ ...agent }));
+    return this.#state.agents.map(agentSummary);
   }
 
   createAgent(input: Omit<CreateAgentInput, "initialMessage">, profileOperationId?: string) {
@@ -581,7 +583,7 @@ export class AgentStore {
     const agent = this.#state.agents.find((candidate) => candidate.id === resultAgent.id);
     if (!agent) throw new Error(sourceText("error.agent.duplicatedAgentGone"));
     return {
-      agent: { ...agent },
+      agent: agentSummary(agent),
       layout: structuredClone(resultLayout),
     };
   }
@@ -599,7 +601,7 @@ export class AgentStore {
       if (!marker || marker.operationId !== operationId || marker.sourceAgentId !== sourceAgentId) {
         throw new Error("This agent duplication marker is invalid.");
       }
-      const result = { agent: { ...agent }, layout: structuredClone(layout) };
+      const result = { agent: agentSummary(agent), layout: structuredClone(layout) };
       const receipt = this.#database.dispatch(
         duplicationCommandId(operationId),
         [
@@ -622,7 +624,7 @@ export class AgentStore {
         throw new Error("The agent duplication receipt is invalid.");
       }
       return {
-        agent: { ...normalizeStoredAgent(receipt.result.agent) },
+        agent: agentSummary(normalizeStoredAgent(receipt.result.agent)),
         layout: structuredClone(receipt.result.layout),
       };
     } catch (cause) {
@@ -651,7 +653,7 @@ export class AgentStore {
       Object.assign(agent, previous);
       throw error;
     }
-    return { ...agent };
+    return agentSummary(agent);
   }
 
   commitReviewedProfile(
@@ -704,7 +706,7 @@ export class AgentStore {
       else agent.sessionSettingResets = previousResets;
       throw error;
     }
-    return { ...agent };
+    return agentSummary(agent);
   }
 
   clearSessionSettingReset(agentId: string, identity: string): void {
@@ -954,7 +956,7 @@ export class AgentStore {
         if (previous.chatColor === undefined) delete agent.chatColor;
         throw error;
       }
-      return { ...agent };
+      return agentSummary(agent);
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
@@ -964,25 +966,32 @@ export class AgentStore {
    * Hides the agent at `hiddenAt`, or restores it when `hiddenAt` is null. A second hide keeps the
    * first time. The roster event keeps the field, so the hidden state survives a restart.
    */
-  setHidden(agentId: string, hiddenAt: string | null): AgentSummary {
+  setHidden(agentId: string, hiddenAt: string | null, reason: HiddenReason): boolean {
     const agent = this.#requireAgent(agentId);
     const previous = agent.hiddenAt;
-    if ((hiddenAt === null && previous === undefined) || (hiddenAt !== null && previous !== undefined))
-      return { ...agent };
+    const previousReason = agent.hiddenReason;
+    if ((hiddenAt === null && previous === undefined) || (hiddenAt !== null && previous !== undefined)) return false;
     if (hiddenAt !== null && !isHiddenAt(hiddenAt)) throw new Error("Invalid hidden agent time.");
-    if (hiddenAt === null) delete agent.hiddenAt;
-    else agent.hiddenAt = hiddenAt;
+    if (hiddenAt === null) {
+      delete agent.hiddenAt;
+      delete agent.hiddenReason;
+    } else {
+      agent.hiddenAt = hiddenAt;
+      agent.hiddenReason = reason;
+    }
     try {
       this.#persist(hiddenAt === null ? "agent.restored" : "agent.hidden");
     } catch (error) {
       if (previous === undefined) delete agent.hiddenAt;
       else agent.hiddenAt = previous;
+      if (previousReason === undefined) delete agent.hiddenReason;
+      else agent.hiddenReason = previousReason;
       throw error;
     }
-    return { ...agent };
+    return true;
   }
 
-  /** Whether a user hid the agent. An unknown agent is not hidden. */
+  /** Whether the agent is hidden. An unknown agent is not hidden. */
   isHidden(agentId: string): boolean {
     return this.#state.agents.some((agent) => agent.id === agentId && agent.hiddenAt !== undefined);
   }
@@ -992,7 +1001,7 @@ export class AgentStore {
     agent.marketplaceSource = structuredClone(source);
     agent.updatedAt = new Date().toISOString();
     this.#persist("agent.marketplace-source-updated");
-    return { ...agent, marketplaceSource: structuredClone(source) };
+    return { ...agentSummary(agent), marketplaceSource: structuredClone(source) };
   }
 
   setAvatar(agentId: string, image: AvatarImageInput | null) {
@@ -1020,7 +1029,7 @@ export class AgentStore {
           throw error;
         }
         if (previous) yield* storedIO(() => rm(previous.path, { force: true }).catch(() => undefined));
-        return { ...agent };
+        return agentSummary(agent);
       }
       if (!isValidAvatarImage(image.mimeType, image.bytes)) {
         throw new Error(sourceText("error.team.logoInvalid"));
@@ -1044,7 +1053,7 @@ export class AgentStore {
         throw error;
       }
       if (previous) yield* storedIO(() => rm(previous.path, { force: true }).catch(() => undefined));
-      return { ...agent };
+      return agentSummary(agent);
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
@@ -1106,7 +1115,7 @@ export class AgentStore {
       const remaining = this.#state.agents.filter((candidate) => candidate.id !== id);
       this.#database.hardDeleteAgent(`agents:hard-delete:${randomUUID()}`, id, agent?.threadId ?? null, remaining);
       this.#state.agents = remaining;
-      return agent ? { ...agent } : null;
+      return agent ? agentSummary(agent) : null;
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
@@ -1123,7 +1132,7 @@ export class AgentStore {
   ): Effect.fn.Return<AgentSummary, StoredStateFailure> {
     const agent = yield* storedSync(() => this.#requireAgent(id));
     yield* storedIO(() => mkdir(agent.workspacePath, { recursive: true, mode: 0o700 }));
-    return { ...agent };
+    return agentSummary(agent);
   }).bind(this);
 
   getOrCreate = Effect.fn("AgentStore.getOrCreate")(function* (
@@ -1136,7 +1145,7 @@ export class AgentStore {
     const existing = this.#state.agents.find((agent) => agent.id === id);
     if (existing) {
       yield* storedIO(() => mkdir(existing.workspacePath, { recursive: true, mode: 0o700 }));
-      return { ...existing };
+      return agentSummary(existing);
     }
     return yield* this.#creationQueue.withPermit(this.#getOrCreate(id, name, title));
   }).bind(this);
@@ -1152,7 +1161,7 @@ export class AgentStore {
       const existing = this.#state.agents.find((agent) => agent.id === id);
       if (existing) {
         yield* storedIO(() => mkdir(existing.workspacePath, { recursive: true, mode: 0o700 }));
-        return { ...existing };
+        return agentSummary(existing);
       }
       if (this.#state.agents.length >= INPUT_LIMITS.agents) {
         throw new Error(sourceText("error.agent.hostLimit", { limit: INPUT_LIMITS.agents }));
@@ -1690,12 +1699,28 @@ export class AgentStore {
     this: AgentStore,
     id: string,
     preview: string,
-  ): Effect.fn.Return<void, StoredStateFailure> {
+    restoreInactive = false,
+  ): Effect.fn.Return<boolean, StoredStateFailure> {
     try {
       const agent = this.#requireAgent(id);
+      const { preview: previousPreview, updatedAt, hiddenAt, hiddenReason } = agent;
+      const restored = restoreInactive && hiddenForInactivity(agent);
       agent.preview = preview.slice(0, AGENT_PREVIEW_MAX_LENGTH);
       agent.updatedAt = new Date().toISOString();
-      this.#persist("agent.preview-updated");
+      if (restored) {
+        delete agent.hiddenAt;
+        delete agent.hiddenReason;
+      }
+      try {
+        this.#persist(restored ? "agent.restored" : "agent.preview-updated");
+      } catch (cause) {
+        agent.preview = previousPreview;
+        agent.updatedAt = updatedAt;
+        if (hiddenAt !== undefined) agent.hiddenAt = hiddenAt;
+        if (hiddenReason !== undefined) agent.hiddenReason = hiddenReason;
+        throw cause;
+      }
+      return restored;
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
@@ -1889,6 +1914,20 @@ export class AgentStore {
     if (!agent) throw new Error(sourceText("error.agent.unknown", { id }));
     return agent;
   }
+}
+
+function agentSummary({ hiddenReason: _hiddenReason, ...summary }: StoredAgent): AgentSummary {
+  return summary;
+}
+
+function hiddenForInactivity(agent: StoredAgent): boolean {
+  if (agent.hiddenAt === undefined) return false;
+  if (agent.hiddenReason !== undefined) return agent.hiddenReason === "inactivity";
+  if (agent.updatedAt === null) return false;
+  // Earlier builds saved only the hide time. Activity after hiding can be a message that an
+  // earlier build accepted without restoring the chat.
+  const idleAtHide = Date.parse(agent.hiddenAt) - Date.parse(agent.updatedAt);
+  return idleAtHide >= INACTIVE_ARCHIVE_MS || idleAtHide < 0;
 }
 
 function requiredText(value: string, label: string, maxLength: number): string {
@@ -2131,6 +2170,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.usageLimitReturn === undefined || isAgentUsageLimitReturn(record.usageLimitReturn)) &&
     (record.pendingRuntime === undefined || isAgentPendingRuntime(record.pendingRuntime)) &&
     (record.hiddenAt === undefined || isHiddenAt(record.hiddenAt)) &&
+    (record.hiddenReason === undefined || record.hiddenReason === "manual" || record.hiddenReason === "inactivity") &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     (record.avatarColor === undefined || isAvatarColor(record.avatarColor)) &&
@@ -2249,12 +2289,15 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     value.pendingRuntime === undefined || isAgentPendingRuntime(value.pendingRuntime)
       ? value.pendingRuntime
       : reset("pendingRuntime", undefined);
-  // A time this build cannot read keeps the agent hidden, at the time of the read: a user hid it,
-  // and only the user puts it back in the list.
+  // A time this build cannot read keeps the agent hidden, at the time of the read.
   const hiddenAt =
     value.hiddenAt === undefined || isHiddenAt(value.hiddenAt)
       ? value.hiddenAt
       : reset("hiddenAt", new Date().toISOString());
+  const hiddenReason =
+    hiddenAt !== undefined && (value.hiddenReason === "manual" || value.hiddenReason === "inactivity")
+      ? value.hiddenReason
+      : undefined;
   const avatarHue =
     value.avatarHue === null || isAvatarHue(value.avatarHue) ? value.avatarHue : reset("avatarHue", null);
   const avatarColor =
@@ -2324,6 +2367,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(usageLimitReturn === undefined ? {} : { usageLimitReturn }),
     ...(pendingRuntime === undefined ? {} : { pendingRuntime }),
     ...(hiddenAt === undefined ? {} : { hiddenAt }),
+    ...(hiddenReason === undefined ? {} : { hiddenReason }),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),

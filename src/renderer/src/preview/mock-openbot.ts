@@ -2710,8 +2710,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         if (!isAgentSummary(updated)) throw new Error("Mock profile agent has an unknown provider.");
         return { agent: { ...updated, avatarUrl: null }, layout };
       },
-      // The renderer's create sends a setup message; a saved profile sends a visible first message.
-      createAgent: (input) => createMockAgent(input, true),
+      createAgent: (input) => createMockAgent(input, !input.showInitialMessage),
       duplicateAgent: async (agentId) => {
         const source = agents.find((agent) => agent.id === agentId);
         if (!source) throw new Error("Agent not found");

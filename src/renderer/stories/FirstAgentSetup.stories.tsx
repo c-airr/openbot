@@ -86,6 +86,10 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
+export const NewChat: Story = {
+  args: { mode: "chat", onCancel: fn() },
+};
+
 const selectedSuggestion = FIRST_AGENT_SUGGESTIONS[1];
 
 export const SuggestionSelected: Story = {
