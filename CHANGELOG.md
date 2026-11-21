@@ -6,6 +6,14 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.71.7] - 2026-11-21
+
+### Fixed
+
+- New chat accepts first messages up to the normal message limit and shows an error if a message is too long.
+- The first message you send in a new chat stays visible when you scroll back through its history.
+- When you send a message to a chat hidden because it was inactive, it returns to the chat list. Before, it stayed under Hidden.
+
 ## [0.71.6] - 2026-11-18
 
 ### Fixed
