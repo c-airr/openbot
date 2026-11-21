@@ -6,6 +6,29 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.76.2] - 2026-11-21
+
+### Added
+
+- Agent pictures have three new shapes: a ghost, a jellyfish and an octopus, in the plush and the flat style. Select them in the agent settings. An older OpenBot app shows a similar older shape with the same eyes.
+
+### Fixed
+
+- A message that you send to a Claude agent while it works now gets to the agent at once. Before, when the agent ran a subagent or another long tool, it read your message only after that tool was done, so it did not change its plan in time. The agent now stops the running tool and reads your message. A running shell command continues in the background.
+- Tell the user when a provider refuses the saved API key or sign-in and the agent moves to its
+  backup model. Before, the agent moved without a reason, went back to the refused key every 10
+  minutes and failed again. Now the agent waits longer before each new try, up to one hour, and
+  goes back as soon as you replace the key in Settings or sign in again.
+- A page in the agent browser that stops answering, for example because its script never ends, no
+  longer blocks the tab. Before, the agent could not read the page, and Reload, Back, Forward and a
+  new address also failed, so only closing the tab helped. Now Reload and the other navigation
+  controls, in the Browser panel and for the agent, stop the stuck page and load the new one. When
+  the agent cannot read a stuck page, it now learns that the page does not answer and that a reload
+  fixes it, so it can tell you. On a joined server, the server must also be on the new version.
+- When an agent cannot move an agent or channel into a sidebar folder, or cannot make, rename or delete a folder, it now gets the reason, for example a folder name in place of a folder id, and can correct the call. Before, a ChatGPT agent saw only "dynamic tool request failed", the folder did not change, and the chat showed "Unknown sidebar section."
+- A Muse agent now runs when one of its apps starts slowly or does not start. Before, Muse stopped the full run with "invalid run configuration: Required MCP server … failed during startup", also when the agent did not need that app. Now the agent continues without the tools of that app.
+- Automatic chat compaction uses free OpenRouter models. If a provider refuses the compaction request, the error shows the reason when the provider supplies one.
+
 ## [0.76.1] - 2026-11-21
 
 ### Added
