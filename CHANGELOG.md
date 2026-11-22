@@ -6,6 +6,13 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.76.4] - 2026-11-22
+
+### Fixed
+
+- Show Cursor subagents in the chat's Subagents tab while they run and after they finish.
+- Find Gemini models by reasoning level in agent model searches and tell delegating agents to honor the requested provider, model, and effort.
+
 ## [0.76.3] - 2026-11-22
 
 ### Fixed
