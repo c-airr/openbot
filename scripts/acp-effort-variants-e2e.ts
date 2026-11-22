@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Effect } from "effect";
+import { ModelCatalog } from "../src/backend/agent/model-catalog";
+import { listModelsPayload, requestedToolModel } from "../src/backend/agent/model-tools";
 import type { AgentClient } from "../src/backend/agent-client";
 import type { AgentCliInfo } from "../src/backend/cli";
 import { runCauseEffect } from "../src/backend/effect-boundary";
@@ -214,12 +217,18 @@ async function runTurn(client: AgentClient, thread: string, model: string, effor
 }
 
 try {
-  const executable = join(root, "agy", "1.5.4", "bin", "antigravity");
+  const bin = join(root, "agy", "1.5.4", "bin");
+  const executable = join(bin, process.platform === "win32" ? "antigravity.cmd" : "antigravity");
   const workspace = join(root, "workspace");
-  await mkdir(join(root, "agy", "1.5.4", "bin"), { recursive: true });
+  await mkdir(bin, { recursive: true });
   await mkdir(workspace);
-  await writeFile(executable, FAKE_AGY);
-  await chmod(executable, 0o755);
+  if (process.platform === "win32") {
+    await writeFile(join(bin, "antigravity.cjs"), FAKE_AGY);
+    await writeFile(executable, '@node "%~dp0antigravity.cjs" %*\r\n');
+  } else {
+    await writeFile(executable, FAKE_AGY);
+    await chmod(executable, 0o755);
+  }
   const cli: AgentCliInfo = { executable, version: "1.5.4", source: "managed" };
 
   process.env.FAKE_AGY_MODE = "grouped";
@@ -242,6 +251,29 @@ try {
     ],
     "The picker lists each family once, with its own efforts, and the Claude and GPT models.",
   );
+  const catalog = new ModelCatalog({
+    client: () => client,
+    isSignedOut: () => false,
+    requestTimeoutMs: 10_000,
+    recordProviderError: () => undefined,
+    startSettingsChanged: () => Effect.void,
+  });
+  const { models: options } = await runCauseEffect(catalog.read(client));
+  for (const query of ["Gemini 3.8 Flash High", "gemini-3.8-flash-high"]) {
+    const result = listModelsPayload(options, "cursor", () => undefined, [], { provider: "antigravity", query });
+    assert.deepEqual(
+      result.providers.flatMap(({ models }) => models.map(({ id }) => id)),
+      ["gemini-3.8-flash"],
+    );
+    assert.ok(result.providers[0]?.models[0]?.supportedReasoningEfforts?.includes("high"));
+  }
+  const request = { provider: "antigravity", model: "gemini-3.8-flash", reasoningEffort: "high" } as const;
+  const chosen = requestedToolModel(request, options);
+  assert.ok(chosen);
+  assert.equal(chosen.id, request.model);
+  assert.equal(chosen.provider, request.provider);
+  assert.throws(() => requestedToolModel(request, [{ ...chosen, provider: "cursor" }]));
+  assert.throws(() => requestedToolModel({ ...request, reasoningEffort: "xhigh" }, options));
 
   const discovery = await readLog();
   const clientNames = discovery.filter((entry) => entry.event === "initialize").map((entry) => entry.value);
@@ -267,6 +299,7 @@ try {
     ["gemini-3.1-pro", "low", "gemini-3.1-pro-low"],
     ["gemini-3.1-pro", "high", "gemini-3.1-pro-high"],
     ["gemini-3.8-flash", "medium", "gemini-3.8-flash-medium"],
+    ["gemini-3.8-flash", "high", "gemini-3.8-flash-high"],
     ["claude-sonnet-4-6", "medium", "claude-sonnet-4-6"],
   ] as const) {
     await runTurn(client, thread, model, effort);

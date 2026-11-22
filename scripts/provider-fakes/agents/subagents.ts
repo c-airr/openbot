@@ -296,6 +296,29 @@ function stoppedWork(peer: AcpPeer, root: string): void {
   });
 }
 
+function cursorWork(peer: AcpPeer, root: string): void {
+  const tasks = Array.from({ length: 10 }, (_, index) => `Check example ${index + 1}`);
+  for (const description of tasks) {
+    peer.update(root, {
+      sessionUpdate: "tool_call",
+      toolCallId: description,
+      title: `Task: ${description}`,
+      kind: "other",
+      status: "pending",
+      rawInput: { _toolName: "task", description, prompt: `${description}.` },
+    });
+    peer.update(root, { sessionUpdate: "tool_call_update", toolCallId: description, status: "in_progress" });
+  }
+  for (const description of tasks.toReversed()) {
+    peer.update(root, {
+      sessionUpdate: "tool_call_update",
+      toolCallId: description,
+      status: "completed",
+      rawOutput: { durationMs: 2545, isBackground: false },
+    });
+  }
+}
+
 const prompts = new Map<string, { peer: AcpPeer; reply: () => void }>();
 
 serveFakeAcpAgent(
@@ -327,6 +350,7 @@ serveFakeAcpAgent(
       else if (STYLE === "kimi") kimiWork(peer, root);
       else if (STYLE === "cline") clineWork(peer, root);
       else if (STYLE === "hermes") hermesWork(peer, root);
+      else if (STYLE === "cursor") cursorWork(peer, root);
       peer.say(root, "Done.");
       reply();
     },

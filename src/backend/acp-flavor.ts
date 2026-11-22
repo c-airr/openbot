@@ -411,6 +411,7 @@ export const CURSOR_ACP_FLAVOR: AcpFlavor = {
   connectionLostChunk: /^\s*Error: RetriableError: \[(?:canceled|aborted|unavailable|deadline_exceeded)\] [^\n]*\s*$/u,
   turnFailure: cursorTurnFailure,
   failureCause: (error) => (CURSOR_STREAM_FAILURE.test(errorText(error)) ? "network" : null),
+  subagentTools: ["Task"],
   processWideModel: true,
   mcpServersLoadWithSession: true,
   enableMcpServers: enableCursorMcpServers,

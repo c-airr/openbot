@@ -2068,6 +2068,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       hooks: {
         listAgents: () => this.listAgents(),
         listModels: () => this.listModels(),
+        ensureProvider: (provider) => this.#providers.ensureProvider(provider).pipe(toToolOperationFailed),
         agentModels: (choice) => this.#agentModels(choice),
         providerAccounts: (provider) => this.getStatus().providers?.find((row) => row.id === provider)?.accounts,
         providerStatuses: () => this.getStatus().providers ?? [],

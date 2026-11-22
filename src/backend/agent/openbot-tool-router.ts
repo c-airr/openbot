@@ -204,6 +204,7 @@ import {
   modelList,
   type ProviderAccountRows,
   type ProviderStatusRow,
+  providerCanRun,
   requestedBackupModels,
   requestedRuntime,
   requestedToolModel,
@@ -408,6 +409,7 @@ function captureFailure(failure: ScreenCaptureFailed) {
 export interface OpenBotToolRouterHooks {
   listAgents(): AgentSummary[];
   listModels(): AgentModelOption[];
+  ensureProvider(provider: AgentProvider): Effect.Effect<void, ToolOperationFailed>;
   agentModels(choice: Pick<AgentModelChoice, "provider" | "providerAccountId">): AgentModelOption[];
   providerAccounts: ProviderAccountRows;
   providerStatuses(): readonly ProviderStatusRow[];
@@ -2085,6 +2087,15 @@ export class OpenBotToolRouter {
 
     if (params.tool === "list_models") {
       const args = listModelsToolSchema.parse(params.arguments ?? {});
+      const provider = args.provider;
+      if (
+        provider !== undefined &&
+        providerCanRun(provider, this.#hooks.providerStatuses()) &&
+        !this.#hooks.listModels().some((model) => model.provider === provider)
+      ) {
+        // Read the requested provider's catalog before treating a cold start as a missing model.
+        yield* this.#hooks.ensureProvider(provider).pipe(Effect.ignore);
+      }
       const payload = listModelsPayload(
         this.#hooks.listModels(),
         this.#hooks.preferredProvider(),

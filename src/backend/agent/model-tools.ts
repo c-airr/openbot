@@ -191,7 +191,8 @@ function shortList(own: AgentModelOption[], pinned: ReadonlySet<string>): AgentM
 }
 
 function matchesQuery(model: AgentModelOption, words: readonly string[]): boolean {
-  const text = `${model.id} ${model.name}`.toLowerCase();
+  const efforts = model.reasoningEffortConfigurable === false ? "" : model.supportedReasoningEfforts.join(" ");
+  const text = `${model.id} ${model.name} ${efforts}`.toLowerCase().replace(/[-_]/gu, " ");
   return words.every((word) => text.includes(word));
 }
 
@@ -213,7 +214,11 @@ export function listModelsPayload(
   }[];
   customProviders?: { settings: string; endpoints: CustomEndpointModels[] };
 } {
-  const words = request.query?.toLowerCase().split(/\s+/).filter(Boolean) ?? [];
+  const words =
+    request.query
+      ?.toLowerCase()
+      .split(/[\s_-]+/u)
+      .filter(Boolean) ?? [];
   let resultRoom = QUERY_RESULT_LIMIT;
   const providers = AGENT_PROVIDERS.filter((id) => request.provider === undefined || id === request.provider).flatMap(
     (id) => {
@@ -237,8 +242,12 @@ export function listModelsPayload(
           defaultModel: fallback.id,
           models: listed.map(toolModel),
           ...(omitted > 0 ? { omittedModels: omitted } : {}),
-          ...(id === "openrouter" && words.length > 0 && candidates.length === 0
-            ? { noMatchReason: OPENROUTER_NO_MATCH_REASON }
+          ...(words.length > 0 && candidates.length === 0
+            ? id === "openrouter"
+              ? { noMatchReason: OPENROUTER_NO_MATCH_REASON }
+              : request.provider === id
+                ? { noMatchReason: "No model in this provider's catalog matches the query." }
+                : {}
             : {}),
           ...(rows
             ? {

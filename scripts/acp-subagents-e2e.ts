@@ -90,8 +90,18 @@ function save(name: string, lists: readonly ConversationSubagent[][]): Card[] {
 }
 
 async function fakeCli(name: string, style: string, log: string): Promise<AgentCliInfo> {
-  const executable = join(root, name, "bin", name);
-  await installFakeAgent(executable, "subagents", { FAKE_STYLE: style, FAKE_LOG: log });
+  const bin = join(root, name, "bin");
+  const executable = join(bin, process.platform === "win32" ? `${name}.cmd` : name);
+  if (process.platform === "win32") {
+    await mkdir(bin, { recursive: true });
+    const script = resolve(import.meta.dirname, "provider-fakes/agents/subagents.ts");
+    await writeFile(
+      executable,
+      `@echo off\r\nset "FAKE_STYLE=${style}"\r\nset "FAKE_LOG=${log}"\r\n"${process.execPath}" "${script}" %*\r\n`,
+    );
+  } else {
+    await installFakeAgent(executable, "subagents", { FAKE_STYLE: style, FAKE_LOG: log });
+  }
   return { executable, version: "1.0.0", source: "managed" };
 }
 
@@ -248,6 +258,23 @@ try {
         steps: ["text: The logs show three restarts."],
       },
     ]);
+  }
+
+  {
+    const cli = await fakeCli("cursor-agent", "cursor", join(root, "cursor.jsonl"));
+    const client = requireProviderDriver("cursor").createClient(cli, 10_000, NO_PROVIDER_CREDENTIALS);
+    clients.push(client);
+    client.start();
+    const thread = await startThread(client, { cwd: workspace });
+    const work = watch(client, thread);
+    assert.equal((await runTurn(client, thread, { text: "work" })).status, "completed");
+    assert.ok(work.lists.some((list) => list.length === 10 && list.every((entry) => entry.status === "running")));
+    const cards = save("cursor/work", work.lists);
+    assert.deepEqual(
+      cards.map(({ title }) => title),
+      Array.from({ length: 10 }, (_, index) => `Check example ${index + 1}`),
+    );
+    assert.ok(cards.every(({ status }) => status === "completed"));
   }
 
   report.passed = true;
