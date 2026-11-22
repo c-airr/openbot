@@ -741,6 +741,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mailbox,
       conversation: this.#conversation,
       tasks: this.#tasks,
+      contextBusy: (agent, threadId, taskId) =>
+        taskId === null
+          ? this.#threads.mainContextBusy(agent) || this.#mailbox.laneActive(agent.id, null)
+          : this.#channelSessionBusy(agent, threadId) || this.#mailbox.laneActive(agent.id, taskId),
+      discardBriefing: (agentId) => this.#memories.compact.remove(agentId),
+      cancelReview: (agentId, threadId) => this.#memoryReview.messageDeleted(agentId, threadId),
+      releaseContext: (sessions) => this.#threads.releaseRetiredSessions(sessions),
     });
     this.#feedbackWithdrawal = new FeedbackWithdrawal({
       store,
@@ -1507,6 +1514,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
       forgetThread: (threadId) => this.#forgetExecutionThread(threadId).pipe(toChannelOperationError),
       loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
+      contextBusy: ({ agentId, threadId }) => this.#channelSessionBusy(this.#store.get(agentId), threadId),
+      releaseContexts: (sessions) => this.#threads.releaseRetiredSessions(sessions),
       channelTurnLimit: (agentId) => this.#drain.channelTurnLimit(agentId),
       busy: (agentId, channelId) =>
         this.#channelHeld(agentId) ||
@@ -6510,6 +6519,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     access: MessageDeleteAccess,
   ): Effect.Effect<void, MessageDeleteRefused | AgentLifecycleFailed> {
     return this.#messageDeletion.delete(input, access).pipe(
+      Effect.tap(() => this.#drain.endPlanContinuation(input.agentId, input.taskId ?? null)),
       Effect.tap(() => Effect.sync(() => this.#messagePins.messagesDeleted(input.agentId))),
       Effect.catchTag("StoredStateFailure", ({ cause }) =>
         Effect.fail(new AgentLifecycleFailed({ operation: "deleteConversationMessage", cause })),

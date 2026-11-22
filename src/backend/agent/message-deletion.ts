@@ -1,7 +1,13 @@
-import type { ConversationMessage, ConversationSnapshot, DeleteConversationMessageInput } from "@openbot/contracts/ipc";
+import type {
+  AgentSummary,
+  ConversationMessage,
+  ConversationSnapshot,
+  DeleteConversationMessageInput,
+} from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import type { AgentStore } from "../agent-store";
 import type { AgentTasks } from "../agent-tasks/agent-tasks";
+import type { ProviderSession } from "../database/provider-sessions";
 import type { MailboxStore } from "../mailbox-store";
 import { type MessageDeleteAccess, MessageDeleteRefused } from "../message-delete";
 import { type StoredStateFailure, storedSync } from "../stored-state-effects";
@@ -12,12 +18,16 @@ export interface MessageDeletionOptions {
   mailbox: MailboxStore;
   conversation: ConversationRuntime;
   tasks: AgentTasks;
+  contextBusy: (agent: AgentSummary, threadId: string, taskId: string | null) => boolean;
+  discardBriefing: (agentId: string) => void;
+  cancelReview: (agentId: string, threadId: string | null) => void;
+  releaseContext: (sessions: readonly ProviderSession[]) => Effect.Effect<void>;
 }
 
 const MESSAGE_DELETED_EVENT = "conversation.message-deleted";
 
 interface DeletionTarget {
-  agentId: string;
+  agent: AgentSummary;
   threadId: string;
   taskId: string | null;
   snapshot: ConversationSnapshot;
@@ -29,12 +39,14 @@ export class MessageDeletion {
   readonly #mailbox: MailboxStore;
   readonly #conversation: ConversationRuntime;
   readonly #tasks: AgentTasks;
+  readonly #options: MessageDeletionOptions;
 
   constructor(options: MessageDeletionOptions) {
     this.#store = options.store;
     this.#mailbox = options.mailbox;
     this.#conversation = options.conversation;
     this.#tasks = options.tasks;
+    this.#options = options;
   }
 
   readonly delete = Effect.fn("MessageDeletion.delete")(function* (
@@ -44,31 +56,40 @@ export class MessageDeletion {
   ): Effect.fn.Return<void, MessageDeleteRefused | StoredStateFailure> {
     const target = yield* storedSync(() => this.#target(input));
     if (!target) return yield* new MessageDeleteRefused({ reason: "not-found" });
-    const { agentId, threadId, taskId, snapshot, message } = target;
+    const { agent, threadId, taskId, snapshot, message } = target;
+    const agentId = agent.id;
     if (!access.deleteAny && !sentBy(message, access.memberId))
       return yield* new MessageDeleteRefused({ reason: "forbidden" });
-    if (this.#busy(snapshot, message)) return yield* new MessageDeleteRefused({ reason: "busy" });
-    const mailbox = yield* this.#mailbox.deleteShownMessage(agentId, message.id);
-    if (mailbox === "busy") return yield* new MessageDeleteRefused({ reason: "busy" });
-    yield* storedSync(() => {
-      const current = taskId ? this.#tasks.read(agentId, taskId) : this.#conversation.ensureSnapshot(agentId, threadId);
-      const activeTurnId =
-        current.threadId === threadId
-          ? current.activeTurnId
-          : this.#store.database.readConversationPage(agentId, threadId, { type: "latest" }, 1).activeTurnId;
-      const revision = this.#store.database.persistConversationChanges({
-        agentId,
-        threadId,
-        activeTurnId,
-        changedMessages: [],
-        deletedMessageIds: [message.id],
-        eventType: MESSAGE_DELETED_EVENT,
-        detail: { messageId: message.id },
-      });
-      const published = this.#conversation.forgetDeletedMessage(agentId, threadId, message.id, revision);
-      if (published) this.#conversation.publishConversation(published);
-      if (taskId) this.#tasks.changed(agentId);
+    const idle = () => !this.#busy(snapshot, message) && !this.#options.contextBusy(agent, threadId, taskId);
+    if (!idle()) return yield* new MessageDeleteRefused({ reason: "busy" });
+    const database = this.#store.database;
+    let revision = 0;
+    let retired: ProviderSession[] = [];
+    const mailbox = yield* this.#mailbox.deleteShownMessage(agentId, message.id, {
+      idle,
+      persist: () => {
+        if (!taskId) this.#options.discardBriefing(agentId);
+        retired = database.listProviderSessions(threadId).filter((session) => session.state === "active");
+        database.deactivateProviderSessions(threadId);
+        revision = database.persistConversationChanges({
+          agentId,
+          threadId,
+          activeTurnId: null,
+          changedMessages: [],
+          deletedMessageIds: [message.id],
+          eventType: MESSAGE_DELETED_EVENT,
+          detail: { messageId: message.id },
+        });
+      },
+      committed: () => {
+        const published = this.#conversation.forgetDeletedMessage(agentId, threadId, message.id, revision);
+        this.#options.cancelReview(agentId, taskId ? threadId : null);
+        if (published) this.#conversation.publishConversation(published);
+        if (taskId) this.#tasks.changed(agentId);
+      },
     });
+    if (mailbox === "busy") return yield* new MessageDeleteRefused({ reason: "busy" });
+    yield* this.#options.releaseContext(retired);
   }, Effect.uninterruptible);
 
   #target(input: DeleteConversationMessageInput): DeletionTarget | null {
@@ -88,12 +109,12 @@ export class MessageDeletion {
     const message =
       snapshot.messages.find((candidate) => candidate.id === input.messageId) ??
       this.#store.database.readConversationMessages(agent.id, threadId, [input.messageId])[0];
-    return message ? { agentId: agent.id, threadId, taskId, snapshot, message } : null;
+    return message ? { agent, threadId, taskId, snapshot, message } : null;
   }
 
   #busy(snapshot: ConversationSnapshot, message: ConversationMessage): boolean {
     if (message.status === "streaming") return true;
-    if (snapshot.activeTurnId !== null && message.turnId === snapshot.activeTurnId) return true;
+    if (snapshot.activeTurnId !== null) return true;
     if (message.delivery && isActiveStatus(message.delivery.status)) return true;
     const delivery = this.#mailbox.getDelivery(message.id)?.delivery;
     return delivery !== undefined && isActiveStatus(delivery.status);

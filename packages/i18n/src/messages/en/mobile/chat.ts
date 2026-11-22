@@ -324,7 +324,8 @@ export const messages = defineMessages("mobile.chat", {
   "mobile.chat.message.agentReaction": "{name} reacted with {emoji}",
   "mobile.chat.message.reactionFailed": "Could not update the reaction",
   "mobile.chat.message.deleteTitle": "Delete this message?",
-  "mobile.chat.message.deleteBody": "This removes the message for everyone in this chat. Agents can still remember it.",
+  "mobile.chat.message.deleteBody":
+    "This removes the message for everyone and from future chat context. Saved memories and copies may still contain its contents.",
   "mobile.chat.message.deleteFailed": "Could not delete the message",
   "mobile.chat.message.sendToChannel": "Send to channel",
   "mobile.chat.message.chooseChannel": "Choose a channel",

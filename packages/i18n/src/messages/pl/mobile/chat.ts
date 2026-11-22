@@ -395,7 +395,8 @@ export const messages = {
   "mobile.chat.message.agentReaction": "{name} reaguje: {emoji}",
   "mobile.chat.message.reactionFailed": "Nie udało się zaktualizować reakcji",
   "mobile.chat.message.deleteTitle": "Usunąć tę wiadomość?",
-  "mobile.chat.message.deleteBody": "Wiadomość zniknie dla wszystkich w tym czacie. Agenci mogą nadal ją pamiętać.",
+  "mobile.chat.message.deleteBody":
+    "Wiadomość zniknie dla wszystkich w tym czacie i z kontekstu kolejnych odpowiedzi. Jej treść może pozostać w zapisanej pamięci lub w kopiach.",
   "mobile.chat.message.deleteFailed": "Nie udało się usunąć wiadomości",
   "mobile.chat.message.sendToChannel": "Wyślij na kanał",
   "mobile.chat.message.chooseChannel": "Wybierz kanał",

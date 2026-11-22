@@ -54,6 +54,7 @@ export type { ExportedAttachmentFile, GeneratedAttachmentSource } from "./attach
 import { isEmptyStoredFile, parseStoredJson } from "./atomic-json-file";
 import { routineNameInLimit } from "./database/legacy-conversation-message";
 import { mailboxReactionRowKey } from "./database/mailbox-projection";
+import { withTransaction } from "./database/sqlite-transaction";
 import { MailboxDeliveryGate } from "./mailbox-delivery-gate";
 import { runIdOrigins } from "./message-run-ids";
 import type { OpenBotDatabase } from "./openbot-database";
@@ -1346,8 +1347,17 @@ export class MailboxStore {
     }
   }, Effect.uninterruptible).bind(this);
 
-  deleteShownMessage(agentId: string, shownMessageId: string): Effect.Effect<"busy" | "deleted", StoredStateFailure> {
-    return this.deleteShownMessages(agentId, [shownMessageId], `mailbox:message-deleted:${agentId}:${shownMessageId}`);
+  deleteShownMessage(
+    agentId: string,
+    shownMessageId: string,
+    conversation: { idle: () => boolean; persist: () => void; committed: () => void },
+  ): Effect.Effect<"busy" | "deleted", StoredStateFailure> {
+    return this.deleteShownMessages(
+      agentId,
+      [shownMessageId],
+      `mailbox:message-deleted:${agentId}:${shownMessageId}`,
+      conversation,
+    );
   }
 
   deleteShownMessages = Effect.fn("MailboxStore.deleteShownMessages")(function* (
@@ -1355,6 +1365,7 @@ export class MailboxStore {
     agentId: string,
     shownMessageIds: readonly string[],
     commandPrefix = `mailbox:history-deleted:${agentId}`,
+    conversation?: { idle: () => boolean; persist: () => void; committed: () => void },
   ): Effect.fn.Return<"busy" | "deleted", StoredStateFailure> {
     try {
       const shown = new Set(shownMessageIds);
@@ -1386,13 +1397,19 @@ export class MailboxStore {
         }
       }
       const { deliveries, personal, lastOf } = found();
-      if (deliveries.some(isActiveDelivery)) return "busy";
+      if (deliveries.some(isActiveDelivery) || (conversation && !conversation.idle())) return "busy";
       const removedMessageIds = new Set(lastOf.map((message) => message.id));
       const reactions = this.#state.reactions.filter(
         (reaction) =>
           (reaction.agentId === agentId && shown.has(reaction.messageId)) || removedMessageIds.has(reaction.messageId),
       );
-      if (personal.length === 0 && reactions.length === 0) return "deleted";
+      if (personal.length === 0 && reactions.length === 0) {
+        if (conversation) {
+          withTransaction(this.#database.connection, conversation.persist);
+          conversation.committed();
+        }
+        return "deleted";
+      }
       const previous = structuredClone(this.#state);
       const deletions: string[] = [];
       const removedDeliveryIds = new Set(personal.map(({ delivery }) => delivery.id));
@@ -1420,11 +1437,19 @@ export class MailboxStore {
       for (const reaction of reactions)
         this.#changes.reactionKeys.add(mailboxReactionRowKey(reaction.agentId, reaction.messageId, reaction.actor));
       try {
-        this.#persist("mailbox.message-deleted", `${commandPrefix}:${randomUUID()}`, deletions);
+        const write = () => this.#persist("mailbox.message-deleted", `${commandPrefix}:${randomUUID()}`, deletions);
+        if (conversation) {
+          withTransaction(this.#database.connection, () => {
+            conversation.persist();
+            write();
+          });
+          this.#clearChanges();
+        } else write();
       } catch (error) {
         this.#state = previous;
         throw error;
       }
+      conversation?.committed();
       yield* this.#drainFileDeletionOutboxEffect();
       return "deleted";
     } catch (cause) {

@@ -19,7 +19,11 @@ import { AgentUsage } from "./database/agent-usage";
 import { type ConversationMarkerExclusions, ConversationQueries } from "./database/conversation-queries";
 import { ConversationWriter } from "./database/conversation-writer";
 import { DatabaseCore, type DatabaseCoreOptions, type OrchestrationEventInput } from "./database/database-core";
-import { deletedThreadMessageIds, threadMessageIds } from "./database/deleted-thread-messages";
+import {
+  deletedThreadMessageIds,
+  latestThreadMessageDeletion,
+  threadMessageIds,
+} from "./database/deleted-thread-messages";
 import {
   type ActiveHostedSiteConversationEvent,
   HostedSiteEventLog,
@@ -378,6 +382,10 @@ export class OpenBotDatabase {
 
   deletedConversationMessageIds(threadId: string): Set<string> {
     return deletedThreadMessageIds(this.connection, threadId);
+  }
+
+  latestConversationMessageDeletion(threadId: string): string | null {
+    return latestThreadMessageDeletion(this.connection, threadId);
   }
 
   pinnedThreadMessages(threadIds: readonly string[], limit: number): PinnedThreadMessage[] {

@@ -6,6 +6,12 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.76.3] - 2026-11-22
+
+### Fixed
+
+- Refresh the agent's chat context when a message is deleted, so the next reply uses the remaining history.
+
 ## [0.76.2] - 2026-11-21
 
 ### Added

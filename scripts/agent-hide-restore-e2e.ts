@@ -19,7 +19,9 @@ import {
   agentHiddenEvent,
 } from "@openbot/contracts/team-protocol/agent-hidden-v1";
 import { teamCapabilitiesForProtocol } from "@openbot/contracts/team-protocol/current";
+import { MESSAGE_DELETE_ROUTES } from "@openbot/contracts/team-protocol/message-delete-v1";
 import { TEAM_PROTOCOL_V7 } from "@openbot/contracts/team-protocol/v7";
+import { TEAM_PROTOCOL_V9 } from "@openbot/contracts/team-protocol/v9";
 import { sourceText } from "@openbot/i18n/source";
 import { plugin } from "bun";
 import { Effect } from "effect";
@@ -83,7 +85,7 @@ const answer = (message) => {
     case "turn/start": {
       const turnId = "turn-" + process.pid + "-" + (++turns);
       const text = (params.input || []).map((item) => item.text || "").join("\\n");
-      appendFileSync(LOG, JSON.stringify({ turnId, text }) + "\\n");
+      appendFileSync(LOG, JSON.stringify({ threadId: params.threadId, turnId, text }) + "\\n");
       write({ id: message.id, result: { turn: { id: turnId, status: "inProgress", items: [] } } });
       write({ method: "turn/started", params: { threadId: params.threadId, turn: { id: turnId } } });
       return setTimeout(() => {
@@ -333,13 +335,13 @@ function current(): Host {
 async function call(
   method: string,
   path: string,
-  input: { token?: string; body?: unknown } = {},
+  input: { token?: string; body?: unknown; protocol?: number } = {},
 ): Promise<{ status: number; body: unknown }> {
   const headers: Record<string, string> = {
     Accept: "application/json",
-    [TEAM_PROTOCOL_VERSION_HEADER]: String(TEAM_PROTOCOL_V7),
+    [TEAM_PROTOCOL_VERSION_HEADER]: String(input.protocol ?? TEAM_PROTOCOL_V7),
     [TEAM_APP_VERSION_HEADER]: HOST_VERSION,
-    [TEAM_CAPABILITIES_HEADER]: teamCapabilitiesForProtocol(TEAM_PROTOCOL_V7).join(","),
+    [TEAM_CAPABILITIES_HEADER]: teamCapabilitiesForProtocol(input.protocol ?? TEAM_PROTOCOL_V7).join(","),
   };
   if (input.body !== undefined) headers["Content-Type"] = "application/json";
   if (input.token) headers.Authorization = `Bearer ${input.token}`;
@@ -419,7 +421,7 @@ function snapshotIds(snapshot: HiddenAgentsSnapshot): string[] {
   return snapshot.agents.map((agent) => agent.agentId);
 }
 
-function turns(): { turnId: string; text: string }[] {
+function turns(): { threadId: string; turnId: string; text: string }[] {
   let log = "";
   try {
     log = readFileSync(fakeLog, "utf8");
@@ -694,6 +696,63 @@ try {
     host = await startHost();
     assert.deepEqual(snapshotIds(current().agents.listHiddenAgents()), []);
     return { threadId: restored.threadId, legacyRestored: true };
+  });
+
+  await step("deleting a message rebuilds the provider session from the remaining chat after a restart", async () => {
+    const agent = await runCauseEffect(
+      current().agents.createAgentProfile({
+        name: "Message deletion",
+        description: "",
+        avatarSeed: "delete-message",
+        avatarHue: null,
+      }),
+    );
+    async function send(message: string): Promise<string> {
+      const sent = await call("POST", TEAM_API_ROUTES.agent.messages(agent.id), {
+        token: ownerToken,
+        body: { text: message },
+      });
+      assert.equal(sent.status, 202);
+      const deliveries = record(sent.body, "receipt").deliveries;
+      assert.ok(Array.isArray(deliveries));
+      const deliveryId = text(record(deliveries[0], "delivery").id, "delivery ID");
+      await waitFor(() => current().mailbox.getDelivery(deliveryId)?.delivery.status === "completed");
+      return deliveryId;
+    }
+    const kept = "Keep the tangerine checklist";
+    const removed = "Forget the periwinkle checklist";
+    await send(kept);
+    const messageId = await send(removed);
+    await stopHost();
+    const summariesPath = join(userData, "openbot-compact-summaries-v1.json");
+    await writeFile(summariesPath, JSON.stringify({ [agent.id]: removed }));
+    host = await startHost();
+    const threadId = current()
+      .agents.listAgents()
+      .find(({ id }) => id === agent.id)?.threadId;
+    assert.ok(threadId);
+    const previous = current().database.activeProviderSession(threadId, "codex");
+    assert.ok(previous);
+    const deleted = await call("POST", MESSAGE_DELETE_ROUTES.agent, {
+      token: ownerToken,
+      body: { agentId: agent.id, messageId },
+      protocol: TEAM_PROTOCOL_V9,
+    });
+    assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+    assert.equal(current().database.activeProviderSession(threadId, "codex"), null);
+    assert.ok(!current().mailbox.getDelivery(messageId));
+    assert.equal(record(JSON.parse(readFileSync(summariesPath, "utf8")), "compaction summaries")[agent.id], undefined);
+
+    await stopHost();
+    host = await startHost();
+    const next = "Continue with the remaining checklist";
+    await send(next);
+    const turn = turns().findLast(({ text }) => text.includes(next));
+    assert.ok(turn);
+    assert.notEqual(turn.threadId, previous.externalSessionId);
+    assert.ok(turn.text.includes(kept), turn.text);
+    assert.ok(!turn.text.includes(removed), turn.text);
+    return { threadId };
   });
 
   report.passed = true;

@@ -14,6 +14,7 @@ import {
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import type { boundedHistoryPage, historyMessagePart } from "../src/backend/channel-history";
+import { runMessageDelete } from "../src/main/message-delete-refusal";
 
 type HistoryPage = ReturnType<typeof boundedHistoryPage>;
 type HistoryPart = ReturnType<typeof historyMessagePart>;
@@ -22,7 +23,7 @@ const OUT = resolve(import.meta.dirname, "../.openbot-build/channel-context-e2e"
 const root = await mkdtemp(join(tmpdir(), "openbot-channel-context-"));
 const userData = join(root, "user-data");
 const home = join(root, "home");
-const fakeCodex = join(root, "codex");
+const fakeCodex = join(root, process.platform === "win32" ? "codex.cmd" : "codex");
 const fakeLog = join(root, "codex.jsonl");
 const release = join(root, "release");
 
@@ -345,7 +346,12 @@ function record(agent: string, packet: string): void {
   });
 }
 
-await writeFile(fakeCodex, FAKE_CODEX, { mode: 0o755 });
+if (process.platform === "win32") {
+  await writeFile(join(root, "codex.cjs"), FAKE_CODEX);
+  await writeFile(fakeCodex, '@node "%~dp0codex.cjs" %*\r\n');
+} else {
+  await writeFile(fakeCodex, FAKE_CODEX, { mode: 0o755 });
+}
 const database = new OpenBotDatabase(userData);
 const store = new AgentStore(userData, home, database);
 const mailbox = new MailboxStore(userData, store.sharedRoot, store.database);
@@ -935,6 +941,29 @@ try {
       quotedRow?.superseded === false &&
         messages(channelId).find((message) => message.id === answer.id)?.superseded === true,
       JSON.stringify(quotedRow),
+    );
+
+    const removedText = "Forget the marigold checklist.";
+    const previous = await send(channelId, lead.id, removedText);
+    const oldThread = packets().findLast((entry) => entry.text === previous)?.threadId;
+    const removed = messages(channelId).find((message) => message.message.text === removedText);
+    assert.ok(oldThread && removed);
+    const store = channels().store;
+    const summary = store.summary(channelId);
+    store.saveSummary(channelId, {
+      version: summary.version + 1,
+      throughSequence: removed.sequence,
+      text: removedText,
+    });
+    assert.equal(store.summary(channelId).text, removedText);
+    await runMessageDelete(
+      channels().deleteMessage({ channelId, messageId: removed.id }, { memberId: PERSON.id, deleteAny: true }),
+    );
+    assert.equal(store.summary(channelId).text, "");
+    const next = await send(channelId, lead.id, "Continue with the latest remaining message.");
+    pass(
+      "Deleting a summarized message starts a fresh session without the deleted text",
+      !next.includes(removedText) && packets().findLast((entry) => entry.text === next)?.threadId !== oldThread,
     );
   }
   report.passed = true;

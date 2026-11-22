@@ -645,6 +645,15 @@ export class ChannelStore {
       [{ aggregateType: "channel", aggregateId: channel.id, eventType: "channel.changed", payload }],
       (db) => {
         this.project(db, payload);
+        const summary = this.summary(channel.id);
+        // Bump the version even when the stored summary is unaffected. An in-flight summary may include the message.
+        this.saveSummary(
+          channel.id,
+          entry.sequence <= summary.throughSequence
+            ? { version: summary.version + 1, throughSequence: this.contextResetSequence(channel.id), text: "" }
+            : { ...summary, version: summary.version + 1 },
+        );
+        for (const { threadId } of this.contexts(channel.id)) this.database.deactivateProviderSessions(threadId);
         const events = databaseRows(
           db
             .prepare(

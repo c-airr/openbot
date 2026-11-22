@@ -13,6 +13,14 @@ export function deletedThreadMessageIds(db: DatabaseSync, threadId: string): Set
   return new Set(rows.map((row) => requiredStringColumn(row, "message_id")));
 }
 
+export function latestThreadMessageDeletion(db: DatabaseSync, threadId: string): string | null {
+  const row = cachedStatement(
+    db,
+    "SELECT MAX(deleted_at) AS deleted_at FROM projection_deleted_thread_messages WHERE thread_id = ?",
+  ).get(threadId);
+  return typeof row?.deleted_at === "string" ? row.deleted_at : null;
+}
+
 export function threadMessageIds(db: DatabaseSync, threadId: string): string[] {
   return databaseRows(
     db.prepare("SELECT message_id FROM projection_thread_messages WHERE thread_id = ?").all(threadId),

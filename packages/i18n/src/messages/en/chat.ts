@@ -408,7 +408,8 @@ export const messages = defineMessages("chat", {
   "chat.menu.chooseChannel": "Choose a channel",
   "chat.menu.delete": "Delete",
   "chat.deleteMessage.title": "Delete this message?",
-  "chat.deleteMessage.body": "This removes the message for everyone in this chat. Agents can still remember it.",
+  "chat.deleteMessage.body":
+    "This removes the message for everyone and from future chat context. Saved memories and copies may still contain its contents.",
   "chat.deleteMessage.pending": "Deleting…",
   "chat.voice.play": "Play voice message",
   "chat.voice.pause": "Pause voice message",

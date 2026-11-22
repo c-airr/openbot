@@ -68,6 +68,7 @@ import {
 import { ChannelMemoryStore } from "./channel-memory-store";
 import { CHANNEL_REPLY_ID_PREFIX, channelReplyExpectedResult, checkChannelReply, isReplyTask } from "./channel-replies";
 import { type ChannelAssignment, type ChannelContext, ChannelStore } from "./channel-store";
+import type { ProviderSession } from "./database/provider-sessions";
 import type { DeliveryContext, MailboxStore } from "./mailbox-store";
 import { type MessageDeleteAccess, MessageDeleteRefused } from "./message-delete";
 import type { OpenBotDatabase } from "./openbot-database";
@@ -95,6 +96,8 @@ export interface ChannelHooks {
   provisionalAnswers?(agentId: string): boolean;
   quietTurn?(turnId: string): boolean;
   loadedSnapshot?(threadId: string): ConversationSnapshot | undefined;
+  contextBusy?(context: { agentId: string; threadId: string }): boolean;
+  releaseContexts?(sessions: readonly ProviderSession[]): Effect.Effect<void>;
   forgetThread?(threadId: string): Effect.Effect<void, ChannelOperationError>;
   steersWhenBusy?(agentId: string): boolean;
   steer?(
@@ -589,8 +592,11 @@ export class ChannelService {
           if (!access.deleteAny && !(message.author.kind === "member" && message.author.id === access.memberId))
             return yield* new MessageDeleteRefused({ reason: "forbidden" });
           const tasks = yield* channelSync(() => this.store.tasks(input.channelId));
+          const contexts = yield* channelSync(() => this.store.contexts(input.channelId));
           if (
             message.message.status === "streaming" ||
+            contexts.some((context) => this.hooks.contextBusy?.(context)) ||
+            this.store.assignments(input.channelId).some(activeAssignment) ||
             tasks.some(
               (task) =>
                 !terminal(task) &&
@@ -600,13 +606,19 @@ export class ChannelService {
             )
           )
             return yield* new MessageDeleteRefused({ reason: "busy" });
-          const channel = yield* channelSync(() => this.store.get(input.channelId));
-          yield* channelSync(() => this.store.deleteMessage(channel, message));
+          const retired = yield* channelSync(() => {
+            const channel = this.store.get(input.channelId);
+            const threadIds = contexts.map(({ threadId }) => threadId);
+            const sessions = threadIds.flatMap((threadId) => this.store.database.listProviderSessions(threadId));
+            this.store.deleteMessage(channel, message);
+            return sessions.filter((session) => session.state === "active");
+          });
           yield* this.mailbox
             .deleteChannelMessageCopy(input.channelId, message.id)
             .pipe(Effect.mapError(channelFailure));
           this.publish(input.channelId);
-        }),
+          yield* this.hooks.releaseContexts?.(retired) ?? Effect.void;
+        }).pipe(Effect.uninterruptible),
       ),
   );
 

@@ -131,6 +131,11 @@ export class MemoryReview {
     yield* this.#start(conversation);
   }).bind(this);
 
+  messageDeleted(agentId: string, threadId: string | null): void {
+    const running = this.#running;
+    if (running?.key === conversationKey(agentId, threadId)) running.fiber.interruptUnsafe();
+  }
+
   readonly threadClosed = Effect.fn("MemoryReview.threadClosed")(function* (
     this: MemoryReview,
     agentId: string,

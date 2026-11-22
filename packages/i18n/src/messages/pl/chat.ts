@@ -562,7 +562,8 @@ export const messages = {
   "chat.menu.chooseChannel": "Wybierz kanał",
   "chat.menu.delete": "Usuń",
   "chat.deleteMessage.title": "Usunąć tę wiadomość?",
-  "chat.deleteMessage.body": "Wiadomość zniknie dla wszystkich w tym czacie. Agenci mogą nadal ją pamiętać.",
+  "chat.deleteMessage.body":
+    "Wiadomość zniknie dla wszystkich w tym czacie i z kontekstu kolejnych odpowiedzi. Jej treść może pozostać w zapisanej pamięci lub w kopiach.",
   "chat.deleteMessage.pending": "Usuwanie…",
   "chat.voice.play": "Odtwórz wiadomość głosową",
   "chat.voice.pause": "Wstrzymaj wiadomość głosową",

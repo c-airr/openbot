@@ -1525,6 +1525,13 @@ export class ThreadLifecycle {
       return;
     }
     this.#store.database.deactivateProviderSessions(threadId);
+    yield* this.releaseRetiredSessions(sessions);
+  }, Effect.uninterruptible);
+
+  readonly releaseRetiredSessions = Effect.fn("ThreadLifecycle.releaseRetiredSessions")(function* (
+    this: ThreadLifecycle,
+    sessions: readonly ProviderSession[],
+  ) {
     for (const session of sessions) {
       yield* this.#releaseProviderSession(session.externalSessionId);
       this.#conversation.unbindThread(session.externalSessionId);
@@ -1532,7 +1539,7 @@ export class ThreadLifecycle {
       this.#compaction.forgetThread(session.externalSessionId);
       this.#pendingHandoffs.delete(session.externalSessionId);
     }
-  }, Effect.uninterruptible);
+  }, Effect.uninterruptible).bind(this);
 
   readonly #releaseProviderSession = Effect.fn("ThreadLifecycle.releaseProviderSession")(function* (
     this: ThreadLifecycle,
@@ -1621,12 +1628,15 @@ export class ThreadLifecycle {
     if (sessions.length < 1 && !branch && !this.#importedHistory(threadId)) return null;
     const agentNames = agentNamesById(this.#store.list());
     const history = readHandoffHistory(this.#store.database, agentId, threadId, agentNames);
+    const deletedAt = this.#store.database.latestConversationMessageDeletion(threadId);
     const captures = new Map<string, Map<string, string> | null>();
     const steps = new Map<string, string>();
     const turns = new Set<string>();
     for (const row of history.recent) {
       const session = sessions.find((candidate) => candidate.id === row.providerSessionId);
       if (!session || !row.message.turnId) continue;
+      // Provider work logs can quote prompts that no longer exist in the chat.
+      if (deletedAt && session.createdAt <= deletedAt) continue;
       const key = `${session.id}:${row.message.turnId}`;
       if (turns.has(key)) continue;
       turns.add(key);
