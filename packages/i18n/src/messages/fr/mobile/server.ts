@@ -100,14 +100,17 @@ export const messages = {
   "mobile.server.hosted.intro.description":
     "Un serveur cloud exécute vos agents et vos routines lorsque votre ordinateur est éteint. OpenBot le configure et le maintient en marche.",
   "mobile.server.hosted.planFacts": "{members} · {storage} · {sites} · {speed}",
-  "mobile.server.hosted.computer.title": "Sur votre ordinateur",
+  "mobile.server.hosted.steps.title": "Ajoutez-le sur votre ordinateur",
+  "mobile.server.hosted.steps.open": "Ouvrez OpenBot sur votre ordinateur.",
+  "mobile.server.hosted.steps.settings": "Allez dans Réglages → Serveurs hébergés.",
+  "mobile.server.hosted.steps.add": "Sélectionnez « Ajouter un serveur » et choisissez une offre.",
+  "mobile.server.hosted.plansToggle": "Ce que comprend chaque offre",
   "mobile.server.hosted.computer.add": "Ajouter un serveur cloud",
   "mobile.server.hosted.computer.addHint":
     "Dans OpenBot, ouvrez Réglages → Serveurs hébergés et sélectionnez « Ajouter un serveur ».",
   "mobile.server.hosted.computer.change": "Changer d’offre",
   "mobile.server.hosted.computer.changeHint": "Dans OpenBot, ouvrez Réglages → Facturation.",
   "mobile.server.hosted.yourServers": "Vos serveurs",
-  "mobile.server.hosted.plans": "Offres",
   "mobile.server.hosted.currentPlan": "Votre offre",
   "mobile.server.hosted.soldOut": "Épuisé",
   "mobile.server.hosted.serverPlan": "{plan} · {interval}",
@@ -337,6 +340,7 @@ export const messages = {
   "mobile.server.route.invite": "Inviter des personnes",
   "mobile.server.route.member": "Membre",
   "mobile.server.route.timezone": "Fuseau horaire",
+  "mobile.server.route.signalHome": "Serveur Signal",
   "mobile.server.route.personality": "Personnalité de l’agent",
   "mobile.server.route.agents": "Agents",
   "mobile.server.route.voiceModel": "Reconnaissance vocale",
@@ -470,6 +474,29 @@ export const messages = {
     "Connectez-vous à ce serveur en tant que propriétaire ou admin pour changer son fuseau horaire.",
   "mobile.server.settings.timezoneUnsupported":
     "Mettez à jour OpenBot sur ce serveur pour changer son fuseau horaire ici.",
+  "mobile.server.settings.signalHomeAutomatic": "Automatique",
+  "mobile.server.settings.signalHomeNearest": "Le serveur Signal le plus proche",
+  "mobile.server.settings.signalHomeInUse": "Utilisé : {name}",
+  "mobile.server.settings.signalHomeLoading": "Mesure des serveurs Signal…",
+  "mobile.server.settings.signalHomeSaveFailed": "Impossible de changer le serveur Signal. Réessayez.",
+  "mobile.server.settings.signalHomeUnavailable":
+    "Connectez-vous à ce serveur en tant que propriétaire ou administrateur pour changer son serveur Signal.",
+  "mobile.server.settings.signalHomeUnsupported":
+    "Mettez à jour OpenBot sur ce serveur pour changer ici son serveur Signal.",
+  "mobile.server.settings.signalHomeDescription":
+    "Les membres se connectent à ce serveur via ce serveur Signal. Un serveur Signal avec une latence plus faible donne des connexions plus rapides.",
+  "mobile.server.settings.signalHomeFallback":
+    "{chosen} ne répond pas. Le serveur utilise {name} jusqu'à ce que {chosen} réponde à nouveau.",
+  "mobile.server.settings.signalHomeMoving":
+    "Le serveur passe à {name}. Les membres se reconnectent dans quelques secondes.",
+  "mobile.server.settings.signalHomeLoadFailed": "Impossible de charger les serveurs Signal.",
+  "mobile.server.settings.signalHomeLatency": "{latency} ms",
+  "mobile.server.settings.signalHomeNoAnswer": "Pas de réponse",
+  "mobile.server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "mobile.server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "mobile.server.settings.signalHomePlaceSanJose": "San José",
+  "mobile.server.settings.signalHomePlaceSydney": "Sydney",
+  "mobile.server.settings.signalHomePlaceSingapore": "Singapour",
   "mobile.server.settings.voiceModelDescription":
     "Les agents de ce serveur utilisent ce modèle pour transcrire le son des vidéos sans sous-titres.",
   "mobile.server.settings.voiceModelLoading": "Chargement de la reconnaissance vocale…",
@@ -1004,6 +1031,11 @@ export const messages = {
   "mobile.server.connectors.whatsapp.sendersLimit": "Un numéro peut autoriser jusqu’à {count} contacts et groupes.",
   "mobile.server.connectors.whatsapp.senderGroup": "Groupe",
   "mobile.server.connectors.whatsapp.removeSender": "Retirer",
+  "mobile.server.connectors.whatsapp.senderReadOnlyRow": "{kind} · Lecture seule",
+  "mobile.server.connectors.whatsapp.makeReadOnly": "Passer en lecture seule",
+  "mobile.server.connectors.whatsapp.allowWork": "Autoriser à confier du travail",
+  "mobile.server.connectors.whatsapp.readOnlyDetail":
+    "Lecture seule : les agents peuvent lire ce chat, et OpenBot n'y écrit jamais.",
   "mobile.server.connectors.whatsapp.addContact": "Ajouter un contact",
   "mobile.server.connectors.whatsapp.addGroup": "Ajouter un groupe",
   "mobile.server.connectors.whatsapp.contactTitle": "Ajouter un contact",
@@ -1405,7 +1437,7 @@ export const messages = {
   "mobile.server.update.waitingFor": "En attente : {reasons}.",
   "mobile.server.update.disabledTitle": "Les mises à jour à distance sont désactivées",
   "mobile.server.update.disabledDescription":
-    "L’utilisateur de {name} a désactivé les mises à jour par les membres du serveur. Demandez-lui de mettre à jour OpenBot ou d’activer ce réglage.",
+    "L’utilisateur de {name} a désactivé les mises à jour par les membres du serveur. Demandez-lui de mettre à jour OpenBot, ou d’ouvrir Réglages > Mises à jour sur son ordinateur et d’activer « Autoriser les mises à jour par les membres du serveur ».",
   "mobile.server.update.managedTitle": "Un Host Manager contrôle les mises à jour",
   "mobile.server.update.managedDescription":
     "OpenBot Host Manager met à jour {name}. Contactez l’administrateur de l’hôte.",

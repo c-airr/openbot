@@ -390,6 +390,24 @@ export const messages = {
     "Le nuove routine usano questo fuso orario quando il messaggio non indica quello del mittente. Su un server, anche il browser lo usa dopo il prossimo riavvio.",
   "server.settings.timezoneAutomatic": "Automatico ({zone})",
   "server.settings.timezoneLoadFailed": "Impossibile caricare il fuso orario del server.",
+  "server.settings.connectionTitle": "Connessione",
+  "server.settings.signalHome": "Server Signal",
+  "server.settings.signalHomeDescription":
+    "I membri si connettono a questo server tramite questo server Signal. Un server Signal con latenza più bassa dà connessioni più veloci.",
+  "server.settings.signalHomeFallback":
+    "{chosen} non risponde. Il server usa {name} finché {chosen} non risponde di nuovo.",
+  "server.settings.signalHomeMoving": "Il server passa a {name}. I membri si riconnettono in pochi secondi.",
+  "server.settings.signalHomeLoadFailed": "Impossibile caricare i server Signal.",
+  "server.settings.signalHomeAutomatic": "Automatico (il più vicino)",
+  "server.settings.signalHomeAutomaticUsing": "Automatico ({name})",
+  "server.settings.signalHomeOption": "{name} · {latency}",
+  "server.settings.signalHomeLatency": "{latency} ms",
+  "server.settings.signalHomeNoAnswer": "Nessuna risposta",
+  "server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "server.settings.signalHomePlaceSanJose": "San Jose",
+  "server.settings.signalHomePlaceSydney": "Sydney",
+  "server.settings.signalHomePlaceSingapore": "Singapore",
   "server.settings.voiceModel.section": "Riconoscimento vocale",
   "server.settings.voiceModel.description":
     "Gli agenti su questo server usano questo modello per trascrivere l’audio dei video senza sottotitoli.",
@@ -635,7 +653,7 @@ export const messages = {
   "server.update.waitingFor": "In attesa di {reasons}.",
   "server.update.disabledTitle": "Gli aggiornamenti remoti sono disattivati",
   "server.update.disabledDescription":
-    "L'utente di {name} ha disattivato gli aggiornamenti dai membri del server. Chiedigli di aggiornare OpenBot o di riattivare l'impostazione.",
+    "L'utente di {name} ha disattivato gli aggiornamenti dai membri del server. Chiedigli di aggiornare OpenBot o di aprire Impostazioni > Aggiornamenti sul suo computer e attivare «Consenti aggiornamenti dai membri del server».",
   "server.update.managedTitle": "Gli aggiornamenti sono controllati da un Host Manager",
   "server.update.managedDescription": "OpenBot Host Manager aggiorna {name}. Contatta l'amministratore dell'host.",
   "server.update.unsupportedTitle": "{name} non può aggiornarsi da solo",

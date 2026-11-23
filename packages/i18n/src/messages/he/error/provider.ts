@@ -170,6 +170,8 @@ export const messages = {
   "error.provider.stoppedBeforeStart": "{provider} נעצר לפני שההודעה הזו התחילה. יש לשלוח את ההודעה שוב.",
   "error.provider.sessionStartTimedOut":
     "{provider} לא פתח צ׳אט חדש בזמן, ולכן ההודעה הזו לא התחילה. במחשב שמריץ את OpenBot, יש לפתוח את ספקים, לבחור את {provider} וללחוץ על הפעלה מחדש. אחר כך יש לנסות שוב.",
+  "error.provider.sessionResumeTimedOut":
+    "{provider} לא פתח את הצ׳אט הזה בזמן, ולכן ההודעה הזו לא התחילה. במחשב שמריץ את OpenBot, יש לפתוח את ספקים, לבחור את {provider} וללחוץ על הפעלה מחדש. אחר כך יש לנסות שוב.",
   "error.provider.serviceUnreachable":
     "{provider} לא מצליח להתחבר לשירות שלו. יש לבדוק את החיבור לאינטרנט. OpenBot ינסה שוב.",
   "error.provider.serviceUnreachableRefresh":
@@ -269,6 +271,12 @@ export const messages = {
   "error.provider.realtimeLimitZero":
     "Linux עצר את הספק כי ל-OpenBot יש מגבלת מעבד בזמן אמת של 0. המגבלה מגיעה מהמערכת שלך. יש להתקין ולהפעיל את rtkit (`rtkit-daemon`), להריץ `systemctl --user restart xdg-desktop-portal`, ואז להפעיל מחדש את OpenBot. הפעלה מחדש של xdg-desktop-portal בלבד לא תעזור כל עוד rtkit חסר.",
   "error.provider.cpuUnsupported": "המעבד של המחשב הזה לא יכול להריץ את הספק הזה. השתמש בספק אחר.",
+  "error.provider.largeMemoryPages":
+    "הספק הזה לא יכול לרוץ על ליבת Linux הזו, כי הליבה משתמשת בדפי זיכרון גדולים מ-4 KiB, כמו ב-Raspberry Pi 5 או ב-Asahi Linux. השתמש בליבה עם דפים של 4 KiB או בספק אחר.",
+  "error.provider.ipv6Missing":
+    "הספק הזה צריך IPv6, ו-IPv6 כבוי במחשב הזה. הפעל IPv6 ונסה שוב. ב-WSL, הסר את ipv6.disable=1 מ-.wslconfig והרץ wsl --shutdown.",
+  "error.provider.windowsBlocked":
+    "הגדרות האבטחה של Windows, כמו Smart App Control, מנעו מהספק הזה להתחיל. השתמש בספק אחר.",
   "error.provider.opencodeDatabaseNewer":
     "OpenCode לא הצליח לפתוח את מסד הנתונים שלו כי גרסה חדשה יותר של OpenCode שינתה אותו. יש לעדכן את OpenCode לגרסה 2 ומעלה ואז לנסות שוב.",
   "error.provider.grokDefaultModelNotAllowed":
@@ -282,6 +290,7 @@ export const messages = {
   "error.provider.acpRefusedNoReason": "{provider} עצר בלי תשובה. יש לשלוח את ההודעה שוב.",
   "error.provider.channelNoAnswer":
     "{provider} סיים את התור בלי תשובה. בערוץ, יש ללחוץ על המשך כדי להריץ את המשימה שוב, או על הקצאה מחדש כדי לתת אותה לחבר אחר.",
+  "error.provider.acpProcessStopped": "{provider} נעצר לפני שענה. יש לשלוח את ההודעה שוב.",
   "error.provider.chatgptPageFailed": "OpenBot לא הצליח לפתוח את דף החיבור של ChatGPT.",
   "error.provider.noneReady": "אין ספק סוכנים מוכן.",
   "error.provider.claudeTurnActive": "יש להמתין לפעולה הפעילה של Claude לפני רענון ההקשר שלו.",
@@ -320,6 +329,8 @@ export const messages = {
     "{provider} לא סיים את התור הקודם שלו, ולכן לא קיבל את ההודעה הזו. OpenBot התחיל סשן {provider} חדש עם היסטוריית הצ'אט. יש לשלוח את ההודעה שוב.",
   "error.provider.antigravityLocationUnsupported":
     "חברת Google לא מאפשרת ל-Gemini לפעול ממיקום הרשת של המחשב שמריץ את הסוכן הזה. יש להשתמש ב-Gemini במחשב אחר, או לבחור ספק אחר לסוכן הזה.\n{detail}",
+  "error.provider.antigravityTurnStopped":
+    "Gemini נעצר בגלל שגיאה. יש לשלוח את ההודעה שוב. אם הוא נעצר שוב, יש לבחור מודל או ספק אחר.",
   "error.provider.antigravityConnectionLost": "Gemini איבד את החיבור לסוכן שלו ונעצר. יש לשלוח הודעה כדי להמשיך.",
   "error.provider.grokServiceFailure":
     "השירות של Grok עמוס או שיש בו שגיאה. יש לנסות שוב בעוד כמה דקות, או לבחור מודל אחר.",
@@ -368,6 +379,8 @@ export const messages = {
     "Hermes איבד את החיבור שלו במהלך ההודעה הזו, ולכן הוא לא יודע אם העבודה הסתיימה. יש לבדוק מה הסוכן עשה לפני שליחת ההודעה שוב.",
   "error.provider.copilotThinkingRejected":
     "GitHub Copilot לא הצליח להשתמש במודל הזה: המודל לא קיבל את הגדרת החשיבה שלו. בחרו מודל אחר לסוכן הזה ושלחו שוב את ההודעה.",
+  "error.provider.copilotAnswerIncomplete":
+    "המודל עצר לפני שהתשובה שלו הושלמה. שלחו שוב את ההודעה, או בחרו מודל אחר לסוכן הזה.",
   "error.provider.usageLimitReached": "החשבון הגיע למגבלת השימוש שלו.",
   "error.provider.claudeContextFull":
     "הצ'אט הזה נעשה ארוך מדי עבור Claude. OpenBot התחיל סשן חדש של Claude Code עם היסטוריית הצ'אט. יש לנסות שוב.",
@@ -412,8 +425,11 @@ export const messages = {
   "error.provider.claudeSessionMissing":
     "Claude Code לא מצא את הסשן השמור של הצ'אט הזה. OpenBot התחיל סשן חדש של Claude Code עם היסטוריית הצ'אט. יש לנסות שוב.",
   "error.provider.grokSignIn": "יש להריץ `grok login` או להגדיר XAI_API_KEY כדי להשתמש ב-Grok.",
+  "error.provider.acpSignInNoStart": "הספק לא הופעל, ולכן ההתחברות לא יכלה להתחיל. נסה שוב או הפעל מחדש את OpenBot.",
   "error.provider.acpSignInTimedOut": "זמן ההתחברות אזל.",
   "error.provider.acpSignInStopped": "ההתחברות נעצרה לפני שהושלמה.",
+  "error.provider.geminiNoBrowserUseCode":
+    "למחשב הזה אין דפדפן להתחברות ל-Google. בחר „התחברות עם קוד”, פתח את הקישור בכל מכשיר ואז הדבק את הקוד.",
   "error.provider.geminiBrowserUnavailable":
     "Gemini לא הצליח לפתוח את דף ההתחברות. יש להתקין דפדפן ו-xdg-utils, ואז להתחבר מסשן שולחן עבודה במארח הזה. שרת בלי שולחן עבודה לא יכול להשלים את ההתחברות הזו.",
   "error.provider.geminiBrowserOpenFailed":

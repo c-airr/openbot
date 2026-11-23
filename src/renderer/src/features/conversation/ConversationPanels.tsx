@@ -130,6 +130,7 @@ function VoiceConversation(paneProps: VoicePillPresence & { kind: VoiceConversat
           muted={conversation.muted()}
           levels={conversation.levels()}
           error={conversation.error()}
+          downloadProgress={conversation.downloadProgress()}
           onToggleMute={conversation.toggleMute}
           talkMode={talkMode()}
           onTalkModeChange={setVoiceTalkMode}
@@ -193,6 +194,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
     sidebarFilePreview,
     settingsOpen,
     skillSettingsRequest,
+    clearSkillSettingsRequest,
     instructionsSettingsRequest,
     agentSettingRowRequest,
     handleAgentSettingRowRequest,
@@ -436,10 +438,16 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
   const panelSubagent = createMemo(() => {
     const subagentId = panelSubagentId();
     if (!subagentId) return undefined;
-    for (let index = props.messages.length - 1; index >= 0; index -= 1) {
-      const found = props.messages[index]?.subagents?.find((subagent) => subagent.id === subagentId);
-      if (found) return found;
-    }
+    const threads = props.threads;
+    const sideMessages = (threads?.side.tabs ?? []).map(
+      (tab) => threads?.side.thread(tab.id)?.conversation?.messages ?? [],
+    );
+    const openThreadMessages = threads?.conversation?.messages ?? [];
+    for (const messages of [props.messages, openThreadMessages, ...sideMessages])
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const found = messages[index]?.subagents?.find((subagent) => subagent.id === subagentId);
+        if (found) return found;
+      }
     return undefined;
   });
   const sidePanelMaxWidth = () => settingsPanelMaxWidth(conversationPanelElement());
@@ -885,6 +893,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
               onUpdateRuntimeSettings={updateRuntimeSettings}
               onSetAgentAvatar={props.onSetAgentAvatar}
               skillSelectionRequest={skillSettingsRequest()?.agentId === agent().id ? skillSettingsRequest() : null}
+              onSkillsClosed={() => clearSkillSettingsRequest(agent().id)}
               instructionsRequest={
                 instructionsSettingsRequest()?.agentId === agent().id ? instructionsSettingsRequest() : null
               }

@@ -401,6 +401,24 @@ export const messages = {
     "Новые регулярные задачи используют этот часовой пояс, если в сообщении нет часового пояса отправителя. На сервере браузер тоже использует его после следующего перезапуска.",
   "server.settings.timezoneAutomatic": "Автоматически ({zone})",
   "server.settings.timezoneLoadFailed": "Не удалось загрузить часовой пояс сервера.",
+  "server.settings.connectionTitle": "Подключение",
+  "server.settings.signalHome": "Сервер Signal",
+  "server.settings.signalHomeDescription":
+    "Участники подключаются к этому серверу через этот сервер Signal. Сервер Signal с меньшей задержкой даёт более быстрые подключения.",
+  "server.settings.signalHomeFallback":
+    "{chosen} не отвечает. Сервер использует {name}, пока {chosen} снова не ответит.",
+  "server.settings.signalHomeMoving": "Сервер переходит на {name}. Участники снова подключатся через несколько секунд.",
+  "server.settings.signalHomeLoadFailed": "Не удалось загрузить серверы Signal.",
+  "server.settings.signalHomeAutomatic": "Автоматически (ближайший)",
+  "server.settings.signalHomeAutomaticUsing": "Автоматически ({name})",
+  "server.settings.signalHomeOption": "{name} · {latency}",
+  "server.settings.signalHomeLatency": "{latency} мс",
+  "server.settings.signalHomeNoAnswer": "Нет ответа",
+  "server.settings.signalHomePlaceHelsinki1": "Хельсинки 1",
+  "server.settings.signalHomePlaceHelsinki2": "Хельсинки 2",
+  "server.settings.signalHomePlaceSanJose": "Сан-Хосе",
+  "server.settings.signalHomePlaceSydney": "Сидней",
+  "server.settings.signalHomePlaceSingapore": "Сингапур",
   "server.settings.voiceModel.section": "Распознавание речи",
   "server.settings.voiceModel.description":
     "Агенты на этом сервере используют эту модель, чтобы расшифровывать звук видео без субтитров.",
@@ -667,7 +685,7 @@ export const messages = {
   "server.update.waitingFor": "Ожидание: {reasons}.",
   "server.update.disabledTitle": "Удалённые обновления отключены",
   "server.update.disabledDescription":
-    "Пользователь {name} отключил обновления от участников сервера. Попросите его обновить OpenBot или включить эту настройку.",
+    "Пользователь {name} отключил обновления от участников сервера. Попросите его обновить OpenBot или открыть на своём компьютере «Настройки» > «Обновления» и включить «Разрешить обновления от участников сервера».",
   "server.update.managedTitle": "Обновлениями управляет Host Manager",
   "server.update.managedDescription": "OpenBot Host Manager обновляет {name}. Обратитесь к администратору хоста.",
   "server.update.unsupportedTitle": "{name} не может обновляться сам",

@@ -40,6 +40,7 @@ export interface ConversationTurnTrace {
   endedAt: string | null;
   steps: ConversationTraceStep[];
   tokens?: number | undefined;
+  cachedInput?: number | undefined;
   costUsd?: number | null | undefined;
 }
 
@@ -56,6 +57,7 @@ export function isConversationTurnTrace(value: unknown): value is ConversationTu
     value.steps.length <= CONVERSATION_TRACE_STEP_LIMIT &&
     value.steps.every(isConversationTraceStep) &&
     (value.tokens === undefined || isCount(value.tokens)) &&
+    (value.cachedInput === undefined || isCount(value.cachedInput)) &&
     (value.costUsd === undefined || value.costUsd === null || isCost(value.costUsd))
   );
 }

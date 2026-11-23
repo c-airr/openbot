@@ -69,6 +69,7 @@ import {
   powerMonitor,
   powerSaveBlocker,
   screen,
+  session,
   shell,
   systemPreferences,
   webContents,
@@ -251,6 +252,7 @@ import {
   readDevelopmentHostEmail,
   startDevelopmentRemoteRole,
 } from "./development-remote-bootstrap";
+import { setDiscordRunningSource } from "./discord-presence";
 import { performDynamicIslandCriticalAction } from "./dynamic-island-actions";
 import { DynamicIslandFailed, DynamicIslandWindowController, toDynamicIslandFailed } from "./dynamic-island-window";
 import {
@@ -277,6 +279,7 @@ import {
 } from "./host-events-service";
 import { HostReleaseService, readInstallationMode } from "./host-release-service";
 import { HostService } from "./host-service";
+import { HostSignalHomeService, SIGNAL_HOME_PREFERENCE_FILE } from "./host-signal-home";
 import { HostTurnLimitsPreferenceStore } from "./host-turn-limits-preference-store";
 import { HostUpdateCoordinator } from "./host-update-coordinator";
 import { HostVoiceModelService } from "./host-voice-model";
@@ -354,7 +357,13 @@ import {
   showMainWindow,
 } from "./main-window";
 import { DATA_SKILL_SLUG, ManagedSkillService, SKILL_CREATOR_SKILL_SLUG } from "./managed-skill-service";
-import { MCP_ACCESS_FILE, type McpAccessControl, McpAccessStore, sameMcpAgents } from "./mcp-access-store";
+import {
+  MCP_ACCESS_FILE,
+  type McpAccessControl,
+  McpAccessStore,
+  mcpAgentsOnlyAdded,
+  sameMcpAgents,
+} from "./mcp-access-store";
 import { McpHostSignIns } from "./mcp-host-sign-ins";
 import { McpOAuthProxySettingsFile } from "./mcp-oauth-proxy-store";
 import {
@@ -496,6 +505,7 @@ import { spawnVoiceTranscriptionHost } from "./voice-transcription-host-process"
 import { VoiceTranscriptionService } from "./voice-transcription-service";
 import { WebhookRelay } from "./webhook-relay";
 import { WindowsTopmostKeeper } from "./windows-topmost-keeper";
+import { createWorkflowFileExporter, type WorkflowFileExporter } from "./workflow-file-export";
 import { WorkflowFoldersService } from "./workflow-folders-service";
 import { sizeWorkflowPicture } from "./workflow-picture-size";
 
@@ -658,6 +668,7 @@ export interface ApplicationServiceContext {
 export interface ApplicationServices {
   service: AgentService;
   workflows: WorkflowsHandle;
+  workflowFiles: WorkflowFileExporter;
   workflowGitHub: WorkflowGitHubDirectory;
   crm: CrmHandle;
   routineResults: RoutineResultsHandle;
@@ -719,6 +730,7 @@ export interface ApplicationServices {
   mcpAccess: McpAccessControl;
   serverAudit: ServerAuditStore;
   serverTimezone: ServerTimezonePreferenceStore;
+  hostSignalHome: HostSignalHomeService;
   hostTurnLimits: HostTurnLimitsPreferenceStore;
   serverPersonality: ServerPersonalityPreferenceStore;
   promptCacheTtl: PromptCacheTtlPreferenceStore;
@@ -841,6 +853,13 @@ async function createMessagingServices({
     issueTelegramRoute: (hostId) => centralAuth.issueTelegramRoute(hostId).pipe(toRemoteWorkflowError),
     issueGitHubRoute,
     queueKey: () => loadIngressQueueKey(join(app.getPath("userData"), INGRESS_QUEUE_KEY_FILE), secretCipher),
+    resolveProxy: (url) =>
+      Effect.tryPromise(() => session.defaultSession.resolveProxy(url)).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => logger.warn("OpenBot could not read the proxy settings. Signal connects directly.")),
+        ),
+        Effect.orElseSucceed(() => "DIRECT"),
+      ),
   });
   teardown.push(TEARDOWN_ORDER.signalIngress, "the Signal ingress socket", () =>
     Effect.runPromise(signalIngress.dispose()),
@@ -1460,6 +1479,16 @@ export async function createApplicationServices({
     join(app.getPath("userData"), SERVER_TIMEZONE_PREFERENCE_FILE),
     systemTimezone,
   );
+  const hostSignalHome = new HostSignalHomeService({
+    path: join(app.getPath("userData"), SIGNAL_HOME_PREFERENCE_FILE),
+    fetch: (url, init) => net.fetch(url, { ...init, credentials: "omit", cache: "no-store" }),
+    listHomes: () => {
+      const hostId = teamStore.configured ? teamStore.getIdentity()?.serverId : undefined;
+      return hostId && host.getStatus().apiOnline ? centralAuth.listRemoteSignalHomes(hostId) : Effect.succeed([]);
+    },
+    currentHome: () => host.signalHome(),
+    followHome: () => host.followSignalHome(),
+  });
   const hostTurnLimits = new HostTurnLimitsPreferenceStore(
     join(app.getPath("userData"), HOST_TURN_LIMITS_PREFERENCE_FILE),
     () => hostMemory?.turnLimit() ?? null,
@@ -1516,6 +1545,7 @@ export async function createApplicationServices({
       serverAudit.load(),
       mcpServerOwners.load(),
       serverTimezone.load(),
+      hostSignalHome.load(),
       hostTurnLimits.load(),
       serverPersonality.load(),
       promptCacheTtl.load(),
@@ -2240,6 +2270,7 @@ export async function createApplicationServices({
       }),
     tables,
   });
+  setDiscordRunningSource(() => service.runningAgentCount());
   teardown.push(TEARDOWN_ORDER.service, "the agent service", () => runCauseEffect(service.stop()));
   serverPersonality.onChange(() => service.responseStyleChanged());
   hostTurnLimits.onChange(() => service.turnLimitsChanged());
@@ -2272,6 +2303,7 @@ export async function createApplicationServices({
     listAgents: () => service.listAgents(),
     agentDefaults: () => agentDefaults.get(),
     listModels: () => service.listModels(),
+    providerStatuses: () => service.getStatus().providers ?? [],
     listRoutines: (agentId) => service.listRoutines(agentId),
     runRoutine: (input) => service.runRoutineFromAutomation(input),
     sendMessage: (input) => service.sendMessage(input),
@@ -2402,6 +2434,14 @@ export async function createApplicationServices({
     }),
   );
   const workflowFoldersService = new WorkflowFoldersService({ store: workflowFolders, workflows: workflowRuntime });
+  const workflowFiles = createWorkflowFileExporter({
+    agents: () => service.listAgents(),
+    channelName: (channelId) =>
+      service.channels.store.ids().includes(channelId) ? service.channels.store.get(channelId).name : null,
+    attachment: (fileId) => mailbox.resolveAttachment(fileId).pipe(Effect.orElseSucceed(() => null)),
+    timezone: () => serverTimezone.effective(),
+    appVersion: app.getVersion(),
+  });
   workflowTriggers = new WorkflowTriggers({
     store: workflowStore,
     timezone: () => serverTimezone.effective(),
@@ -2644,7 +2684,7 @@ export async function createApplicationServices({
     providerRuntimes.startUpdateChecks();
   }
   providerRuntimes.on("ready", (runtime) => {
-    if (isManagedToolRuntime(runtime)) Effect.runFork(service.refreshAllAgentRuntimes());
+    if (isManagedToolRuntime(runtime)) Effect.runFork(service.refreshAllAgentRuntimes("after-background-work"));
   });
   service.on("event", (event) => {
     if (event.type === "agents-changed") storageUsage.invalidate();
@@ -3077,9 +3117,15 @@ export async function createApplicationServices({
       saveRoutineFlowPosition: (input) => routineFlowRuntime.savePosition(input),
       workflows: {
         workflows: () =>
-          workflowRuntime
-            .listWithGraphs()
-            .pipe(Effect.map((list) => list.map(({ summary, graph }) => ({ title: summary.title, graph })))),
+          workflowRuntime.listWithGraphs().pipe(
+            Effect.map((list) =>
+              list.map(({ summary, graph, needsNewerApp }) => ({
+                title: summary.title,
+                graph,
+                ...(needsNewerApp ? { needsNewerApp } : {}),
+              })),
+            ),
+          ),
         createWorkflow: (input) => workflowRuntime.createCopy(input),
       },
       signedInProviders: () =>
@@ -3143,7 +3189,11 @@ export async function createApplicationServices({
           .set(change, existing)
           .pipe(
             Effect.andThen(
-              sameMcpAgents(before, change.access.agents) ? Effect.void : service.refreshAllAgentRuntimes(),
+              sameMcpAgents(before, change.access.agents)
+                ? Effect.void
+                : service.refreshAllAgentRuntimes(
+                    mcpAgentsOnlyAdded(before, change.access.agents) ? "after-background-work" : "now",
+                  ),
             ),
           );
       }),
@@ -3208,6 +3258,7 @@ export async function createApplicationServices({
       ...workflowRuntime,
       rotateWorkflowSecret: (input) => events.rotateWorkflowSecret(input),
       github: workflowGitHub,
+      files: workflowFiles,
     },
     crm,
     hiddenAgents: service,
@@ -3250,6 +3301,7 @@ export async function createApplicationServices({
         changeSettings: (change) => scheduledUpdate().changeSettings(change),
       },
       timezone: serverTimezone,
+      signalHome: hostSignalHome,
       ...(hostedServer || serverModeEnvironment || localServerChild
         ? {
             voiceModel: {
@@ -3353,7 +3405,11 @@ export async function createApplicationServices({
       centralAuth.handOverRemoteHostKey(hostId, handover).pipe(toRemoteWorkflowError),
     onKeyRotated: () => remoteServers.requestDirectoryRefresh(),
     issueRemoteHostTicket: (hostId, home) =>
-      centralAuth.issueRemoteHostTicket(hostId, home).pipe(toRemoteWorkflowError),
+      centralAuth
+        .issueRemoteHostTicket(hostId, home && { ...home, preferredSignalHome: hostSignalHome.preferred() })
+        .pipe(toRemoteWorkflowError),
+    preferredSignalHome: () => hostSignalHome.preferred(),
+    signalHomeAnswers: (home) => hostSignalHome.answers(home),
     ...(serverModeEnvironment && !hostedServer
       ? {
           requestTransferredOwnerSession: (hostId: string) =>
@@ -4052,7 +4108,7 @@ export async function createApplicationServices({
   const describeRestartReadiness = (): RestartReadiness =>
     checkRestartReadiness({
       agentWork: [
-        ...service.hasActiveWork(),
+        ...service.workBeforeRestart(),
         ...(workflowRuntime.working() ? ["routine-run"] : []),
         ...(localServers && localServers.workingAgents().length > 0 ? ["agent-turn"] : []),
       ],
@@ -4262,6 +4318,7 @@ export async function createApplicationServices({
   return {
     service,
     workflows: workflowRuntime,
+    workflowFiles,
     workflowGitHub,
     crm,
     routineResults: routineResultRuntime,
@@ -4318,6 +4375,7 @@ export async function createApplicationServices({
     mcpAccess,
     serverAudit,
     serverTimezone,
+    hostSignalHome,
     hostTurnLimits,
     serverPersonality,
     promptCacheTtl,

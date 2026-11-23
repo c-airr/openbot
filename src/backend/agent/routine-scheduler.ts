@@ -196,13 +196,20 @@ export class RoutineScheduler implements RoutineDueSource {
     return this.#routines.list(agentId);
   }
 
-  hasActiveRuns(): boolean {
+  hasActiveRuns(queuedRunsWait: (agentId: string) => boolean): boolean {
     for (const agent of this.#hooks.listAgents()) {
+      const waits = queuedRunsWait(agent.id);
       for (const routine of this.#routines.listRecords(agent.id)) {
-        if (this.#routines.activeRuns(agent.id, routine.id).length > 0) return true;
+        const runs = this.#routines.activeRuns(agent.id, routine.id);
+        if (runs.some((run) => !waits || run.status !== "queued" || this.#deliveryStarted(run))) return true;
       }
     }
     return false;
+  }
+
+  #deliveryStarted(run: RoutineRun): boolean {
+    const status = run.deliveryId ? this.#mailbox.getDelivery(run.deliveryId)?.delivery.status : undefined;
+    return status === "starting" || status === "running";
   }
 
   runForDelivery(deliveryId: string): RoutineRun | null {
@@ -909,6 +916,10 @@ export class RoutineScheduler implements RoutineDueSource {
     const run = this.#routines.runForDelivery(delivery.delivery.id);
     if (!run || run.status === "needs-attention") return;
     this.#transitionInteractionWithReconciliation(run, "needs-attention");
+  }
+
+  runsTurn(turnId: string): boolean {
+    return this.#mailbox.findDeliveryByTurn(turnId)?.delivery.sender.kind === "routine";
   }
 
   markRunningForTurn(turnId: string | null): void {

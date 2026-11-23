@@ -189,6 +189,8 @@ export const messages = {
     "{provider} se detuvo antes de que empezara este mensaje. Envía el mensaje de nuevo.",
   "error.provider.sessionStartTimedOut":
     "{provider} no abrió un chat nuevo a tiempo, así que este mensaje no empezó. En el ordenador que ejecuta OpenBot, abre Proveedores, selecciona {provider} y haz clic en Reiniciar. Luego vuelve a intentarlo.",
+  "error.provider.sessionResumeTimedOut":
+    "{provider} no abrió este chat a tiempo, así que este mensaje no empezó. En el ordenador que ejecuta OpenBot, abre Proveedores, selecciona {provider} y haz clic en Reiniciar. Luego vuelve a intentarlo.",
   "error.provider.serviceUnreachable":
     "{provider} no puede conectarse a su servicio. Comprueba tu conexión a internet. OpenBot lo intentará de nuevo.",
   "error.provider.serviceUnreachableRefresh":
@@ -296,6 +298,12 @@ export const messages = {
   "error.provider.realtimeLimitZero":
     "Linux detuvo el proveedor porque OpenBot tiene un límite de CPU en tiempo real de 0. El límite viene de tu sistema. Instala e inicia rtkit (`rtkit-daemon`), ejecuta `systemctl --user restart xdg-desktop-portal` y luego reinicia OpenBot. Reiniciar solo xdg-desktop-portal no sirve mientras falte rtkit.",
   "error.provider.cpuUnsupported": "El procesador de este equipo no puede ejecutar este proveedor. Usa otro proveedor.",
+  "error.provider.largeMemoryPages":
+    "Este proveedor no puede ejecutarse en este kernel de Linux, porque el kernel usa páginas de memoria de más de 4 KiB, como en Raspberry Pi 5 o Asahi Linux. Usa un kernel con páginas de 4 KiB u otro proveedor.",
+  "error.provider.ipv6Missing":
+    "Este proveedor necesita IPv6, y IPv6 está desactivado en este equipo. Activa IPv6 y vuelve a intentarlo. En WSL, quita ipv6.disable=1 de .wslconfig y ejecuta wsl --shutdown.",
+  "error.provider.windowsBlocked":
+    "La configuración de seguridad de Windows, como el Control inteligente de aplicaciones, impidió que este proveedor se iniciara. Usa otro proveedor.",
   "error.provider.opencodeDatabaseNewer":
     "OpenCode no pudo abrir su base de datos porque una versión más reciente de OpenCode la cambió. Actualiza OpenCode a la versión 2 o posterior y vuelve a intentarlo.",
   "error.provider.grokDefaultModelNotAllowed":
@@ -311,6 +319,7 @@ export const messages = {
   "error.provider.acpRefusedNoReason": "{provider} se detuvo sin respuesta. Envía el mensaje de nuevo.",
   "error.provider.channelNoAnswer":
     "{provider} terminó el turno sin respuesta. En el canal, haz clic en Continuar para ejecutar la tarea de nuevo, o en Reasignar para dársela a otro miembro.",
+  "error.provider.acpProcessStopped": "{provider} se detuvo antes de responder. Envía el mensaje de nuevo.",
   "error.provider.chatgptPageFailed": "OpenBot no pudo abrir la página de conexión de ChatGPT.",
   "error.provider.noneReady": "Ningún proveedor de agentes está listo.",
   "error.provider.claudeTurnActive": "Espera a que termine el turno activo de Claude antes de actualizar su contexto.",
@@ -351,6 +360,8 @@ export const messages = {
     "{provider} no terminó su turno anterior, por lo que no aceptó este mensaje. OpenBot inició una nueva sesión de {provider} con el historial del chat. Vuelve a enviar tu mensaje.",
   "error.provider.antigravityLocationUnsupported":
     "Google no permite que Gemini funcione desde la ubicación de red del equipo que ejecuta este agente. Usa Gemini en otro equipo o elige otro proveedor para este agente.\n{detail}",
+  "error.provider.antigravityTurnStopped":
+    "Gemini se detuvo por un error. Vuelve a enviar tu mensaje. Si se detiene de nuevo, elige otro modelo u otro proveedor.",
   "error.provider.antigravityConnectionLost":
     "Gemini perdió la conexión con su agente y se detuvo. Envía un mensaje para continuar.",
   "error.provider.grokServiceFailure":
@@ -401,6 +412,8 @@ export const messages = {
     "Hermes perdió su conexión durante este mensaje, así que no sabe si el trabajo terminó. Revisa lo que hizo el agente antes de enviar el mensaje de nuevo.",
   "error.provider.copilotThinkingRejected":
     "GitHub Copilot no pudo usar este modelo: el modelo no aceptó su ajuste de razonamiento. Selecciona otro modelo para este agente y envía tu mensaje de nuevo.",
+  "error.provider.copilotAnswerIncomplete":
+    "El modelo se detuvo antes de completar su respuesta. Envía tu mensaje de nuevo o selecciona otro modelo para este agente.",
   "error.provider.usageLimitReached": "La cuenta alcanzó su límite de uso.",
   "error.provider.claudeContextFull":
     "Este chat se volvió demasiado largo para Claude. OpenBot inició una nueva sesión de Claude Code con el historial del chat. Inténtalo de nuevo.",
@@ -445,8 +458,12 @@ export const messages = {
   "error.provider.claudeSessionMissing":
     "Claude Code no encontró la sesión guardada de este chat. OpenBot inició una nueva sesión de Claude Code con el historial del chat. Inténtalo de nuevo.",
   "error.provider.grokSignIn": "Ejecuta `grok login` o define XAI_API_KEY para usar Grok.",
+  "error.provider.acpSignInNoStart":
+    "El proveedor no se inició, así que el inicio de sesión no pudo empezar. Vuelve a intentarlo o reinicia OpenBot.",
   "error.provider.acpSignInTimedOut": "Se agotó el tiempo del inicio de sesión.",
   "error.provider.acpSignInStopped": "El inicio de sesión se detuvo antes de completarse.",
+  "error.provider.geminiNoBrowserUseCode":
+    "Este equipo no tiene un navegador para iniciar sesión en Google. Elige «Usar código», abre el enlace en cualquier dispositivo y pega el código.",
   "error.provider.geminiBrowserUnavailable":
     "Gemini no pudo abrir la página de inicio de sesión. Instala un navegador y xdg-utils, y conéctate desde una sesión de escritorio en este host. Un servidor sin escritorio no puede completar este inicio de sesión.",
   "error.provider.geminiBrowserOpenFailed":

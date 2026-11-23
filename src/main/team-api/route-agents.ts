@@ -358,7 +358,7 @@ export async function routeAgents(
       throw new HttpError(400, sourceText("error.team.secureAuthUnsupported"));
     const input = parseBrowserSecretResponse(await readJson(request));
     requireRequestAgent(input.agentId);
-    await runCauseEffect(agents.respondToBrowserSecret(input));
+    await runCauseEffect(agents.respondToBrowserSecret(input)).catch(inactiveAsConflict);
     return empty(204);
   }
   if (method === "POST" && url.pathname === BROWSER_SECRET_VAULT_ROUTES.respond) {
@@ -368,7 +368,7 @@ export async function routeAgents(
       throw new HttpError(400, sourceText("error.team.vaultUnsupported"));
     const input = parseBrowserSecretResponse({ ...(await readJson(request)), decision: "submit" });
     requireRequestAgent(input.agentId);
-    await runCauseEffect(agents.respondToBrowserSecret({ ...input, saveToVault: true }));
+    await runCauseEffect(agents.respondToBrowserSecret({ ...input, saveToVault: true })).catch(inactiveAsConflict);
     return json(200, {});
   }
   if (method === "POST" && url.pathname === TEAM_API_ROUTES.respond.browserTakeover) {

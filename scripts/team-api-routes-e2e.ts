@@ -57,6 +57,7 @@ import {
   isAccountUsage,
   isLocalVoiceModelId,
   isQueueSnapshot,
+  isWhatsAppReadOnlyList,
   isWhatsAppStatusReactionsList,
   isWhatsAppWorkingMessageList,
   type LibraryFolderAction,
@@ -85,9 +86,11 @@ import {
   type VoiceSettings,
   type WhatsAppAccount,
   type WhatsAppLinkState,
+  type WhatsAppReadOnlyList,
   type WhatsAppStatusReactionsList,
   type WhatsAppWorkingMessageList,
   withHostProviderAccountModels,
+  withWhatsAppReadOnly,
   withWhatsAppStatusReactions,
   withWhatsAppWorkingMessages,
 } from "@openbot/contracts/ipc";
@@ -182,6 +185,7 @@ import {
   AGENT_WAITS_REQUEST_TEXT_LIMIT,
   AGENT_WAITS_ROUTES,
 } from "@openbot/contracts/team-protocol/agent-waits-v1";
+import { ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY } from "@openbot/contracts/team-protocol/antigravity-code-sign-in-v1";
 import { ATTACHMENT_PREVIEW_CAPABILITY } from "@openbot/contracts/team-protocol/attachment-preview-v1";
 import {
   BACKGROUND_PROCESS_COMMAND_LIMIT,
@@ -299,6 +303,10 @@ import {
 } from "@openbot/contracts/team-protocol/host-key-rotation-v1";
 import { HOST_RESTART_CAPABILITY, HOST_RESTART_ROUTES } from "@openbot/contracts/team-protocol/host-restart-v1";
 import {
+  HOST_SIGNAL_HOME_CAPABILITY,
+  HOST_SIGNAL_HOME_ROUTES,
+} from "@openbot/contracts/team-protocol/host-signal-home-v1";
+import {
   HOST_TURN_LIMITS_CAPABILITY,
   HOST_TURN_LIMITS_ROUTES,
 } from "@openbot/contracts/team-protocol/host-turn-limits-v1";
@@ -348,6 +356,14 @@ import { MESSAGE_DELETE_CAPABILITY, MESSAGE_DELETE_ROUTES } from "@openbot/contr
 import { MESSAGE_PINS_CAPABILITY, MESSAGE_PINS_ROUTES } from "@openbot/contracts/team-protocol/message-pins-v1";
 import { MISTRAL_CODE_SIGN_IN_CAPABILITY } from "@openbot/contracts/team-protocol/mistral-code-sign-in-v1";
 import { MODEL_STEERING_CAPABILITY, MODEL_STEERING_ROUTES } from "@openbot/contracts/team-protocol/model-steering-v1";
+import {
+  MODEL_VISIBILITY_KEPT_CAPABILITY,
+  MODEL_VISIBILITY_KEPT_ROUTES,
+} from "@openbot/contracts/team-protocol/model-visibility-kept-v1";
+import {
+  MODEL_VISIBILITY_CAPABILITY,
+  MODEL_VISIBILITY_ROUTES,
+} from "@openbot/contracts/team-protocol/model-visibility-v1";
 import {
   PASSWORD_MANAGERS_CAPABILITY,
   PASSWORD_MANAGERS_CODECS,
@@ -485,6 +501,11 @@ import {
   WHATSAPP_CONNECTOR_ROUTES,
 } from "@openbot/contracts/team-protocol/whatsapp-connector-v1";
 import {
+  WHATSAPP_READ_ONLY_CAPABILITY,
+  WHATSAPP_READ_ONLY_CODECS,
+  WHATSAPP_READ_ONLY_ROUTES,
+} from "@openbot/contracts/team-protocol/whatsapp-read-only-v1";
+import {
   WHATSAPP_STATUS_REACTIONS_CAPABILITY,
   WHATSAPP_STATUS_REACTIONS_CODECS,
   WHATSAPP_STATUS_REACTIONS_ROUTES,
@@ -557,6 +578,7 @@ import { createCustomProviderChanges } from "../src/main/custom-provider-changes
 import { CustomProviderStore } from "../src/main/custom-provider-store";
 import { githubSkillSource } from "../src/main/github-skill-source";
 import type { HostEventsApi } from "../src/main/host-events-api";
+import { HostSignalHomeService, SIGNAL_HOME_PREFERENCE_FILE } from "../src/main/host-signal-home";
 import { HostTurnLimitsPreferenceStore } from "../src/main/host-turn-limits-preference-store";
 import { HostVoiceModelService, type VoiceModels } from "../src/main/host-voice-model";
 import {
@@ -567,6 +589,7 @@ import {
 import { LibraryFoldersService, type LibraryFoldersSources } from "../src/main/library-folders-service";
 import { MachineAlertMonitor, MachineAlertPreferenceStore } from "../src/main/machine-alerts";
 import { MemoryReviewPreferenceStore } from "../src/main/memory-review-preference-store";
+import { ModelReleaseCatalog, ModelVisibility } from "../src/main/model-visibility";
 import type { PasswordManagerDriver } from "../src/main/password-managers/driver";
 import { PasswordManagersService } from "../src/main/password-managers/password-managers-service";
 import { ProviderAccountsHost } from "../src/main/provider-accounts-host";
@@ -699,6 +722,28 @@ class FakeVoiceModels extends EventEmitter<{ modelStatus: [VoiceModelStatus] }> 
   }
 }
 const fakeVoiceModels = new FakeVoiceModels();
+const signalHomePreferencePath = join(root, SIGNAL_HOME_PREFERENCE_FILE);
+let signalHomeInUse: string | null = "a";
+const hostSignalHome = new HostSignalHomeService({
+  path: signalHomePreferencePath,
+  fetch: async (url) => {
+    record("signalHealth", url);
+    if (url.startsWith("https://signal-down.test/")) throw new TypeError("fetch failed");
+    return new Response("{}", { status: 200 });
+  },
+  listHomes: () =>
+    Effect.succeed([
+      { id: "a", url: "wss://signal-a.test/v1/signal" },
+      { id: "au", url: "wss://signal-au.test/v1/signal" },
+      { id: "sg", url: "wss://signal-down.test/v1/signal" },
+    ]),
+  currentHome: () => signalHomeInUse,
+  followHome: () =>
+    Effect.sync(() => {
+      record("followSignalHome");
+      signalHomeInUse = hostSignalHome.preferred() ?? "a";
+    }),
+});
 const transferUploads = join(root, "user-data", "instance-transfer-uploads");
 const checks: Check[] = [];
 const calls: RecordedCall[] = [];
@@ -740,6 +785,7 @@ function check(name: string, passed: boolean, detail: unknown = null): void {
 }
 
 const MISTRAL_SIGN_IN_PAGE = "https://console.mistral.ai/vibe/sign-in/e2e";
+const GOOGLE_SIGN_IN_PAGE = "https://accounts.google.com/o/oauth2/auth?client_id=e2e";
 
 function record(method: string, ...args: unknown[]): void {
   calls.push({ method, args });
@@ -2338,6 +2384,13 @@ const whatsappMessaging: TeamApiConnectors["messaging"] = {
       record("whatsapp.setStatusReactions", workspaceId, statusReactions);
       whatsappAccount.statusReactions = statusReactions;
     }),
+  setWhatsAppSenderReadOnly: (workspaceId, senderId, readOnly) =>
+    Effect.sync(() => {
+      record("whatsapp.setSenderReadOnly", workspaceId, senderId, readOnly);
+      whatsappAccount.allowedSenders = whatsappAccount.allowedSenders.map((sender) =>
+        sender.id === senderId ? { ...sender, readOnly } : sender,
+      );
+    }),
 };
 const connectors: TeamApiConnectors = {
   github: {
@@ -2668,6 +2721,14 @@ try {
     skills: chatSkills,
     admin: {
       skills: githubSkillsAdmin,
+      modelVisibility: new ModelVisibility({
+        path: join(root, "model-visibility.json"),
+        catalog: new ModelReleaseCatalog({ XDG_CACHE_HOME: join(root, "cache") }, root),
+        listModels: () => FAST_MODE_MODELS,
+        listAgents: () => agents,
+        customEndpoints: () => [],
+        modelsChanged: () => {},
+      }),
       customAgents: {
         list: () => Effect.succeed(customAgentList),
         save: (input) =>
@@ -2772,6 +2833,7 @@ try {
       },
       turnLimits: hostTurnLimits,
       voiceModel: new HostVoiceModelService(fakeVoiceModels),
+      signalHome: hostSignalHome,
       localServers: {
         list: () => Effect.sync(() => ({ servers: [...localServerList], limit: 5 })),
         create: (name) =>
@@ -2890,6 +2952,8 @@ try {
         service: {
           startProviderCodeLogin: (provider) => {
             record("startProviderCodeLogin", provider);
+            if (provider === "antigravity")
+              return Effect.succeed({ kind: "paste", verificationUrl: GOOGLE_SIGN_IN_PAGE, expiresAt: 1 });
             if (provider !== "mistral") throw new Error(sourceText("error.provider.noCodeSignIn", { provider }));
             return Effect.succeed({ kind: "link", verificationUrl: MISTRAL_SIGN_IN_PAGE, expiresAt: 1 });
           },
@@ -4243,6 +4307,86 @@ try {
         field(modelOf(removed.body, "whisper-turbo"), "phase") === "missing" &&
         isDeepStrictEqual(callsOf("removeVoiceModel"), [["whisper-turbo"]]),
       summary(removed),
+    );
+  }
+
+  {
+    const v10 = { capabilities: [HOST_SIGNAL_HOME_CAPABILITY], protocol: TEAM_PROTOCOL_V10 };
+    const route = HOST_SIGNAL_HOME_ROUTES;
+    const latencyOf = (body: Json, id: string) =>
+      field(
+        list(field(body, "homes")).find((home) => field(home, "id") === id),
+        "latencyMs",
+      );
+    const compatibility = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V10 });
+    const unsupported = await call("POST", route.settings, {
+      token: adaToken,
+      json: {},
+      capabilities: [],
+      protocol: TEAM_PROTOCOL_V10,
+    });
+    const memberRead = await call("POST", route.settings, { token: bobToken, json: {}, ...v10 });
+    const memberChange = await call("POST", route.update, { token: bobToken, json: { home: "au" }, ...v10 });
+    check(
+      "the host advertises host-signal-home-v1; a member reads the Signal servers but cannot choose one, and a client without the capability gets 400",
+      JSON.stringify(compatibility.body).includes(HOST_SIGNAL_HOME_CAPABILITY) &&
+        errorIs(unsupported, 400, sourceText("error.team.hostSignalHomeUnsupported")) &&
+        memberRead.status === 200 &&
+        list(field(memberRead.body, "homes")).length === 3 &&
+        errorIs(memberChange, 403, sourceText("error.team.adminRequired")) &&
+        callsOf("followSignalHome").length === 0,
+      [summary(unsupported), summary(memberRead), summary(memberChange)],
+    );
+    const adminRead = await call("POST", route.settings, { token: adaToken, json: {}, ...v10 });
+    check(
+      "an admin reads each Signal server with the latency that the host measures once a minute, and no latency for a server that does not answer",
+      adminRead.status === 200 &&
+        field(adminRead.body, "preferred") === null &&
+        field(adminRead.body, "current") === "a" &&
+        typeof latencyOf(adminRead.body, "a") === "number" &&
+        typeof latencyOf(adminRead.body, "au") === "number" &&
+        latencyOf(adminRead.body, "sg") === null &&
+        callsOf("signalHealth").filter(([url]) => url === "https://signal-a.test/health/ready").length === 4,
+      summary(adminRead),
+    );
+    const unknown = await call("POST", route.update, { token: adaToken, json: { home: "eu" }, ...v10 });
+    const invalid = await call("POST", route.update, { token: adaToken, json: { home: "Not a home" }, ...v10 });
+    check(
+      "the host refuses a Signal server that the account service does not list, and saves nothing",
+      errorIs(unknown, 400, sourceText("error.host.signalHomeUnknown")) &&
+        invalid.status === 400 &&
+        !existsSync(signalHomePreferencePath) &&
+        callsOf("followSignalHome").length === 0,
+      [summary(unknown), summary(invalid)],
+    );
+    const chosen = await call("POST", route.update, { token: adaToken, json: { home: "au" }, ...v10 });
+    check(
+      "an admin chooses a Signal server; the host saves it, moves to it, and answers with the new server in use",
+      chosen.status === 200 &&
+        field(chosen.body, "preferred") === "au" &&
+        field(chosen.body, "current") === "au" &&
+        hostSignalHome.preferred() === "au" &&
+        JSON.parse(readFileSync(signalHomePreferencePath, "utf8")).home === "au" &&
+        callsOf("followSignalHome").length === 1,
+      summary(chosen),
+    );
+    const reloaded = new HostSignalHomeService({
+      path: signalHomePreferencePath,
+      fetch: async () => new Response("{}", { status: 200 }),
+      listHomes: () => Effect.succeed([]),
+      currentHome: () => null,
+      followHome: () => Effect.void,
+    });
+    await Effect.runPromise(reloaded.load());
+    const automatic = await call("POST", route.update, { token: adaToken, json: { home: null }, ...v10 });
+    check(
+      "the choice stays after a restart, and an admin returns the server to the automatic Signal server",
+      reloaded.preferred() === "au" &&
+        automatic.status === 200 &&
+        field(automatic.body, "preferred") === null &&
+        field(automatic.body, "current") === "a" &&
+        callsOf("followSignalHome").length === 2,
+      summary(automatic),
     );
   }
 
@@ -6110,6 +6254,71 @@ try {
       steering.status === 200 &&
         isDeepStrictEqual(steering.body, { models: [{ provider: "acp", id: "steering-agent/default" }] }),
       summary(steering),
+    );
+  }
+
+  {
+    const visibilityCapabilities = [AGENT_HIDDEN_CAPABILITY, TEAM_QUEUE_EDIT_CAPABILITY, MODEL_VISIBILITY_CAPABILITY];
+    const keptCapabilities = [...visibilityCapabilities, MODEL_VISIBILITY_KEPT_CAPABILITY];
+    const ada = agents.find((item) => item.id === "agent-ada");
+    assert.ok(ada, "agent-ada is missing.");
+    const backups = ada.backupModels;
+    ada.backupModels = { automatic: true, order: [{ provider: "codex", model: "gpt-standard" }] };
+    const hide = await call("POST", MODEL_VISIBILITY_ROUTES.update, {
+      token: adaToken,
+      json: { provider: "codex", shown: [] },
+      capabilities: visibilityCapabilities,
+    });
+    const unsupported = await call("POST", MODEL_VISIBILITY_KEPT_ROUTES.list, {
+      token: bobToken,
+      json: {},
+      capabilities: visibilityCapabilities,
+    });
+    const kept = await call("POST", MODEL_VISIBILITY_KEPT_ROUTES.list, {
+      token: bobToken,
+      json: {},
+      capabilities: keptCapabilities,
+    });
+    const listing = await call("POST", MODEL_VISIBILITY_ROUTES.listing, {
+      token: bobToken,
+      json: {},
+      capabilities: keptCapabilities,
+    });
+    const released = await call("GET", TEAM_API_ROUTES.agents.models, {
+      token: bobToken,
+      capabilities: keptCapabilities,
+    });
+    const ids = list(released.body).map((model) => field(model, "id"));
+    check(
+      "a turned-off model that an agent uses stays in the model list, and only model-visibility-kept-v1 marks it",
+      hide.status === 200 &&
+        errorIs(unsupported, 400, sourceText("error.team.modelVisibilityUnsupported")) &&
+        kept.status === 200 &&
+        isDeepStrictEqual(kept.body, { models: [{ provider: "codex", id: "gpt-standard" }] }) &&
+        listing.status === 200 &&
+        list(field(listing.body, "models")).every((entry) => field(entry, "id") !== "gpt-standard") &&
+        released.status === 200 &&
+        ids.includes("gpt-standard") &&
+        !ids.includes("gpt-fast") &&
+        list(released.body).every((model) => field(model, "listing") === undefined),
+      [summary(hide), summary(unsupported), summary(kept), summary(listing), summary(released)],
+    );
+    const reset = await call("POST", MODEL_VISIBILITY_ROUTES.update, {
+      token: adaToken,
+      json: { provider: "codex", shown: null },
+      capabilities: visibilityCapabilities,
+    });
+    if (backups) ada.backupModels = backups;
+    else delete ada.backupModels;
+    const none = await call("POST", MODEL_VISIBILITY_KEPT_ROUTES.list, {
+      token: bobToken,
+      json: {},
+      capabilities: keptCapabilities,
+    });
+    check(
+      "after a reset no model is kept",
+      reset.status === 200 && none.status === 200 && isDeepStrictEqual(none.body, { models: [] }),
+      [summary(reset), summary(none)],
     );
   }
 
@@ -8933,6 +9142,46 @@ try {
   }
 
   {
+    const newest = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V10 });
+    const older = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V9 });
+    check(
+      "the host advertises antigravity-code-sign-in-v1 to a protocol 10 peer only",
+      list(field(newest.body, "capabilities")).includes(ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY) &&
+        older.status === 200 &&
+        !list(field(older.body, "capabilities")).includes(ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY),
+      [summary(newest), summary(older)],
+    );
+    const v10 = {
+      token: adaToken,
+      protocol: TEAM_PROTOCOL_V10,
+      capabilities: [PROVIDERS_V8_CAPABILITY, ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY],
+    };
+    const before = callsOf("startProviderCodeLogin").length;
+    const started = await call("POST", PROVIDERS_V8_ROUTES.codeLoginStart, {
+      ...v10,
+      json: { provider: "antigravity" },
+    });
+    check(
+      "an admin starts the Gemini code sign-in on providers-v8 and gets the Google link to paste a code from",
+      started.status === 200 &&
+        field(started.body, "kind") === "paste" &&
+        field(started.body, "verificationUrl") === GOOGLE_SIGN_IN_PAGE &&
+        isDeepStrictEqual(callsOf("startProviderCodeLogin").slice(before), [["antigravity"]]),
+      summary(started),
+    );
+    const member = await call("POST", PROVIDERS_V8_ROUTES.codeLoginStart, {
+      ...v10,
+      token: bobToken,
+      json: { provider: "antigravity" },
+    });
+    check(
+      "a member gets 403 and starts no Gemini sign-in",
+      member.status === 403 && callsOf("startProviderCodeLogin").length === before + 1,
+      summary(member),
+    );
+  }
+
+  {
     const v8 = { token: adaToken, protocol: 8, capabilities: [PROVIDERS_V8_CAPABILITY] };
     const key = ["sk", "e2e", "deepseek", "fake0000"].join("-");
     const before = await call("POST", PROVIDERS_V8_ROUTES.apiKeyState, { ...v8, json: { provider: "deepseek" } });
@@ -10231,14 +10480,29 @@ try {
         bitwardenCalls.length === 0,
       summary(plainHttp),
     );
+    const wrongKeySettled = bitwardenSettled(bitwardenConnector);
+    const wrongKey = await connectAs(adaToken, { ...input, clientSecret: "wrong-client-secret" });
+    const wrongKeyStatus = await wrongKeySettled;
+    check(
+      "a wrong API key names the sign-in step, does not unlock, and leaves no CLI data",
+      field(wrongKey.body, "state") === "connecting" &&
+        !wrongKeyStatus.connected &&
+        wrongKeyStatus.error === sourceText("error.connector.bitwardenHostSignInFailed") &&
+        bitwardenCalls.some((entry) => entry.args[0] === "login") &&
+        !bitwardenCalls.some((entry) => entry.args[0] === "unlock") &&
+        !existsSync(bitwardenFile) &&
+        !existsSync(bitwardenData),
+      { wrongKey: summary(wrongKey), wrongKeyStatus },
+    );
+    bitwardenCalls.length = 0;
     const wrongSettled = bitwardenSettled(bitwardenConnector);
     const wrong = await connectAs(adaToken, { ...input, masterPassword: "wrong-master-password" });
     const wrongStatus = await wrongSettled;
     check(
-      "a wrong master password leaves no connection, no stored file and no signed-in CLI data",
+      "a wrong master password names the unlock step and leaves no connection, no stored file and no signed-in CLI data",
       field(wrong.body, "state") === "connecting" &&
         !wrongStatus.connected &&
-        wrongStatus.error === sourceText("error.connector.bitwardenHostFailed") &&
+        wrongStatus.error === sourceText("error.connector.bitwardenHostUnlockFailed") &&
         bitwardenCalls.some((entry) => entry.args[0] === "login") &&
         bitwardenCalls.filter((entry) => entry.args[0] === "unlock").length === 1 &&
         !existsSync(bitwardenFile) &&
@@ -10710,6 +10974,100 @@ try {
         asClient(restored).numbers[0]?.statusReactions === true,
       [summary(on), summary(restored)],
     );
+  }
+
+  {
+    const v10 = { capabilities: [WHATSAPP_READ_ONLY_CAPABILITY], protocol: TEAM_PROTOCOL_V10 };
+    const group = "120363000000000009@g.us";
+    whatsappAccount.allowedSenders = [
+      ...whatsappAccount.allowedSenders.filter((sender) => sender.id !== group),
+      { id: group, kind: "group", name: "Branding", readOnly: false },
+    ];
+    const settingCalls = () => calls.filter((entry) => entry.method === "whatsapp.setSenderReadOnly");
+    const groupOf = (overview: { accounts: WhatsAppAccount[] }) =>
+      overview.accounts[0]?.allowedSenders.find((sender) => sender.id === group);
+    const asClient = (reply: Reply): WhatsAppReadOnlyList => {
+      const codec = WHATSAPP_READ_ONLY_CODECS.get(WHATSAPP_READ_ONLY_ROUTES.list);
+      assert(codec, WHATSAPP_READ_ONLY_ROUTES.list);
+      const value = codec.response(reply.status, reply.body);
+      assert(isWhatsAppReadOnlyList(value), "the list does not pass the client's guard");
+      return value;
+    };
+    const compatibility = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V10 });
+    const older = await call("GET", TEAM_API_ROUTES.compatibility, { protocol: TEAM_PROTOCOL_V9 });
+    check(
+      "the host advertises whatsapp-read-only-v1 to a protocol 10 peer only",
+      JSON.stringify(compatibility.body).includes(WHATSAPP_READ_ONLY_CAPABILITY) &&
+        !JSON.stringify(older.body).includes(WHATSAPP_READ_ONLY_CAPABILITY),
+      [summary(compatibility), summary(older)],
+    );
+    const update = { workspaceId: WHATSAPP_NUMBER, senderId: group, readOnly: true };
+    const unsupported = await call("POST", WHATSAPP_READ_ONLY_ROUTES.update, {
+      token: adaToken,
+      json: update,
+      capabilities: [],
+      protocol: TEAM_PROTOCOL_V10,
+    });
+    const memberList = await call("POST", WHATSAPP_READ_ONLY_ROUTES.list, { token: bobToken, json: {}, ...v10 });
+    const memberUpdate = await call("POST", WHATSAPP_READ_ONLY_ROUTES.update, {
+      token: bobToken,
+      json: update,
+      ...v10,
+    });
+    check(
+      "a client without the capability gets 400, and a member cannot read or set the read-only chats",
+      errorIs(unsupported, 400, sourceText("error.team.connectorsUnsupported")) &&
+        errorIs(memberList, 403, sourceText("error.team.adminRequired")) &&
+        errorIs(memberUpdate, 403, sourceText("error.team.adminRequired")) &&
+        settingCalls().length === 0 &&
+        groupOf({ accounts: [whatsappAccount] })?.readOnly === false,
+      [summary(unsupported), summary(memberList), summary(memberUpdate)],
+    );
+    const before = await call("POST", WHATSAPP_READ_ONLY_ROUTES.list, { token: adaToken, json: {}, ...v10 });
+    const bad = await call("POST", WHATSAPP_READ_ONLY_ROUTES.update, {
+      token: adaToken,
+      json: { ...update, readOnly: "yes" },
+      ...v10,
+    });
+    const on = await call("POST", WHATSAPP_READ_ONLY_ROUTES.update, { token: adaToken, json: update, ...v10 });
+    const after = await call("POST", WHATSAPP_READ_ONLY_ROUTES.list, { token: adaToken, json: {}, ...v10 });
+    const overview = await call("POST", WHATSAPP_CONNECTOR_ROUTES.overview, {
+      token: adaToken,
+      json: {},
+      capabilities: [WHATSAPP_CONNECTOR_CAPABILITY],
+      protocol: TEAM_PROTOCOL_V9,
+    });
+    const connectorCodec = WHATSAPP_CONNECTOR_CODECS.get(WHATSAPP_CONNECTOR_ROUTES.overview);
+    assert(connectorCodec, WHATSAPP_CONNECTOR_ROUTES.overview);
+    const plain = decodeHostWhatsAppOverview(connectorCodec.response(overview.status, overview.body));
+    check(
+      "an admin makes a group read only; a bad value is refused, and the released overview does not carry the mode",
+      before.status === 200 &&
+        asClient(before).numbers[0]?.workspaceId === WHATSAPP_NUMBER &&
+        asClient(before).numbers[0]?.readOnly.includes(group) === false &&
+        bad.status === 400 &&
+        on.status === 200 &&
+        settingCalls().length === 1 &&
+        asClient(after).numbers[0]?.readOnly.includes(group) === true &&
+        groupOf(plain)?.readOnly === undefined &&
+        groupOf(withWhatsAppReadOnly(plain, asClient(after)))?.readOnly === true &&
+        groupOf(withWhatsAppReadOnly(plain, null))?.readOnly === undefined,
+      [summary(before), summary(bad), summary(on), summary(after), summary(overview)],
+    );
+    const off = await call("POST", WHATSAPP_READ_ONLY_ROUTES.update, {
+      token: adaToken,
+      json: { ...update, readOnly: false },
+      ...v10,
+    });
+    const restored = await call("POST", WHATSAPP_READ_ONLY_ROUTES.list, { token: adaToken, json: {}, ...v10 });
+    check(
+      "an admin lets the group give work again",
+      off.status === 200 &&
+        settingCalls().length === 2 &&
+        asClient(restored).numbers[0]?.readOnly.includes(group) === false,
+      [summary(off), summary(restored)],
+    );
+    whatsappAccount.allowedSenders = whatsappAccount.allowedSenders.filter((sender) => sender.id !== group);
   }
 
   {

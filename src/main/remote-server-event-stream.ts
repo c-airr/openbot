@@ -80,6 +80,7 @@ export interface RemoteEventAgentState {
 
 export interface RemoteEventLiveTransport {
   connect(hostId: string): Effect.Effect<void, RemoteWorkflowError>;
+  retry(hostId: string): Effect.Effect<void, RemoteWorkflowError>;
   requestRuntimeSnapshot(hostId: string): Effect.Effect<void, RemoteWorkflowError>;
 }
 
@@ -304,7 +305,7 @@ export class RemoteEventStream {
     for (const server of this.#servers.servers) {
       if (this.#authenticationPaused.has(server.id)) continue;
       this.clearReconnectBackoff(server.id);
-      if (server.transport === "webrtc-v2") yield* this.ensure(server.id);
+      if (server.transport === "webrtc-v2") yield* this.ensure(server.id, true);
       else yield* this.restart(server.id);
     }
   }).bind(this);
@@ -362,7 +363,11 @@ export class RemoteEventStream {
     this.#sockets.delete(serverId);
   }
 
-  readonly ensure = Effect.fn("RemoteEventStream.ensure")(function* (this: RemoteEventStream, serverId: string) {
+  readonly ensure = Effect.fn("RemoteEventStream.ensure")(function* (
+    this: RemoteEventStream,
+    serverId: string,
+    checkLiveConnection = false,
+  ) {
     const server = this.#servers.find(serverId);
     if (server?.transport === "webrtc-v2") {
       if (
@@ -376,7 +381,7 @@ export class RemoteEventStream {
       const transport = this.#transport;
       if (transport)
         yield* Effect.forkIn(
-          transport.connect(serverId).pipe(
+          (checkLiveConnection ? transport.retry(serverId) : transport.connect(serverId)).pipe(
             Effect.catch(() => Effect.sync(() => this.scheduleReconnect(serverId))),
             Effect.ensuring(
               Effect.sync(() => {

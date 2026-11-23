@@ -448,6 +448,17 @@ changed, on this computer and on a joined host.
 - An asset node with no file, a file output node and a message trigger node are kept in the graph but
   do not run yet (`unsupportedNode` in `workflow-walk.ts`); a run that reaches one fails with
   `nodeUnsupported`.
+- Copied steps record the server of the canvas (`copied` in `workflow-clipboard.ts`, the `server` prop
+  of `WorkflowCanvas`). A paste on another server clears every id field of the node registry
+  (`workflowFieldsWithoutIds`) except a connection or place that follows the trigger. Each paste and
+  duplicate gives the step fields of the registry (`workflowStepFields`: `firstFrame` and `lastFrame`)
+  the new node ids; a field that names a step outside the copy is cleared unless the copy keeps its edge.
+- The instance transfer (`instance-transfer-workflows.ts`) remaps with the same registry: agent and
+  channel ids become keys and then new ids, connections and file ids are cleared, and a value that
+  follows the trigger stays. Each workflow in the file has its graph `format`. Import keeps a step of
+  an unknown kind as a locked note with its fields, drops the edges that this version cannot read, and
+  warns that the workflow needs a newer OpenBot. Each workflow goes through `parseCreateWorkflow` (the
+  1 MB limit) and is created paused.
 - Agents use workflows with six `openbot` tools (`workflow-tools.ts`): `list_workflows`,
   `read_workflow`, `edit_workflow`, `delete_workflow`, `run_workflow` and `read_workflow_runs`. They
   are not in the visible set, so before `tool_search` finds them they cost only their names. A search
@@ -1084,7 +1095,16 @@ and the copy that OpenBot installs can be older (2.3.0-2.3.2 are blocked, #13640
 descriptor has `steer: "reported"`: the catalog keeps the `steersTurns` of the `model/list` answer on
 each OpenCode model, and `agentSteersTurns` reads it for the whole OpenCode process. An OpenCode
 without the extension shows the agent settings warning and "Send now", and its messages wait in the
-queue (#14488). `scripts/opencode-steer-e2e.ts` checks both. Antigravity and Devin steer with
+queue (#14488). `scripts/opencode-steer-e2e.ts` checks both. OpenCode answers `injected` also when
+its session went idle after its busy check, and it then keeps the steer for later instead of reading
+it. So the ACP client counts a steer as read only when the agent writes, thinks or calls a tool
+after the steer was accepted. A steer that the turn did not read, or that was still in flight when
+the prompt ended, is listed in `unreadSteers` of `turn/completed` (not after a stop). The turn end
+puts those deliveries back in the queue with `restoreUnsteered`, so they run in the next turn and
+the sender gets no "blocked" note (#15062). A channel steer sends a channel message id, not a
+delivery id, so this does not cover it. OpenCode can still give its kept copy to a later prompt, as
+it does after a manual resend; over ACP, OpenBot cannot take that copy back. `scripts/opencode-late-steer-e2e.ts` checks both orders
+of the race and that a read steer does not run again. Antigravity and Devin steer with
 a second `session/prompt` (`AcpFlavor.steerByPromptSince` for Antigravity 1.5.0 and later,
 `steerByPromptCapability` for a Devin CLI that reports `cognition.ai/midTurnPrompts`, because Devin
 reports the version "0.0.0-dev"). While an approval or a question is open, the message waits in the

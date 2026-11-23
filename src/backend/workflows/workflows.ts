@@ -16,6 +16,7 @@ import {
   type RetryWorkflowStepInput,
   type RunWorkflowStepInput,
   type SaveWorkflowGraphInput,
+  type SetWorkflowPausedInput,
   type StartWorkflowRunInput,
   WORKFLOW_CHECK_FIELD,
   WORKFLOW_CREDIT_MODEL_PREFIX,
@@ -396,11 +397,15 @@ export function workflowNoticeEvent(event: AgentEvent): boolean {
 
 interface WorkflowsShape {
   list(): Effect.Effect<WorkflowSummary[], WorkflowFailed>;
-  listWithGraphs(): Effect.Effect<{ summary: WorkflowSummary; graph: WorkflowGraph }[], WorkflowFailed>;
+  listWithGraphs(): Effect.Effect<
+    { summary: WorkflowSummary; graph: WorkflowGraph; needsNewerApp?: true }[],
+    WorkflowFailed
+  >;
   get(workflowId: string): Effect.Effect<WorkflowDetail, WorkflowFailed>;
   create(input: CreateWorkflowInput, agentId?: string): Effect.Effect<WorkflowDetail, WorkflowFailed>;
-  createCopy(input: { title: string; graph: WorkflowGraph }): Effect.Effect<WorkflowDetail, WorkflowFailed>;
+  createCopy(input: CreateWorkflowInput): Effect.Effect<WorkflowDetail, WorkflowFailed>;
   rename(input: RenameWorkflowInput): Effect.Effect<WorkflowSummary, WorkflowFailed>;
+  setPaused(input: SetWorkflowPausedInput): Effect.Effect<WorkflowSummary, WorkflowFailed>;
   remove(workflowId: string): Effect.Effect<void, WorkflowFailed>;
   saveGraph(input: SaveWorkflowGraphInput, agentId?: string): Effect.Effect<WorkflowSaveResult, WorkflowFailed>;
   versions(workflowId: string): Effect.Effect<WorkflowVersion[], WorkflowFailed>;
@@ -760,28 +765,30 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
                 : [];
             const result = empty
               ? Result.fail({ message: sourceText("error.workflow.mediaEmptyRequest") })
-              : !generateMedia || !model
+              : !generateMedia
                 ? Result.fail({ message: sourceText("error.workflow.nodeUnsupported") })
-                : yield* (paysWithCredits(model.provider) ? creditMedia : subscriptionMedia)
-                    .withPermit(
-                      Effect.suspend(() => {
-                        if (model.provider === "openbot") paidMedia.add(step.id);
-                        return generateMedia({
-                          jobId: step.id,
-                          earlierJobIds: earlier,
-                          kind,
-                          provider: model.provider,
-                          model: model.providerModel ?? model.id,
-                          catalogId: model.id,
-                          account: mediaAccount(node.fields),
-                          specs,
-                          prompt: mediaStepPrompt(node.fields, kind, step.input, specs, model.provider),
-                          images,
-                          voice: mediaVoice(node.fields, kind, model),
-                        });
-                      }).pipe(Effect.flatMap(sized(specs))),
-                    )
-                    .pipe(Effect.result);
+                : !model
+                  ? Result.fail({ message: sourceText("error.workflow.modelUnavailable") })
+                  : yield* (paysWithCredits(model.provider) ? creditMedia : subscriptionMedia)
+                      .withPermit(
+                        Effect.suspend(() => {
+                          if (model.provider === "openbot") paidMedia.add(step.id);
+                          return generateMedia({
+                            jobId: step.id,
+                            earlierJobIds: earlier,
+                            kind,
+                            provider: model.provider,
+                            model: model.providerModel ?? model.id,
+                            catalogId: model.id,
+                            account: mediaAccount(node.fields),
+                            specs,
+                            prompt: mediaStepPrompt(node.fields, kind, step.input, specs, model.provider),
+                            images,
+                            voice: mediaVoice(node.fields, kind, model),
+                          });
+                        }).pipe(Effect.flatMap(sized(specs))),
+                      )
+                      .pipe(Effect.result);
             if (Result.isFailure(result)) settle(step, { status: "failed", error: result.failure.message });
             else settle(step, { status: "done", output: result.success });
             yield* requestSweep();
@@ -1480,8 +1487,9 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             if (run.status === "stopping")
               for (const step of runs.steps(run.id)) if (isOpenStep(step)) yield* stopNow(step);
           }
+          const unreadable = runs.unreadableOpenRunIds();
           for (const step of runs.openSteps()) {
-            if (step.status !== "running") continue;
+            if (step.status !== "running" || (step.runId && unreadable.has(step.runId))) continue;
             let ended = false;
             if (step.kind === "agent") {
               if (!step.deliveryId) {
@@ -1561,12 +1569,9 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
           return announceCreated(detail, agentId);
         });
 
-        const createCopy = Effect.fn("Workflows.createCopy")(function* (input: {
-          title: string;
-          graph: WorkflowGraph;
-        }) {
+        const createCopy = Effect.fn("Workflows.createCopy")(function* (input: CreateWorkflowInput) {
           const detail = yield* attempt(() =>
-            store.create({ title: input.title, graph: prepareGraph(input.graph) }, now(), "saved"),
+            store.create(input.graph ? { ...input, graph: prepareGraph(input.graph) } : input, now(), "saved"),
           );
           return announceCreated(detail);
         });
@@ -1574,6 +1579,14 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
         const rename = Effect.fn("Workflows.rename")(function* (input: RenameWorkflowInput) {
           const summary = yield* attempt(() => store.rename(input.workflowId, input.title, now()));
           changed(summary.id);
+          return summary;
+        });
+
+        const setPaused = Effect.fn("Workflows.setPaused")(function* (input: SetWorkflowPausedInput) {
+          const summary = yield* attempt(() => store.setPaused(input.workflowId, input.paused, now()));
+          changed(summary.id);
+          rearm();
+          watchGitHub();
           return summary;
         });
 
@@ -1628,6 +1641,7 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             triggerNodeId: from?.kind === "trigger" ? from.id : null,
             fromNodeId: from && from.kind !== "trigger" ? from.id : null,
           };
+          if (detail.needsNewerApp) return yield* refuse("refused", sourceText("error.workflow.newerSteps"));
           const workflowId = detail.summary.id;
           const answered = currentAnswers(detail.graph, runs.latestDone(workflowId), answerGraphs());
           const scope = runScope(detail.graph, start, new Set(answered.keys()));
@@ -1705,6 +1719,7 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
               const detail = store.detail(input.workflowId);
               const trigger = detail?.graph.nodes.find((node) => node.id === input.nodeId);
               if (!detail || trigger?.kind !== "trigger" || trigger.fields.trigger !== "schedule") return;
+              if (detail.summary.paused) return;
               if (runs.openRuns().some((run) => run.workflowId === input.workflowId)) return;
               yield* begin(detail, trigger, {
                 source: "schedule",
@@ -1726,6 +1741,12 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
                 return { kind: "gone" };
               const receipt = { workflowId, nodeId, deliveryId: event.deliveryId, receivedAt: event.receivedAt };
               if (yield* attempt(() => runs.hasWebhookReceipt(receipt))) return { kind: "duplicate" };
+              if (detail.summary.paused) {
+                yield* attempt(() =>
+                  runs.addWebhookReceipt({ ...receipt, status: "ignored", reason: "refused", runId: null }),
+                );
+                return { kind: "ignored", reason: "refused" };
+              }
               const checked = webhookAnswerEvent(trigger, event);
               if ("problems" in checked) {
                 logger.warn("A workflow webhook request did not match the trigger's answer fields.", {
@@ -1780,8 +1801,11 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
         }) =>
           locked(
             Effect.gen(function* (): Effect.fn.Return<MessagingMentionResult, WorkflowFailed> {
-              const triggers = (yield* attempt(() => store.listWithGraphs())).flatMap(({ summary, graph }) =>
-                graph.nodes.filter(chat.matches).map((node) => ({ workflowId: summary.id, node })),
+              const triggers = (yield* attempt(() => store.listWithGraphs())).flatMap(
+                ({ summary, graph, needsNewerApp }) =>
+                  summary.paused || needsNewerApp
+                    ? []
+                    : graph.nodes.filter(chat.matches).map((node) => ({ workflowId: summary.id, node })),
               );
               if (triggers.length === 0) return "none";
               let started = false;
@@ -1855,8 +1879,8 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
         });
 
         const githubTriggers = () =>
-          store.listWithGraphs().flatMap(({ summary, graph }) =>
-            graph.nodes.flatMap((node) => {
+          store.listWithGraphs().flatMap(({ summary, graph, needsNewerApp }) =>
+            (summary.paused || needsNewerApp ? [] : graph.nodes).flatMap((node) => {
               const event = node.fields.event;
               return githubTriggerRepositories(node).length > 0 && isOneOf(WORKFLOW_GITHUB_EVENTS, event)
                 ? [{ workflowId: summary.id, node, event }]
@@ -1930,7 +1954,7 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
                 node.id === delivery.nodeId &&
                 githubTriggerRepositories(node).some((name) => name.toLowerCase() === repository),
             );
-            if (!detail || !trigger) github.endWaiting(delivery, { reason: "refused" });
+            if (!detail || !trigger || detail.summary.paused) github.endWaiting(delivery, { reason: "refused" });
             else if (delivery.causedByBot && chainTooLong(delivery.item))
               github.endWaiting(delivery, { reason: "chain" });
             else {
@@ -2126,6 +2150,7 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
           return yield* locked(
             Effect.gen(function* () {
               const detail = yield* attempt(() => detailOf(input.workflowId));
+              if (detail.needsNewerApp) return yield* refuse("refused", sourceText("error.workflow.newerSteps"));
               const node = detail.graph.nodes.find((candidate) => candidate.id === input.nodeId);
               if (!node) return yield* refuse("missing", sourceText("error.workflow.nodeMissing"));
               if (unsupportedNode(node)) return yield* refuse("refused", sourceText("error.workflow.nodeUnsupported"));
@@ -2322,6 +2347,7 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
           create,
           createCopy,
           rename,
+          setPaused,
           remove,
           saveGraph,
           versions,

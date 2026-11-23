@@ -103,14 +103,17 @@ export const messages = {
   "mobile.server.hosted.intro.description":
     "Bulut sunucusu, bilgisayarınız kapalıyken ajanlarınızı ve rutinlerinizi çalıştırır. OpenBot onu kurar ve çalışır durumda tutar.",
   "mobile.server.hosted.planFacts": "{members} · {storage} · {sites} · {speed}",
-  "mobile.server.hosted.computer.title": "Bilgisayarınızda",
+  "mobile.server.hosted.steps.title": "Bilgisayarınızda ekleyin",
+  "mobile.server.hosted.steps.open": "Bilgisayarınızda OpenBot'u açın.",
+  "mobile.server.hosted.steps.settings": "Ayarlar → Barındırılan sunucular bölümüne gidin.",
+  "mobile.server.hosted.steps.add": "“Sunucu ekle”yi seçin ve bir plan seçin.",
+  "mobile.server.hosted.plansToggle": "Her planın içeriği",
   "mobile.server.hosted.computer.add": "Bulut sunucusu ekleyin",
   "mobile.server.hosted.computer.addHint":
     "OpenBot'ta Ayarlar → Barındırılan sunucular bölümünü açın ve “Sunucu ekle” seçeneğini seçin.",
   "mobile.server.hosted.computer.change": "Planı değiştirin",
   "mobile.server.hosted.computer.changeHint": "OpenBot'ta Ayarlar → Faturalandırma bölümünü açın.",
   "mobile.server.hosted.yourServers": "Sunucularınız",
-  "mobile.server.hosted.plans": "Planlar",
   "mobile.server.hosted.currentPlan": "Planınız",
   "mobile.server.hosted.soldOut": "Tükendi",
   "mobile.server.hosted.serverPlan": "{plan} · {interval}",
@@ -341,6 +344,7 @@ export const messages = {
   "mobile.server.route.invite": "Kişileri davet et",
   "mobile.server.route.member": "Üye",
   "mobile.server.route.timezone": "Saat dilimi",
+  "mobile.server.route.signalHome": "Signal sunucusu",
   "mobile.server.route.personality": "Ajan kişiliği",
   "mobile.server.route.agents": "Ajanlar",
   "mobile.server.route.voiceModel": "Konuşma tanıma",
@@ -469,6 +473,29 @@ export const messages = {
     "Saat dilimini değiştirmek için bu sunucuya sahip veya yönetici olarak bağlanın.",
   "mobile.server.settings.timezoneUnsupported":
     "Saat dilimini burada değiştirmek için bu sunucudaki OpenBot'u güncelleyin.",
+  "mobile.server.settings.signalHomeAutomatic": "Otomatik",
+  "mobile.server.settings.signalHomeNearest": "En yakın Signal sunucusu",
+  "mobile.server.settings.signalHomeInUse": "Kullanımda: {name}",
+  "mobile.server.settings.signalHomeLoading": "Signal sunucuları ölçülüyor…",
+  "mobile.server.settings.signalHomeSaveFailed": "Signal sunucusu değiştirilemedi. Yeniden deneyin.",
+  "mobile.server.settings.signalHomeUnavailable":
+    "Signal sunucusunu değiştirmek için bu sunucuya sahip veya yönetici olarak bağlanın.",
+  "mobile.server.settings.signalHomeUnsupported":
+    "Signal sunucusunu buradan değiştirmek için bu sunucudaki OpenBot'u güncelleyin.",
+  "mobile.server.settings.signalHomeDescription":
+    "Üyeler bu sunucuya bu Signal sunucusu üzerinden bağlanır. Gecikmesi daha düşük bir Signal sunucusu daha hızlı bağlantı sağlar.",
+  "mobile.server.settings.signalHomeFallback":
+    "{chosen} yanıt vermiyor. Sunucu, {chosen} yeniden yanıt verene kadar {name} kullanır.",
+  "mobile.server.settings.signalHomeMoving":
+    "Sunucu {name} sunucusuna geçiyor. Üyeler birkaç saniye içinde yeniden bağlanır.",
+  "mobile.server.settings.signalHomeLoadFailed": "Signal sunucuları yüklenemedi.",
+  "mobile.server.settings.signalHomeLatency": "{latency} ms",
+  "mobile.server.settings.signalHomeNoAnswer": "Yanıt yok",
+  "mobile.server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "mobile.server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "mobile.server.settings.signalHomePlaceSanJose": "San Jose",
+  "mobile.server.settings.signalHomePlaceSydney": "Sidney",
+  "mobile.server.settings.signalHomePlaceSingapore": "Singapur",
   "mobile.server.settings.voiceModelDescription":
     "Bu sunucudaki ajanlar, altyazısı olmayan videoların sesini yazıya dökmek için bu modeli kullanır.",
   "mobile.server.settings.voiceModelLoading": "Konuşma tanıma yükleniyor…",
@@ -994,6 +1021,11 @@ export const messages = {
   "mobile.server.connectors.whatsapp.sendersLimit": "Bir numara en fazla {count} kişiye ve gruba izin verebilir.",
   "mobile.server.connectors.whatsapp.senderGroup": "Grup",
   "mobile.server.connectors.whatsapp.removeSender": "Kaldır",
+  "mobile.server.connectors.whatsapp.senderReadOnlyRow": "{kind} · Salt okunur",
+  "mobile.server.connectors.whatsapp.makeReadOnly": "Salt okunur yap",
+  "mobile.server.connectors.whatsapp.allowWork": "İş vermesine izin ver",
+  "mobile.server.connectors.whatsapp.readOnlyDetail":
+    "Salt okunur: ajanlar bu sohbeti okuyabilir ve OpenBot buraya asla yazmaz.",
   "mobile.server.connectors.whatsapp.addContact": "Kişi ekle",
   "mobile.server.connectors.whatsapp.addGroup": "Grup ekle",
   "mobile.server.connectors.whatsapp.contactTitle": "Bir kişi ekleyin",
@@ -1386,7 +1418,7 @@ export const messages = {
   "mobile.server.update.waitingFor": "{reasons} bekleniyor.",
   "mobile.server.update.disabledTitle": "Uzaktan güncellemeler kapalı",
   "mobile.server.update.disabledDescription":
-    "{name} kullanıcısı sunucu üyelerinin güncelleme yapmasını kapattı. OpenBot uygulamasını güncellemesini veya ayarı açmasını isteyin.",
+    "{name} kullanıcısı sunucu üyelerinin güncelleme yapmasını kapattı. OpenBot uygulamasını güncellemesini veya o bilgisayarda Ayarlar > Güncellemeler bölümünü açıp “Sunucu üyelerinin güncelleme yapmasına izin ver” seçeneğini açmasını isteyin.",
   "mobile.server.update.managedTitle": "Güncellemeleri OpenBot Host Manager yönetiyor",
   "mobile.server.update.managedDescription":
     "OpenBot Host Manager, {name} sunucusunu günceller. Ana makine yöneticisiyle iletişime geçin.",

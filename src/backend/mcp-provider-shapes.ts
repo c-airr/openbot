@@ -69,6 +69,7 @@ export interface McpServerDrop {
   name: string;
   reason: McpDropReason;
   detail: string;
+  signIn?: boolean;
 }
 
 export type McpDropReporter = (provider: AgentProviderId, drops: readonly McpServerDrop[]) => void;

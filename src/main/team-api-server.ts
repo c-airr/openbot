@@ -62,6 +62,7 @@ import { AGENT_THREAD_READS_CAPABILITY } from "@openbot/contracts/team-protocol/
 import { AGENT_THREAD_REPLIES_CAPABILITY } from "@openbot/contracts/team-protocol/agent-thread-replies-v1";
 import { AGENT_THREAD_REQUESTS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-thread-requests-v1";
 import { AGENT_THREADS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-threads-v1";
+import { ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY } from "@openbot/contracts/team-protocol/antigravity-code-sign-in-v1";
 import { BACKGROUND_PROCESSES_CAPABILITY } from "@openbot/contracts/team-protocol/background-processes-v1";
 import { BROWSER_EGRESS_CAPABILITY } from "@openbot/contracts/team-protocol/browser-egress-v1";
 import { BROWSER_PAGE_STATE_CAPABILITY } from "@openbot/contracts/team-protocol/browser-page-state-v1";
@@ -198,12 +199,15 @@ import {
   WORKFLOWS_CHANNELS_CAPABILITY,
   WORKFLOWS_CHATS_CAPABILITY,
   WORKFLOWS_CREDIT_MEDIA_CAPABILITY,
+  WORKFLOWS_CREDIT_MEDIA_UNAVAILABLE_CAPABILITY,
   WORKFLOWS_GITHUB_CAPABILITY,
   WORKFLOWS_HIGGSFIELD_CAPABILITY,
   WORKFLOWS_MEDIA_CAPABILITY,
   WORKFLOWS_MEDIA_CATALOG_CAPABILITY,
   WORKFLOWS_MEDIA_CATALOG_V2_CAPABILITY,
   WORKFLOWS_MEDIA_SERVICE_ACCOUNT_CAPABILITY,
+  WORKFLOWS_PAUSE_CAPABILITY,
+  WORKFLOWS_PORTABLE_CAPABILITY,
   WORKFLOWS_STEP_SETTINGS_CAPABILITY,
   WORKFLOWS_SUNRA_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
@@ -220,6 +224,7 @@ import {
   type HostAppearanceEvent,
 } from "@openbot/contracts/team-protocol/host-appearance-v1";
 import { HOST_PERSONALITY_CAPABILITY } from "@openbot/contracts/team-protocol/host-personality-v1";
+import { HOST_SIGNAL_HOME_CAPABILITY } from "@openbot/contracts/team-protocol/host-signal-home-v1";
 import {
   HOST_RESTART_EVENT,
   type HostRestartEvent,
@@ -241,6 +246,7 @@ import { MCP_MANY_SERVERS_CAPABILITY } from "@openbot/contracts/team-protocol/mc
 import { MESSAGE_PINS_CAPABILITY } from "@openbot/contracts/team-protocol/message-pins-v1";
 import { MISTRAL_CODE_SIGN_IN_CAPABILITY } from "@openbot/contracts/team-protocol/mistral-code-sign-in-v1";
 import { MODEL_STEERING_CAPABILITY } from "@openbot/contracts/team-protocol/model-steering-v1";
+import { MODEL_VISIBILITY_KEPT_CAPABILITY } from "@openbot/contracts/team-protocol/model-visibility-kept-v1";
 import { type OptionalTeamEvent, optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { OWNER_TRANSFER_CAPABILITY } from "@openbot/contracts/team-protocol/owner-transfer-v1";
 import { PROVIDER_ACCOUNT_CODE_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-code-v1";
@@ -277,6 +283,10 @@ import {
   withUiBlockAutoAnswers,
 } from "@openbot/contracts/team-protocol/ui-block-auto-answer-v1";
 import {
+  TEAM_UI_BLOCK_LOCATION_CAPABILITY,
+  withUiBlockLocationRequests,
+} from "@openbot/contracts/team-protocol/ui-block-location-v1";
+import {
   TEAM_UI_BLOCK_VAULT_CAPABILITY,
   withUiBlockVaultRequests,
 } from "@openbot/contracts/team-protocol/ui-block-vault-v1";
@@ -307,6 +317,7 @@ import { encodeTeamProtocolV7BaseCurrentEvent } from "@openbot/contracts/team-pr
 import { TEAM_OPEN_PROVIDERS_CAPABILITY } from "@openbot/contracts/team-protocol/v8";
 import { encodeTeamProtocolV8BaseCurrentEvent } from "@openbot/contracts/team-protocol/v8-base-adapter";
 import { TEAM_PROTOCOL_V10, type TeamProtocolSupportV10 } from "@openbot/contracts/team-protocol/v10";
+import { WHATSAPP_READ_ONLY_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-read-only-v1";
 import { WORKSPACE_ONLY_PROCESS_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-only-process-limit-v1";
 import { isFixedSourceText, sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
@@ -430,6 +441,7 @@ import { routeHostAppearance } from "./team-api/route-host-appearance";
 import { routeHostKeyRotation } from "./team-api/route-host-key-rotation";
 import { routeHostPersonality } from "./team-api/route-host-personality";
 import { routeHostRestart } from "./team-api/route-host-restart";
+import { routeHostSignalHome } from "./team-api/route-host-signal-home";
 import { routeHostTimezone } from "./team-api/route-host-timezone";
 import { routeHostTurnLimits } from "./team-api/route-host-turn-limits";
 import { routeHostUpdate } from "./team-api/route-host-update";
@@ -496,6 +508,7 @@ import { routeUsageCredits } from "./team-api/route-usage-credits";
 import { routeVault } from "./team-api/route-vault";
 import { routeVaultImport } from "./team-api/route-vault-import";
 import { routeWhatsAppConnector } from "./team-api/route-whatsapp-connector";
+import { routeWhatsAppReadOnly } from "./team-api/route-whatsapp-read-only";
 import { routeWhatsAppStatusReactions } from "./team-api/route-whatsapp-status-reactions";
 import { routeWhatsAppWorkingMessage } from "./team-api/route-whatsapp-working-message";
 import { routeWorkflowFolders } from "./team-api/route-workflow-folders";
@@ -1188,6 +1201,7 @@ export class TeamApiServer {
       if ((await routeWhatsAppConnector(context, this.#options.connectors)) === "handled") return;
       if ((await routeWhatsAppWorkingMessage(context, this.#options.connectors)) === "handled") return;
       if ((await routeWhatsAppStatusReactions(context, this.#options.connectors)) === "handled") return;
+      if ((await routeWhatsAppReadOnly(context, this.#options.connectors)) === "handled") return;
       if ((await routeOnePasswordConnector(context, this.#options.onePasswordConnector)) === "handled") return;
       if ((await routeBitwardenConnector(context, this.#options.bitwardenConnector)) === "handled") return;
       if ((await routePasswordManagers(context, this.#options.passwordManagers)) === "handled") return;
@@ -1312,6 +1326,7 @@ export class TeamApiServer {
       if ((await routeHostUpdate(context, this.#options.admin)) === "handled") return;
       if ((await routeHostTimezone(context, this.#options.admin)) === "handled") return;
       if ((await routeHostVoiceModel(context, this.#options.admin)) === "handled") return;
+      if ((await routeHostSignalHome(context, this.#options.admin)) === "handled") return;
       if ((await routeHostTurnLimits(context, this.#options.admin)) === "handled") return;
       if ((await routeHostRestart(context, this.#options.admin)) === "handled") return;
       if ((await routeHostPersonality(context, this.#options.admin)) === "handled") return;
@@ -1615,7 +1630,12 @@ export class TeamApiServer {
       const withVault = capabilities.has(TEAM_UI_BLOCK_VAULT_CAPABILITY)
         ? withUiBlockVaultRequests(answered, visible)
         : answered;
-      return capabilities.has(SKILL_LEARNING_CAPABILITY) ? withSkillSuggestionNames(withVault, visible) : withVault;
+      const withLocation = capabilities.has(TEAM_UI_BLOCK_LOCATION_CAPABILITY)
+        ? withUiBlockLocationRequests(withVault, visible)
+        : withVault;
+      return capabilities.has(SKILL_LEARNING_CAPABILITY)
+        ? withSkillSuggestionNames(withLocation, visible)
+        : withLocation;
     }
     return encodeTeamProtocolV1CurrentEvent(visible, options);
   }
@@ -1902,7 +1922,7 @@ export class TeamApiServer {
           !connection.capabilities.has("hosted-site-event-markers") ||
           event.snapshot.messages.some((message) => !markerSupported(message.itemType, connection.capabilities)))
       ) {
-        const key = `${blockedKey}:${protocol}:${connection.capabilities.has("opencode")}:${connection.capabilities.has("routine-event-markers")}:${connection.capabilities.has("routine-run-event-markers")}:${connection.capabilities.has("hosted-site-event-markers")}:${connection.capabilities.has(SETTING_LINK_MARKERS_CAPABILITY)}:${connection.capabilities.has(ROUTINE_QUIET_ANSWERS_CAPABILITY)}:${connection.capabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY)}:${connection.capabilities.has(TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY)}:${connection.capabilities.has(TEAM_UI_BLOCK_VAULT_CAPABILITY)}:${connection.capabilities.has(SKILL_LEARNING_CAPABILITY)}:${encodingOptions.preserveSemanticTags}`;
+        const key = `${blockedKey}:${protocol}:${connection.capabilities.has("opencode")}:${connection.capabilities.has("routine-event-markers")}:${connection.capabilities.has("routine-run-event-markers")}:${connection.capabilities.has("hosted-site-event-markers")}:${connection.capabilities.has(SETTING_LINK_MARKERS_CAPABILITY)}:${connection.capabilities.has(ROUTINE_QUIET_ANSWERS_CAPABILITY)}:${connection.capabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY)}:${connection.capabilities.has(TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY)}:${connection.capabilities.has(TEAM_UI_BLOCK_VAULT_CAPABILITY)}:${connection.capabilities.has(TEAM_UI_BLOCK_LOCATION_CAPABILITY)}:${connection.capabilities.has(SKILL_LEARNING_CAPABILITY)}:${encodingOptions.preserveSemanticTags}`;
         let filtered = filteredConversationPayloads.get(key);
         if (!filtered) {
           filtered =
@@ -2448,9 +2468,12 @@ export class TeamApiServer {
     const withVault = route.capabilities.has(TEAM_UI_BLOCK_VAULT_CAPABILITY)
       ? withUiBlockVaultRequests(answered, effortValue)
       : answered;
-    const body = route.capabilities.has(SKILL_LEARNING_CAPABILITY)
-      ? withSkillSuggestionNames(withVault, effortValue)
+    const withLocation = route.capabilities.has(TEAM_UI_BLOCK_LOCATION_CAPABILITY)
+      ? withUiBlockLocationRequests(withVault, effortValue)
       : withVault;
+    const body = route.capabilities.has(SKILL_LEARNING_CAPABILITY)
+      ? withSkillSuggestionNames(withLocation, effortValue)
+      : withLocation;
     response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
     response.end(`${body}\n`);
     return "handled";
@@ -2691,6 +2714,7 @@ export class TeamApiServer {
         if (capability === WHATSAPP_CONNECTOR_CAPABILITY) return this.#options.connectors !== undefined;
         if (capability === WHATSAPP_WORKING_MESSAGE_CAPABILITY) return this.#options.connectors !== undefined;
         if (capability === WHATSAPP_STATUS_REACTIONS_CAPABILITY) return this.#options.connectors !== undefined;
+        if (capability === WHATSAPP_READ_ONLY_CAPABILITY) return this.#options.connectors !== undefined;
         if (capability === ONEPASSWORD_CONNECTOR_CAPABILITY) return this.#options.onePasswordConnector !== undefined;
         if (capability === BITWARDEN_CONNECTOR_CAPABILITY) return this.#options.bitwardenConnector !== undefined;
         if (capability === PASSWORD_MANAGERS_CAPABILITY) return this.#options.passwordManagers !== undefined;
@@ -2794,7 +2818,8 @@ export class TeamApiServer {
         if (
           capability === CLAUDE_API_KEY_CAPABILITY ||
           capability === CODEX_API_KEY_CAPABILITY ||
-          capability === MISTRAL_CODE_SIGN_IN_CAPABILITY
+          capability === MISTRAL_CODE_SIGN_IN_CAPABILITY ||
+          capability === ANTIGRAVITY_CODE_SIGN_IN_CAPABILITY
         )
           return this.#options.admin?.providers !== undefined;
         if (capability === PROVIDERS_SIGN_IN_V3_CAPABILITY) return this.#options.admin?.providers?.pasteSignIn === true;
@@ -2803,6 +2828,7 @@ export class TeamApiServer {
         if (capability === HOST_RELEASE_CAPABILITY) return this.#options.admin?.release !== undefined;
         if (capability === HOST_TIMEZONE_CAPABILITY) return this.#options.admin?.timezone !== undefined;
         if (capability === HOST_VOICE_MODEL_CAPABILITY) return this.#options.admin?.voiceModel !== undefined;
+        if (capability === HOST_SIGNAL_HOME_CAPABILITY) return this.#options.admin?.signalHome !== undefined;
         if (capability === HOST_TURN_LIMITS_CAPABILITY) return this.#options.admin?.turnLimits !== undefined;
         if (capability === HOST_RESTART_CAPABILITY) return this.#options.admin?.restart !== undefined;
         if (capability === OWNER_TRANSFER_CAPABILITY) return this.#options.admin?.ownerTransfer === true;
@@ -2823,7 +2849,8 @@ export class TeamApiServer {
         if (capability === PROVIDER_ENVIRONMENT_CAPABILITY)
           return this.#options.admin?.providerEnvironment !== undefined;
         if (capability === PROVIDER_DETECTION_CAPABILITY) return this.#options.admin?.providerDetection !== undefined;
-        if (capability === MODEL_VISIBILITY_CAPABILITY) return this.#options.admin?.modelVisibility !== undefined;
+        if (capability === MODEL_VISIBILITY_CAPABILITY || capability === MODEL_VISIBILITY_KEPT_CAPABILITY)
+          return this.#options.admin?.modelVisibility !== undefined;
         if (capability === PROVIDER_DEFAULT_CAPABILITY) return this.#options.admin?.defaultProvider !== undefined;
         if (capability === AGENT_ACCESS_CAPABILITY) return this.#options.agentAccess !== undefined;
         if (capability === SERVER_AUDIT_CAPABILITY) return this.#options.serverAudit !== undefined;
@@ -2859,8 +2886,11 @@ export class TeamApiServer {
         if (capability === WORKFLOWS_MEDIA_CATALOG_CAPABILITY) return this.#options.workflows !== undefined;
         if (capability === WORKFLOWS_MEDIA_CATALOG_V2_CAPABILITY) return this.#options.workflows !== undefined;
         if (capability === WORKFLOWS_CREDIT_MEDIA_CAPABILITY) return this.#options.workflows !== undefined;
+        if (capability === WORKFLOWS_CREDIT_MEDIA_UNAVAILABLE_CAPABILITY) return this.#options.workflows !== undefined;
         if (capability === WORKFLOWS_MEDIA_SERVICE_ACCOUNT_CAPABILITY) return this.#options.workflows !== undefined;
         if (capability === WORKFLOWS_STEP_SETTINGS_CAPABILITY) return this.#options.workflows !== undefined;
+        if (capability === WORKFLOWS_PAUSE_CAPABILITY) return this.#options.workflows !== undefined;
+        if (capability === WORKFLOWS_PORTABLE_CAPABILITY) return this.#options.workflows?.files !== undefined;
         if (capability === WORKFLOWS_CHANNELS_CAPABILITY) return this.#options.workflows !== undefined;
         if (capability === WORKFLOWS_AGENT_FILES_CAPABILITY) return this.#options.workflows !== undefined;
         if (capability === WORKFLOWS_ANSWERS_CAPABILITY) return this.#options.workflows !== undefined;
@@ -3033,6 +3063,7 @@ const EVENT_ENCODING_CAPABILITIES = [
   TEAM_MEMORY_CHANGES_CAPABILITY,
   TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY,
   TEAM_UI_BLOCK_VAULT_CAPABILITY,
+  TEAM_UI_BLOCK_LOCATION_CAPABILITY,
   SKILL_LEARNING_CAPABILITY,
   QUEUE_HOLD_CAPABILITY,
   QUEUE_HOLD_SIGN_IN_CAPABILITY,

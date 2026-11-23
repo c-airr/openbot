@@ -394,6 +394,25 @@ export const messages = {
     "Las rutinas nuevas usan esta zona horaria cuando el mensaje no indica la zona horaria del remitente. En un servidor, el navegador también la usa después del próximo reinicio.",
   "server.settings.timezoneAutomatic": "Automática ({zone})",
   "server.settings.timezoneLoadFailed": "No se pudo cargar la zona horaria del servidor.",
+  "server.settings.connectionTitle": "Conexión",
+  "server.settings.signalHome": "Servidor de Signal",
+  "server.settings.signalHomeDescription":
+    "Los miembros se conectan a este servidor a través de este servidor de Signal. Un servidor de Signal con menos latencia da conexiones más rápidas.",
+  "server.settings.signalHomeFallback":
+    "{chosen} no responde. El servidor usa {name} hasta que {chosen} vuelva a responder.",
+  "server.settings.signalHomeMoving":
+    "El servidor se cambia a {name}. Los miembros se vuelven a conectar en unos segundos.",
+  "server.settings.signalHomeLoadFailed": "No se pudieron cargar los servidores de Signal.",
+  "server.settings.signalHomeAutomatic": "Automático (el más cercano)",
+  "server.settings.signalHomeAutomaticUsing": "Automático ({name})",
+  "server.settings.signalHomeOption": "{name} · {latency}",
+  "server.settings.signalHomeLatency": "{latency} ms",
+  "server.settings.signalHomeNoAnswer": "Sin respuesta",
+  "server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "server.settings.signalHomePlaceSanJose": "San José",
+  "server.settings.signalHomePlaceSydney": "Sídney",
+  "server.settings.signalHomePlaceSingapore": "Singapur",
   "server.settings.voiceModel.section": "Reconocimiento de voz",
   "server.settings.voiceModel.description":
     "Los agentes de este servidor usan este modelo para transcribir el sonido de los vídeos que no tienen subtítulos.",
@@ -646,7 +665,7 @@ export const messages = {
   "server.update.waitingFor": "Esperando {reasons}.",
   "server.update.disabledTitle": "Las actualizaciones remotas están desactivadas",
   "server.update.disabledDescription":
-    "El usuario de {name} desactivó las actualizaciones de los miembros del servidor. Pídele que actualice OpenBot o que active el ajuste.",
+    "El usuario de {name} desactivó las actualizaciones de los miembros del servidor. Pídele que actualice OpenBot o que abra Ajustes > Actualizaciones en su equipo y active «Permitir actualizaciones de los miembros del servidor».",
   "server.update.managedTitle": "Un Host Manager controla las actualizaciones",
   "server.update.managedDescription": "OpenBot Host Manager actualiza {name}. Contacta con el administrador del host.",
   "server.update.unsupportedTitle": "{name} no puede actualizarse por sí mismo",

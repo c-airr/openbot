@@ -139,6 +139,20 @@ When a user selects "Teach a task" and saves the recording, OpenBot sends the ag
 message with the steps in an attached text file: the host, path and title of each page, and the role and name of each control
 that the user clicked. The steps have no query, no typed text and no field value. A discarded
 recording is sent to nobody.
+When a request needs where the user is, an agent can ask for the user's location with a card in the
+chat. Nothing is sent until a person answers the card. An agent cannot ask in a channel or an external
+chat. On the mobile app, **Share once** reads the phone's location (latitude, longitude, accuracy and
+the time of the measurement) one time, only while the app is in use ("While Using the App"
+permission), and sends it to the server as the answer. **Always allow** does the same and saves on
+that phone that the agent may have it: later cards from that agent are answered on the phone without a
+tap while the app is in use and the chat is open, when this person's own message started the request,
+until the person taps **Ask every time**. Sign-out, session expiry and server removal delete this
+choice. On a computer, the person can type a place instead. The server gives the answer to the agent's
+provider as the result of the agent's request, so the provider gets it and can keep it in its session
+history. The server does not store the location or the typed place in the SQLite database: the card
+keeps only that the location was shared or not. The agent's reply, which can name the place, is stored
+like any other message. The phone does not store the location, follow it in the background, or send it
+to the account service or analytics.
 Channel history keeps its existing membership and task checks. Messaging history stays within its
 current link. The full conversation stays in local SQLite storage. No history text is sent to the
 account service or analytics by these tools.
@@ -468,7 +482,7 @@ The service stores:
   without the ID of the deleted account. For each image or video that OpenBot credits pay for, the
   service keeps a hold record: the job ID, the account or server that pays, the account that started
   it, the model, the credits held and charged, the result (completed, failed, canceled, refused or
-  expired), the job ID of the media generation processor, and the times. It keeps no prompt, picture
+  expired), the media generation processor and its job ID, and the times. It keeps no prompt, picture
   or result file. Deleting the account removes the hold records of its own balance. For the free
   monthly credits of a paid license, it keeps a grant record: the license, the account or server that
   has them, the credits given and left, and the start and end times. Deleting the account removes the
@@ -1200,6 +1214,11 @@ addresses on a private network, such as the Wi-Fi or a Tailscale tailnet. The de
 connection gets the same empty server list for each new stream, so it also uses only a direct path,
 which can be a public IPv6 address of the computer. Sign-in and Signal messages do not change.
 
+When an owner or an admin opens Server settings › General, the host sends a few `GET /health/ready`
+requests to each OpenBot Signal machine to measure its latency. The requests carry no account, server
+or chat data. When the owner or admin chooses a Signal machine, the host keeps the choice in a local
+file and sends only its name (such as `au`) with each Signal ticket request to the account service.
+
 The phone app shows a Remote Desktop in a web view that loads the host's viewer from a server on the
 phone's loopback address (`127.0.0.1`). That server takes only requests with a random token, serves
 one session, and stops when the screen closes. The viewer's files and its signaling go to the host
@@ -1568,7 +1587,8 @@ A step with an OpenBot model uses OpenBot credits. When the computer is signed i
 account, the credits of that account pay; a server pays with its own credits. The computer sends the
 prompt, the model, the size settings and the input pictures to the account service
 (`openbot.run`). The account service holds the credits, sends the same values to a media generation
-processor, and returns the result file to the computer, which keeps it. The account service passes
+processor, and returns the result file to the computer, which keeps it. A processor can keep the
+input pictures for up to three days so that it can read them. The account service passes
 the prompt, the pictures and the file through in transit only: it does not store or log them. It
 keeps only the hold record above. A failed or refused generation spends no credits. A stop does not
 cancel a generation that was sent: when the run stops or the app closes, the job continues, and the

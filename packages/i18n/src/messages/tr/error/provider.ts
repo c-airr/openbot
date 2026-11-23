@@ -181,6 +181,8 @@ export const messages = {
   "error.provider.stoppedBeforeStart": "{provider}, bu mesaj başlamadan önce durdu. Mesajı yeniden gönderin.",
   "error.provider.sessionStartTimedOut":
     "{provider} yeni bir sohbeti zamanında açamadı, bu yüzden bu mesaj başlamadı. OpenBot'u çalıştıran bilgisayarda Sağlayıcılar sayfasını açın, {provider} öğesini seçin ve Yeniden başlat'a tıklayın. Sonra tekrar deneyin.",
+  "error.provider.sessionResumeTimedOut":
+    "{provider} bu sohbeti zamanında açamadı, bu yüzden bu mesaj başlamadı. OpenBot'u çalıştıran bilgisayarda Sağlayıcılar sayfasını açın, {provider} öğesini seçin ve Yeniden başlat'a tıklayın. Sonra tekrar deneyin.",
   "error.provider.serviceUnreachable":
     "{provider} hizmetine bağlanamıyor. İnternet bağlantınızı kontrol edin. OpenBot tekrar deneyecek.",
   "error.provider.serviceUnreachableRefresh":
@@ -290,6 +292,12 @@ export const messages = {
     "OpenBot'un gerçek zamanlı CPU sınırı 0 olduğu için Linux sağlayıcıyı durdurdu. Bu sınır sisteminizden geliyor. rtkit'i kurup başlatın (`rtkit-daemon`), `systemctl --user restart xdg-desktop-portal` komutunu çalıştırın, ardından OpenBot'u yeniden başlatın. rtkit eksikken yalnızca xdg-desktop-portal'ı yeniden başlatmak işe yaramaz.",
   "error.provider.cpuUnsupported":
     "Bu bilgisayarın işlemcisi bu sağlayıcıyı çalıştıramıyor. Başka bir sağlayıcı kullanın.",
+  "error.provider.largeMemoryPages":
+    "Bu sağlayıcı bu Linux çekirdeğinde çalışamıyor, çünkü çekirdek 4 KiB’den büyük bellek sayfaları kullanıyor; Raspberry Pi 5 veya Asahi Linux’ta olduğu gibi. 4 KiB sayfalı bir çekirdek ya da başka bir sağlayıcı kullanın.",
+  "error.provider.ipv6Missing":
+    "Bu sağlayıcı IPv6 gerektiriyor ve bu bilgisayarda IPv6 kapalı. IPv6’yı açın, sonra yeniden deneyin. WSL’de .wslconfig dosyasından ipv6.disable=1 satırını kaldırın ve wsl --shutdown komutunu çalıştırın.",
+  "error.provider.windowsBlocked":
+    "Akıllı Uygulama Denetimi gibi Windows güvenlik ayarları bu sağlayıcının başlamasını engelledi. Başka bir sağlayıcı kullanın.",
   "error.provider.opencodeDatabaseNewer":
     "Daha yeni bir OpenCode sürümü veritabanını değiştirdiği için OpenCode veritabanını açamadı. OpenCode'u 2 veya daha yeni bir sürüme güncelleyin, sonra yeniden deneyin.",
   "error.provider.grokDefaultModelNotAllowed":
@@ -305,6 +313,7 @@ export const messages = {
   "error.provider.acpRefusedNoReason": "{provider} yanıt vermeden durdu. Mesajı yeniden gönderin.",
   "error.provider.channelNoAnswer":
     "{provider} turu yanıt vermeden bitirdi. Kanalda görevi yeniden çalıştırmak için Devam et'e, başka bir üyeye vermek için Yeniden ata'ya tıklayın.",
+  "error.provider.acpProcessStopped": "{provider} yanıt vermeden önce durdu. Mesajı yeniden gönderin.",
   "error.provider.chatgptPageFailed": "OpenBot ChatGPT bağlantı sayfasını açamadı.",
   "error.provider.noneReady": "Hiçbir ajan sağlayıcısı hazır değil.",
   "error.provider.claudeTurnActive": "Bağlamını yenilemeden önce etkin Claude turunun bitmesini bekleyin.",
@@ -345,6 +354,8 @@ export const messages = {
     "{provider} önceki turunu bitirmediği için bu mesajı kabul etmedi. OpenBot sohbet geçmişiyle yeni bir {provider} oturumu başlattı. Mesajınızı yeniden gönderin.",
   "error.provider.antigravityLocationUnsupported":
     "Google, bu ajanı çalıştıran bilgisayarın ağ konumundan Gemini'nin çalışmasına izin vermiyor. Gemini'yi başka bir bilgisayarda kullanın veya bu ajan için başka bir sağlayıcı seçin.\n{detail}",
+  "error.provider.antigravityTurnStopped":
+    "Gemini bir hata nedeniyle durdu. Mesajınızı yeniden gönderin. Yine durursa başka bir model veya sağlayıcı seçin.",
   "error.provider.antigravityConnectionLost":
     "Gemini, aracısıyla bağlantısını kaybetti ve durdu. Devam etmek için bir mesaj gönderin.",
   "error.provider.grokServiceFailure":
@@ -398,6 +409,8 @@ export const messages = {
     "Hermes bu mesaj sırasında bağlantısını kaybetti, bu yüzden işin bitip bitmediğini bilmiyor. Mesajı yeniden göndermeden önce ajanın ne yaptığını kontrol edin.",
   "error.provider.copilotThinkingRejected":
     "GitHub Copilot bu modeli kullanamadı: model, düşünme ayarını kabul etmedi. Bu ajan için başka bir model seçin, sonra mesajınızı yeniden gönderin.",
+  "error.provider.copilotAnswerIncomplete":
+    "Model, yanıtını tamamlamadan durdu. Mesajınızı yeniden gönderin veya bu ajan için başka bir model seçin.",
   "error.provider.usageLimitReached": "Hesap kullanım sınırına ulaştı.",
   "error.provider.claudeContextFull":
     "Bu sohbet Claude için çok uzun hale geldi. OpenBot sohbet geçmişiyle yeni bir Claude Code oturumu başlattı. Tekrar deneyin.",
@@ -442,8 +455,12 @@ export const messages = {
   "error.provider.claudeSessionMissing":
     "Claude Code bu sohbetin kayıtlı oturumunu bulamadı. OpenBot sohbet geçmişiyle yeni bir Claude Code oturumu başlattı. Tekrar deneyin.",
   "error.provider.grokSignIn": "Grok'u kullanmak için `grok login` komutunu çalıştırın veya XAI_API_KEY ayarlayın.",
+  "error.provider.acpSignInNoStart":
+    "Sağlayıcı başlamadı, bu yüzden oturum açma başlayamadı. Yeniden deneyin veya OpenBot’u yeniden başlatın.",
   "error.provider.acpSignInTimedOut": "Oturum açma zaman aşımına uğradı.",
   "error.provider.acpSignInStopped": "Oturum açma tamamlanmadan önce durdu.",
+  "error.provider.geminiNoBrowserUseCode":
+    "Bu bilgisayarda Google ile oturum açmak için tarayıcı yok. “Kodla oturum aç”ı seçin, bağlantıyı herhangi bir cihazda açın, sonra kodu yapıştırın.",
   "error.provider.geminiBrowserUnavailable":
     "Gemini oturum açma sayfasını açamadı. Bir tarayıcı ve xdg-utils yükleyin, ardından bu ana makinede bir masaüstü oturumundan bağlanın. Masaüstü olmayan bir sunucu bu oturum açma işlemini tamamlayamaz.",
   "error.provider.geminiBrowserOpenFailed":

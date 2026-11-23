@@ -50,7 +50,7 @@ import { RunningSubagents } from "@openbot/ui/features/conversation/RunningSubag
 import { SpeakingBar } from "@openbot/ui/features/conversation/SpeakingBar";
 import { ComposerVoiceControls } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, createStore, Loading, lazy, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, createStore, Loading, lazy, Show, snapshot } from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
 import { readableAgentError } from "../agents/agent-error-text";
@@ -137,7 +137,8 @@ export function ConversationComposer() {
     voiceLimitNotice,
     dismissVoiceLimitNotice,
     voiceLiveText,
-    voicePhase,
+    voicePhase: sharedVoicePhase,
+    voiceThreadKey,
     voiceModelProgress,
     sideQuestionAvailable,
     openSideQuestion,
@@ -155,6 +156,8 @@ export function ConversationComposer() {
     props: conversation,
   } = useConversationViewScope();
   const { t, format, errorMessage, sourceText: localizeSourceText } = useText();
+  const voicePhase = () => (voiceThreadKey() === undefined ? sharedVoicePhase() : "idle");
+  const threadVoiceBusy = () => voiceThreadKey() !== undefined && sharedVoicePhase() !== "idle";
   const messageLabel = () =>
     channel
       ? t("channel.composer.placeholder", { name: channel.name() })
@@ -177,7 +180,7 @@ export function ConversationComposer() {
     voiceConversationAvailable() && !voiceConversationOpen() ? toggleVoiceConversation : undefined;
   const sendVoice = (): ComposerSendVoice | undefined => {
     if (!props.agent || !voiceConversationAvailable()) return undefined;
-    if (composerHasContent() || editingDeliveryId() || voicePhase() !== "idle") return undefined;
+    if (composerHasContent() || editingDeliveryId() || sharedVoicePhase() !== "idle") return undefined;
     if (attachmentBusy() || uploadFailed() || submitting() || !agentReady() || providerUpdateRequired())
       return undefined;
     if (voiceConversationOpen()) return "end";
@@ -324,7 +327,7 @@ export function ConversationComposer() {
     !steerRefused() &&
     !editingDeliveryId() &&
     composerHasContent() &&
-    voicePhase() === "idle" &&
+    sharedVoicePhase() === "idle" &&
     agentReady() &&
     !attachmentBusy() &&
     !uploadFailed() &&
@@ -353,7 +356,7 @@ export function ConversationComposer() {
         id: endpoint.id,
         name: endpoint.name,
         baseUrl: endpoint.baseUrl,
-        models: endpoint.models.map((item) =>
+        models: snapshot(endpoint.models).map((item) =>
           item.id === model.id
             ? {
                 ...item,
@@ -484,6 +487,7 @@ export function ConversationComposer() {
         submitting() ||
         !agentAcceptsSend() ||
         Boolean(providerUpdateRequired()) ||
+        threadVoiceBusy() ||
         voicePhase() === "preparing" ||
         voicePhase() === "requesting" ||
         voicePhase() === "transcribing"
@@ -916,7 +920,7 @@ export function ConversationComposer() {
                   levels={voiceLevels()}
                   elapsedSeconds={voiceElapsedSeconds()}
                   modelProgress={voiceModelProgress()}
-                  blocked={!(props.agent || channel) || !agentReady()}
+                  blocked={!(props.agent || channel) || !agentReady() || threadVoiceBusy()}
                   onStart={() => void startVoiceRecording()}
                   onCancel={cancelVoiceRecording}
                   onFinish={stopVoiceRecording}

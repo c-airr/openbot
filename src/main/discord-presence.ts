@@ -23,7 +23,7 @@ const CONFIG_FILE = "openbot-discord-presence-v1.json";
 const RETRY_MS = 60_000;
 const CONNECT_TIMEOUT_MS = 1_000;
 const IDLE_MS = 10 * 60_000;
-const FOCUS_CHECK_MS = 15_000;
+const FOCUS_CHECK_MS = 2_000;
 const APP_STARTED_AT = Date.now();
 const OP_HANDSHAKE = 0;
 const OP_FRAME = 1;
@@ -89,10 +89,12 @@ function encodeFrame(opcode: number, payload: unknown): Buffer {
  * The card that Discord shows: the app line, then the model and the provider of the open chat. Nothing
  * else of the app goes out, so the card shows what the user chose, not what they talk about.
  */
-function presenceActivity(input: DiscordPresenceInput, config: PresenceConfig, idle: boolean) {
+function presenceActivity(input: DiscordPresenceInput, config: PresenceConfig, idle: boolean, running: number) {
   const model = input.model ? modelLabel(input.model, input.effort) : null;
   const provider = input.provider ? providerLabel(input.provider, input.model) : null;
-  const state = [model, provider].filter((part): part is string => Boolean(part)).join(" · ");
+  const state = [running > 0 ? `${running} ${running === 1 ? "agent" : "agents"} running` : null, model, provider]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
   return {
     details: idle ? `${APP_LINE} · Idle` : APP_LINE,
     ...(state ? { state: state.slice(0, 128) } : {}),
@@ -140,6 +142,12 @@ class DiscordPresence {
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
   #lastFocused = Date.now();
   #idle = false;
+  #running = 0;
+  #readRunning: () => number = () => 0;
+
+  setRunningSource(read: () => number): void {
+    this.#readRunning = read;
+  }
 
   constructor() {
     app.on("browser-window-focus", () => {
@@ -153,9 +161,11 @@ class DiscordPresence {
     });
     const timer = setInterval(() => {
       if (BrowserWindow.getAllWindows().some((window) => window.isFocused())) this.#lastFocused = Date.now();
-      const idle = Date.now() - this.#lastFocused >= IDLE_MS;
-      if (idle === this.#idle) return;
+      const running = this.#readRunning();
+      const idle = running === 0 && Date.now() - this.#lastFocused >= IDLE_MS;
+      if (idle === this.#idle && running === this.#running) return;
       this.#idle = idle;
+      this.#running = running;
       if (this.#pending && this.#ready) this.#publish(this.#pending);
     }, FOCUS_CHECK_MS);
     timer.unref();
@@ -181,7 +191,7 @@ class DiscordPresence {
     socket.write(
       encodeFrame(OP_FRAME, {
         cmd: "SET_ACTIVITY",
-        args: { pid: process.pid, activity: presenceActivity(input, config, this.#idle) },
+        args: { pid: process.pid, activity: presenceActivity(input, config, this.#idle, this.#running) },
         nonce: randomUUID(),
       }),
     );
@@ -272,4 +282,8 @@ const presence = new DiscordPresence();
 /** Sets the card that Discord shows, or clears it when no chat is open. Never throws at the caller. */
 export function setDiscordPresence(input: DiscordPresenceInput): void {
   void presence.update(input).catch(() => undefined);
+}
+
+export function setDiscordRunningSource(read: () => number): void {
+  presence.setRunningSource(read);
 }

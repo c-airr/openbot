@@ -13,6 +13,7 @@ import { classifyUserError } from "@openbot/user-errors";
 import { Deferred, Effect, Result, Schema } from "effect";
 import {
   type AgentProvider,
+  ProviderModelLimitedError,
   ProviderModelNotOfferedError,
   ProviderSessionBusyError,
   ProviderStoppedError,
@@ -47,7 +48,7 @@ import type { MailboxSync } from "./mailbox-sync";
 import type { MemoryHold } from "./memory-hold";
 import type { PlanContinuation } from "./plan-continuation";
 import type { ProfileSave } from "./profile-save";
-import { isPlanLimitDiagnostic } from "./provider-diagnostics";
+import { isPlanLimitDiagnostic, providerResetDelayMs } from "./provider-diagnostics";
 import type { ProviderRuntime } from "./provider-runtime";
 import type { RoutineScheduler } from "./routine-scheduler";
 import { RoutineStartRetry } from "./routine-start-retry";
@@ -425,6 +426,7 @@ export class DrainScheduler {
     const key = laneKey(lane);
     if (this.#reportedHolds.get(key) === reason || !this.#mailbox.nextQueued(lane.agentId, lane.taskId)) return;
     this.#reportedHolds.set(key, reason);
+    if (reason === "endpoint-reload") this.#mailboxSync.emitQueue(lane.agentId);
     const working =
       reason === "active-turn" && lane.taskId === null ? this.#conversation.workingSnapshot(lane.agentId) : undefined;
     const channelId = laneChannelId(lane.taskId);
@@ -477,11 +479,25 @@ export class DrainScheduler {
     return this.#heldBy(lane) ?? this.#providerHold(agentId) ?? (heldByMachine ? "machine" : null);
   }
 
-  #providerHold(agentId: string): "providers-not-ready" | "provider-cli-replaced" | null {
+  #providerHold(agentId: string): "providers-not-ready" | "provider-cli-replaced" | "endpoint-reload" | null {
     if (!this.#providers.isReady()) return "providers-not-ready";
     if (this.#deliveryProviders(agentId).some((provider) => this.#providers.isReplacingCli(provider)))
       return "provider-cli-replaced";
+    if (this.awaitsEndpointReload(agentId)) return "endpoint-reload";
     return null;
+  }
+
+  awaitsEndpointReload(agentId: string): boolean {
+    const agent = this.#store.get(agentId);
+    if (!agent) return false;
+    const provider = providerForAgent(agent);
+    if (!this.#providers.reloadPending(provider)) return false;
+    const client = this.#providers.runningAgentClient(agent);
+    return (
+      client !== null &&
+      this.#hooks.servesModel(agent.model, provider, null) &&
+      !this.#hooks.servesModel(agent.model, provider, this.#providers.configRevision(client))
+    );
   }
 
   scheduleDrain(agentId: string, followUsageLimit = true): void {
@@ -762,7 +778,7 @@ export class DrainScheduler {
           deliveryTaskId === null
             ? this.#conversation.loadedSnapshot(agentId)
             : taskThreadId
-              ? this.#conversation.loadedExecutionSnapshot(taskThreadId)
+              ? this.#conversation.executionSnapshot(taskThreadId)
               : undefined;
         if (!snapshot) continue;
         this.#mailboxSync.syncDeliveryMessage(snapshot, deliveryId);
@@ -1185,17 +1201,27 @@ export class DrainScheduler {
               yield* this.#retryBusySession(delivery.recipientAgentId);
             return;
           }
+          const modelLimited = error instanceof ProviderModelLimitedError;
           if (
-            error instanceof ProviderModelNotOfferedError &&
+            (error instanceof ProviderModelNotOfferedError || modelLimited) &&
             !channelDelivery &&
             !messagingDelivery &&
             this.#hooks.mayFailOver(delivery.recipientAgentId)
           ) {
-            logger.warn("A session does not offer the agent's model. The agent moves to its backup model.", {
-              agentId: delivery.recipientAgentId,
-              model: requestedModel,
-            });
-            this.#usageLimits.notOffered(delivery.recipientAgentId, requestedModel);
+            if (modelLimited) {
+              logger.warn("The provider refused the agent's model at a limit. The agent moves to its backup model.", {
+                agentId: delivery.recipientAgentId,
+                model: requestedModel,
+                reason: this.#hooks.redactMcp(error.message),
+              });
+              this.#usageLimits.failed(delivery.recipientAgentId, requestedModel, providerResetDelayMs(error.message));
+            } else {
+              logger.warn("A session does not offer the agent's model. The agent moves to its backup model.", {
+                agentId: delivery.recipientAgentId,
+                model: requestedModel,
+              });
+              this.#usageLimits.notOffered(delivery.recipientAgentId, requestedModel);
+            }
             for (const item of batch) yield* this.#mailbox.restoreQueued(item.delivery.id).pipe(toDeliveryStartFailed);
             this.#mailboxSync.emitQueue(delivery.recipientAgentId);
             if (!this.#hooks.followUsageLimit(delivery.recipientAgentId))
@@ -1233,7 +1259,7 @@ export class DrainScheduler {
             this.#channels?.deliveryUncertain(delivery.id);
             this.#hooks.emitError(
               "delivery_start_unconfirmed",
-              `${error.providerName} did not confirm the turn start in time. OpenBot will wait for lifecycle events instead of retrying potentially duplicated work.`,
+              sourceText("error.backend.turnStartUnconfirmed", { provider: error.providerName }),
               delivery.recipientAgentId,
             );
             const ids = batch.map(({ delivery: item }) => item.id);
@@ -1250,7 +1276,9 @@ export class DrainScheduler {
             ? "error.provider.stoppedBeforeStart"
             : sessionStartTimedOut
               ? "error.provider.sessionStartTimedOut"
-              : null;
+              : isRequestTimeout(error, "thread/resume")
+                ? "error.provider.sessionResumeTimedOut"
+                : null;
           const stoppedReason =
             stoppedKey && recipient
               ? sourceText(stoppedKey, { provider: providerLabel(providerForAgent(recipient)) })
@@ -1454,6 +1482,7 @@ export class DrainScheduler {
       if (routineThreadId) yield* this.#threads.closeRoutineThread(routineThreadId);
       releaseReservation();
       this.#mailboxSync.emitQueue(agentId);
+      this.#hooks.emitError("delivery_start_unconfirmed", sourceText("error.backend.turnStartAbandoned"), agentId);
       this.scheduleDrain(agentId);
     },
     Effect.catch((failure) => Effect.sync(() => this.#hooks.emitError("delivery_start_unconfirmed", failure.cause))),

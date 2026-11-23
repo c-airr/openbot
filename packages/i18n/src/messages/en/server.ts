@@ -444,6 +444,24 @@ export const messages = defineMessages("server", {
     "New routines use this timezone when the message does not give the sender's timezone. On a server, the browser also uses it after the next restart.",
   "server.settings.timezoneAutomatic": "Automatic ({zone})",
   "server.settings.timezoneLoadFailed": "Could not load the server timezone.",
+  "server.settings.connectionTitle": "Connection",
+  "server.settings.signalHome": "Signal server",
+  "server.settings.signalHomeDescription":
+    "Members connect to this server through this Signal server. A Signal server with a lower latency gives faster connections.",
+  "server.settings.signalHomeFallback":
+    "{chosen} does not answer. The server uses {name} until {chosen} answers again.",
+  "server.settings.signalHomeMoving": "The server moves to {name}. Members connect again in a few seconds.",
+  "server.settings.signalHomeLoadFailed": "Could not load the Signal servers.",
+  "server.settings.signalHomeAutomatic": "Automatic (nearest)",
+  "server.settings.signalHomeAutomaticUsing": "Automatic ({name})",
+  "server.settings.signalHomeOption": "{name} · {latency}",
+  "server.settings.signalHomeLatency": "{latency} ms",
+  "server.settings.signalHomeNoAnswer": "No answer",
+  "server.settings.signalHomePlaceHelsinki1": "Helsinki 1",
+  "server.settings.signalHomePlaceHelsinki2": "Helsinki 2",
+  "server.settings.signalHomePlaceSanJose": "San Jose",
+  "server.settings.signalHomePlaceSydney": "Sydney",
+  "server.settings.signalHomePlaceSingapore": "Singapore",
   "server.settings.voiceModel.section": "Speech recognition",
   "server.settings.voiceModel.description":
     "Agents on this server use this model to transcribe the sound of videos that have no captions.",
@@ -739,7 +757,7 @@ export const messages = defineMessages("server", {
   "server.update.waitingFor": "Waiting for {reasons}.",
   "server.update.disabledTitle": "Remote updates are off",
   "server.update.disabledDescription":
-    "The user of {name} turned off updates from server members. Ask them to update OpenBot or to turn the setting on.",
+    "The user of {name} turned off updates from server members. Ask them to update OpenBot, or to open Settings > Updates on that computer and turn on “Allow updates from server members”.",
   "server.update.managedTitle": "A Host Manager controls updates",
   "server.update.managedDescription": "OpenBot Host Manager updates {name}. Contact the host administrator.",
   "server.update.unsupportedTitle": "{name} cannot update itself",

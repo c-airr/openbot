@@ -80,6 +80,7 @@ import { HOST_MEMBER_UPDATE_CODECS } from "./host-member-update-v1";
 import { HOST_PERSONALITY_CODECS } from "./host-personality-v1";
 import { HOST_RELEASE_CODECS } from "./host-release-v1";
 import { HOST_RESTART_CODECS } from "./host-restart-v1";
+import { HOST_SIGNAL_HOME_CODECS } from "./host-signal-home-v1";
 import { HOST_TIMEZONE_CODECS } from "./host-timezone-v1";
 import { HOST_TURN_LIMITS_CODECS } from "./host-turn-limits-v1";
 import { HOST_UPDATE_CODECS } from "./host-update-v1";
@@ -101,6 +102,7 @@ import { MEMORY_REVIEW_CODECS } from "./memory-review-v1";
 import { MESSAGE_DELETE_CODECS } from "./message-delete-v1";
 import { MESSAGE_PINS_CODECS } from "./message-pins-v1";
 import { MODEL_STEERING_CODECS } from "./model-steering-v1";
+import { MODEL_VISIBILITY_KEPT_CODECS } from "./model-visibility-kept-v1";
 import { MODEL_VISIBILITY_CODECS } from "./model-visibility-v1";
 import { ONEPASSWORD_CONNECTOR_CODECS } from "./onepassword-connector-v1";
 import { PASSWORD_MANAGERS_CODECS } from "./password-managers-v1";
@@ -165,9 +167,11 @@ import { WEBHOOK_AGENT_SECRET_CODECS } from "./webhook-agent-secret-v1";
 import { WEBHOOK_SENDER_SECRET_CODECS } from "./webhook-sender-secret-v1";
 import { WEBHOOK_TESTS_CODECS } from "./webhook-tests-v1";
 import { WHATSAPP_CONNECTOR_CODECS } from "./whatsapp-connector-v1";
+import { WHATSAPP_READ_ONLY_CODECS } from "./whatsapp-read-only-v1";
 import { WHATSAPP_STATUS_REACTIONS_CODECS } from "./whatsapp-status-reactions-v1";
 import { WHATSAPP_WORKING_MESSAGE_CODECS } from "./whatsapp-working-message-v1";
 import { WORKFLOW_FOLDERS_CODECS } from "./workflow-folders-v1";
+import { WORKFLOWS_CREDIT_MEDIA_UNAVAILABLE_CODECS } from "./workflows-credit-media-unavailable-v1";
 import { WORKFLOWS_CREDIT_MEDIA_CODECS } from "./workflows-credit-media-v1";
 import { WORKFLOWS_GITHUB_CODECS } from "./workflows-github-v1";
 import { WORKFLOWS_HIGGSFIELD_CODECS } from "./workflows-higgsfield-v1";
@@ -175,6 +179,8 @@ import { WORKFLOWS_MEDIA_CATALOG_CODECS } from "./workflows-media-catalog-v1";
 import { WORKFLOWS_MEDIA_CATALOG_V2_CODECS } from "./workflows-media-catalog-v2";
 import { WORKFLOWS_MEDIA_SERVICE_ACCOUNT_CODECS } from "./workflows-media-service-account-v1";
 import { WORKFLOWS_MEDIA_CODECS } from "./workflows-media-v1";
+import { WORKFLOWS_PAUSE_CODECS } from "./workflows-pause-v1";
+import { WORKFLOWS_PORTABLE_CODECS } from "./workflows-portable-v1";
 import { WORKFLOWS_STEP_SETTINGS_CODECS } from "./workflows-step-settings-v1";
 import { WORKFLOWS_SUNRA_CODECS } from "./workflows-sunra-v1";
 import { WORKFLOWS_CODECS } from "./workflows-v1";
@@ -206,6 +212,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...HOST_UPDATE_CODECS,
   ...HOST_TIMEZONE_CODECS,
   ...HOST_VOICE_MODEL_CODECS,
+  ...HOST_SIGNAL_HOME_CODECS,
   ...HOST_TURN_LIMITS_CODECS,
   ...HOST_PERSONALITY_CODECS,
   ...HOST_KEY_ROTATION_CODECS,
@@ -218,6 +225,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...MODEL_STEERING_CODECS,
   ...PROVIDER_MODEL_SOURCE_CODECS,
   ...MODEL_VISIBILITY_CODECS,
+  ...MODEL_VISIBILITY_KEPT_CODECS,
   ...SERVER_AUDIT_CODECS,
   ...PROVIDER_DEFAULT_CODECS,
   ...DISCORD_ACCESS_CODECS,
@@ -315,6 +323,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WHATSAPP_CONNECTOR_CODECS,
   ...WHATSAPP_WORKING_MESSAGE_CODECS,
   ...WHATSAPP_STATUS_REACTIONS_CODECS,
+  ...WHATSAPP_READ_ONLY_CODECS,
   ...MESSAGE_DELETE_CODECS,
   ...CHAT_HISTORY_CODECS,
   ...CONVERSATION_UNREAD_FROM_CODECS,
@@ -351,7 +360,10 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKFLOWS_MEDIA_CATALOG_CODECS,
   ...WORKFLOWS_MEDIA_CATALOG_V2_CODECS,
   ...WORKFLOWS_CREDIT_MEDIA_CODECS,
+  ...WORKFLOWS_CREDIT_MEDIA_UNAVAILABLE_CODECS,
   ...WORKFLOWS_STEP_SETTINGS_CODECS,
+  ...WORKFLOWS_PAUSE_CODECS,
+  ...WORKFLOWS_PORTABLE_CODECS,
   ...SIDEBAR_FOLDERS_CODECS,
   ...LIBRARY_FOLDERS_CODECS,
   ...WORKFLOW_FOLDERS_CODECS,

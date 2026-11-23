@@ -113,6 +113,7 @@ import {
   editedPreviewQuestions,
   expiredPromptResult,
   lateAnswerText,
+  locationPromptResult,
   MCP_TOOL_CONSENT_ALLOW_ONCE,
   mcpElicitationQuestions,
   mcpElicitationResult,
@@ -167,6 +168,7 @@ export interface SurfacedUiBlock {
   spec: UiBlockSpec;
   apiKey?: { name: string; vault?: boolean };
   vault?: { kind: UiVaultRequestKind };
+  location?: true;
 }
 
 export interface PromptResponder {
@@ -442,6 +444,7 @@ export interface HostedSiteApprovals {
 export interface RoutineAttention {
   markNeedsAttention(turnId: string | null): void;
   markRunningForTurn(turnId: string | null): void;
+  runsTurn(turnId: string): boolean;
 }
 
 export interface AttentionBrowserHost {
@@ -722,21 +725,23 @@ export class AttentionRegistry {
         ? apiKeyPromptResult(pending.uiBlock.blockId, saved?.key ?? null)
         : pending.uiBlock?.vault
           ? vaultPromptResult(pending.uiBlock.blockId, savedItem?.item ?? null)
-          : pending.uiBlock
-            ? uiBlockPromptResult(
-                uiBlockResponse
-                  ? { status: "answered", blockId: pending.uiBlock.blockId, response: uiBlockResponse, preview }
-                  : { status: "skipped", blockId: pending.uiBlock.blockId },
-              )
-            : pending.responseKind === "dynamic-tool"
-              ? dynamicPromptResult(answers)
-              : pending.responseKind === "mcp-elicitation"
-                ? mcpElicitationResult(pending.params, answers)
-                : {
-                    answers: Object.fromEntries(
-                      Object.entries(answers).map(([id, values]) => [id, { answers: values }]),
-                    ),
-                  };
+          : pending.uiBlock?.location
+            ? locationPromptResult(pending.uiBlock.blockId, uiBlockResponse)
+            : pending.uiBlock
+              ? uiBlockPromptResult(
+                  uiBlockResponse
+                    ? { status: "answered", blockId: pending.uiBlock.blockId, response: uiBlockResponse, preview }
+                    : { status: "skipped", blockId: pending.uiBlock.blockId },
+                )
+              : pending.responseKind === "dynamic-tool"
+                ? dynamicPromptResult(answers)
+                : pending.responseKind === "mcp-elicitation"
+                  ? mcpElicitationResult(pending.params, answers)
+                  : {
+                      answers: Object.fromEntries(
+                        Object.entries(answers).map(([id, values]) => [id, { answers: values }]),
+                      ),
+                    };
       if (!pending.detached) pending.client.respond(pending.id, result);
       this.#prompts.delete(input.requestId);
       clearTimeout(pending.autoAnswer?.timer);
@@ -756,6 +761,8 @@ export class AttentionRegistry {
             state.outcome = sourceText("status.agent.vaultAdded", {
               name: savedItem.item.name || (pending.uiBlock.spec.title ?? ""),
             }).slice(0, UI_BLOCK_LIMITS.outcome);
+          else if (pending.uiBlock.location && uiBlockResponse)
+            state.outcome = sourceText("status.agent.location.shared").slice(0, UI_BLOCK_LIMITS.outcome);
           else if (saved && saved.created !== null)
             state.outcome = sourceText(saved.created ? "status.agent.vaultAdded" : "status.agent.vaultUpdated", {
               name: saved.key.name,
@@ -951,8 +958,9 @@ export class AttentionRegistry {
   ) {
     const { pending, secret } = yield* attentionStep(() => {
       const value = this.#takeovers.get(input.requestId);
-      if (!value?.secret || value.request.agentId !== input.agentId || value.submitting)
-        throw new Error(sourceText("error.backend.authRequestInactive"));
+      if (!value?.secret || value.request.agentId !== input.agentId)
+        throw new InactiveAttentionRequest(sourceText("error.backend.authRequestInactive"));
+      if (value.submitting) throw new Error(sourceText("error.backend.authSubmitting"));
       return { pending: value, secret: value.secret };
     });
     if (input.decision === "cancel") {
@@ -1779,7 +1787,7 @@ export class AttentionRegistry {
     }
 
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions);
-    this.#expireDetachedInChat(agentId, publicThreadId);
+    this.#expireDetachedInChat(agentId, publicThreadId, turnId);
     const pending: PendingPrompt = {
       client,
       id: request.id,
@@ -1828,6 +1836,7 @@ export class AttentionRegistry {
       state: auto ? { status: "pending", autoAnswer: auto } : { status: "pending" },
       ...(block.vault ? { vault: { kind: block.vault.kind } } : {}),
       ...(block.apiKey?.vault ? { apiKey: true } : {}),
+      ...(block.location ? { location: true } : {}),
     });
     if (!threadId || !turnId || !agentId || !publicThreadId || !uiBlock || !validPromptQuestions(questions)) {
       client.respond(request.id, {
@@ -1852,7 +1861,7 @@ export class AttentionRegistry {
     }
 
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions, uiBlock);
-    this.#expireDetachedInChat(agentId, publicThreadId);
+    this.#expireDetachedInChat(agentId, publicThreadId, turnId);
     let autoAnswerTimer: PendingPrompt["autoAnswer"];
     if (auto && autoAnswer) {
       const timer = setTimeout(() => this.#answerAutomatically(request.id), autoAnswer.afterMs);
@@ -1921,7 +1930,7 @@ export class AttentionRegistry {
       return;
     }
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions);
-    this.#expireDetachedInChat(agentId, publicThreadId);
+    this.#expireDetachedInChat(agentId, publicThreadId, turnId);
     const pending: PendingPrompt = {
       client,
       id: request.id,
@@ -1993,7 +2002,7 @@ export class AttentionRegistry {
     }
 
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions);
-    this.#expireDetachedInChat(agentId, publicThreadId);
+    this.#expireDetachedInChat(agentId, publicThreadId, turnId);
     this.#prompts.set(request.id, {
       client,
       id: request.id,
@@ -2085,11 +2094,13 @@ export class AttentionRegistry {
     return true;
   }
 
-  #expireDetachedInChat(agentId: string, publicThreadId: string): void {
+  #expireDetachedInChat(agentId: string, publicThreadId: string, turnId: string): void {
+    const routineQuestion = this.#routines.runsTurn(turnId);
     let changed = false;
     for (const [requestId, pending] of this.#prompts) {
       if (!pending.detached || pending.saving) continue;
       if (pending.agentId !== agentId || pending.publicThreadId !== publicThreadId) continue;
+      if (routineQuestion && !this.#routines.runsTurn(pending.turnId)) continue;
       this.#expirePrompt(requestId, pending);
       changed = true;
     }
@@ -2145,7 +2156,8 @@ export class AttentionRegistry {
         !takeover.detached &&
         !takeover.released
       ) {
-        this.#resolveBrowserTakeover(key, takeover, "cancel");
+        if (providerStoppedWaiting) this.#releaseBrowserTakeover(key, takeover);
+        else this.#resolveBrowserTakeover(key, takeover, "cancel");
       }
     }
     if (changed) this.#emitRuntimeSnapshot();

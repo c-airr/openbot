@@ -41,7 +41,9 @@ import {
   STORAGE_CAPABILITY,
   type TeamRole,
   withFastServiceTiers,
+  withKeptModels,
   withSteeringModels,
+  withWhatsAppReadOnly,
   withWhatsAppStatusReactions,
   withWhatsAppWorkingMessages,
   withWorkspaceOnlyLimit,
@@ -148,6 +150,7 @@ import { HOST_MEMBER_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/
 import { HOST_PERSONALITY_CAPABILITY } from "@openbot/contracts/team-protocol/host-personality-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_RESTART_CAPABILITY } from "@openbot/contracts/team-protocol/host-restart-v1";
+import { HOST_SIGNAL_HOME_CAPABILITY } from "@openbot/contracts/team-protocol/host-signal-home-v1";
 import { HOST_TIMEZONE_CAPABILITY } from "@openbot/contracts/team-protocol/host-timezone-v1";
 import { HOST_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/host-update-v1";
 import { HOST_VOICE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/host-voice-model-v1";
@@ -168,6 +171,10 @@ import { MEMORY_REVIEW_CAPABILITY } from "@openbot/contracts/team-protocol/memor
 import { MESSAGE_DELETE_CAPABILITY, MESSAGE_DELETE_ROUTES } from "@openbot/contracts/team-protocol/message-delete-v1";
 import { MESSAGE_PINS_CAPABILITY } from "@openbot/contracts/team-protocol/message-pins-v1";
 import { MODEL_STEERING_CAPABILITY, MODEL_STEERING_ROUTES } from "@openbot/contracts/team-protocol/model-steering-v1";
+import {
+  MODEL_VISIBILITY_KEPT_CAPABILITY,
+  MODEL_VISIBILITY_KEPT_ROUTES,
+} from "@openbot/contracts/team-protocol/model-visibility-kept-v1";
 import { ONEPASSWORD_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/onepassword-connector-v1";
 import { PASSWORD_MANAGERS_CAPABILITY } from "@openbot/contracts/team-protocol/password-managers-v1";
 import { PROVIDER_ACCOUNT_MODELS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-models-v1";
@@ -204,10 +211,14 @@ import { VAULT_V2_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v2";
 import { VAULT_V3_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v3";
 import { VAULT_V4_CAPABILITY } from "@openbot/contracts/team-protocol/vault-v4";
 import { WHATSAPP_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-connector-v1";
+import { WHATSAPP_READ_ONLY_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-read-only-v1";
 import { WHATSAPP_STATUS_REACTIONS_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-status-reactions-v1";
 import { WHATSAPP_WORKING_MESSAGE_CAPABILITY } from "@openbot/contracts/team-protocol/whatsapp-working-message-v1";
 import { WORKFLOWS_CHATS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-chats-v1";
 import { WORKFLOWS_GITHUB_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-github-v1";
+import { WORKFLOWS_MEDIA_SIZE_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-media-size-v1";
+import { WORKFLOWS_MEDIA_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-media-v1";
+import { WORKFLOWS_PAUSE_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-pause-v1";
 import { WORKFLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-v1";
 import { WORKSPACE_ONLY_PROCESS_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-only-process-limit-v1";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
@@ -252,6 +263,7 @@ import {
   getHostMemoryReview,
   getHostPersonality,
   getHostReleaseStatus,
+  getHostSignalHome,
   getHostSkillLearning,
   getHostTimezone,
   getHostUpdateStatus,
@@ -317,6 +329,7 @@ import {
   setHostMcpAccess,
   setHostMemoryReview,
   setHostPersonality,
+  setHostSignalHome,
   setHostSkillLearning,
   setHostTimezone,
   setHostUpdateSettings,
@@ -341,10 +354,12 @@ import {
   whatsappConnectorGroups,
   whatsappConnectorLinkState,
   whatsappConnectorOverview,
+  whatsappConnectorReadOnly,
   whatsappConnectorReconnect,
   whatsappConnectorRemoveSender,
   whatsappConnectorSetEnabled,
   whatsappConnectorSetOwnNumber,
+  whatsappConnectorSetSenderReadOnly,
   whatsappConnectorSetStatusReactions,
   whatsappConnectorSetWorkingMessage,
   whatsappConnectorStartLink,
@@ -526,6 +541,8 @@ type HostRequestActions = Pick<
   | "setServerTimezone"
   | "loadServerVoiceModel"
   | "changeServerVoiceModel"
+  | "loadServerSignalHome"
+  | "setServerSignalHome"
   | "loadAgentMemoryLimit"
   | "setAgentMemoryLimit"
   | "loadMemoryReview"
@@ -601,6 +618,7 @@ type HostRequestActions = Pick<
   | "setWhatsAppOwnNumber"
   | "setWhatsAppWorkingMessage"
   | "setWhatsAppStatusReactions"
+  | "setWhatsAppSenderReadOnly"
   | "loadServerUpdate"
   | "checkServerUpdate"
   | "startServerUpdate"
@@ -716,6 +734,16 @@ export function createHostRequestChecks(capabilities: ServerCapabilities): HostR
       has(serverId, WORKFLOWS_CAPABILITY) &&
       has(serverId, WORKFLOWS_CHATS_CAPABILITY) &&
       has(serverId, ROUTINE_RESULTS_CAPABILITY),
+    canUseWorkflowMedia: (serverId) => has(serverId, WORKFLOWS_CAPABILITY) && has(serverId, WORKFLOWS_MEDIA_CAPABILITY),
+    canUseWorkflowMediaSize: (serverId) =>
+      has(serverId, WORKFLOWS_CAPABILITY) &&
+      has(serverId, WORKFLOWS_MEDIA_CAPABILITY) &&
+      has(serverId, WORKFLOWS_MEDIA_SIZE_CAPABILITY),
+    canUseWorkflowAssets: (serverId) =>
+      has(serverId, WORKFLOWS_CAPABILITY) &&
+      has(serverId, WORKFLOWS_MEDIA_CAPABILITY) &&
+      has(serverId, STORAGE_CAPABILITY),
+    canPauseWorkflows: (serverId) => has(serverId, WORKFLOWS_CAPABILITY) && has(serverId, WORKFLOWS_PAUSE_CAPABILITY),
     canReadServerStorage: (serverId) => has(serverId, STORAGE_CAPABILITY),
     canOrganizeLibrary: (serverId) => has(serverId, STORAGE_CAPABILITY) && has(serverId, LIBRARY_FOLDERS_CAPABILITY),
     canControlComputer: (serverId) => has(serverId, REMOTE_DESKTOP_CAPABILITY),
@@ -809,6 +837,8 @@ export function createHostRequestActions({
     capabilityApi(serverId, HOST_RESTART_CAPABILITY, "mobile.server.settings.restartUnsupported");
   const timezoneAdmin = (serverId: string) =>
     capabilityApi(serverId, HOST_TIMEZONE_CAPABILITY, "mobile.server.settings.timezoneUnsupported");
+  const signalHomeAdmin = (serverId: string) =>
+    capabilityApi(serverId, HOST_SIGNAL_HOME_CAPABILITY, "mobile.server.settings.signalHomeUnsupported");
   const voiceModelAdmin = (serverId: string) =>
     capabilityApi(serverId, HOST_VOICE_MODEL_CAPABILITY, "mobile.server.settings.voiceModelUnsupported");
   const memoryLimitAdmin = (serverId: string) =>
@@ -885,6 +915,8 @@ export function createHostRequestActions({
     loadServerTimezone: async (serverId) => runTeamRequest(getHostTimezone(timezoneAdmin(serverId))),
     setServerTimezone: async (timezone, serverId) => runTeamRequest(setHostTimezone(timezoneAdmin(serverId), timezone)),
     loadServerVoiceModel: async (serverId) => runTeamRequest(getHostVoiceModel(voiceModelAdmin(serverId))),
+    loadServerSignalHome: async (serverId) => runTeamRequest(getHostSignalHome(signalHomeAdmin(serverId))),
+    setServerSignalHome: async (home, serverId) => runTeamRequest(setHostSignalHome(signalHomeAdmin(serverId), home)),
     changeServerVoiceModel: async (change, serverId) =>
       runTeamRequest(changeHostVoiceModel(voiceModelAdmin(serverId), change)),
     loadAgentMemoryLimit: async (serverId) => runTeamRequest(getHostAgentMemoryLimit(memoryLimitAdmin(serverId))),
@@ -1022,11 +1054,15 @@ export function createHostRequestActions({
             has(serverId, WHATSAPP_STATUS_REACTIONS_CAPABILITY)
               ? whatsappConnectorStatusReactions(api)
               : Effect.succeed(null),
+            has(serverId, WHATSAPP_READ_ONLY_CAPABILITY) ? whatsappConnectorReadOnly(api) : Effect.succeed(null),
           ],
           { concurrency: "unbounded" },
         ).pipe(
-          Effect.map(([overview, workingMessages, statusReactions]) =>
-            withWhatsAppStatusReactions(withWhatsAppWorkingMessages(overview, workingMessages), statusReactions),
+          Effect.map(([overview, workingMessages, statusReactions, readOnly]) =>
+            withWhatsAppReadOnly(
+              withWhatsAppStatusReactions(withWhatsAppWorkingMessages(overview, workingMessages), statusReactions),
+              readOnly,
+            ),
           ),
         ),
       );
@@ -1064,6 +1100,13 @@ export function createHostRequestActions({
       runTeamRequest(
         whatsappConnectorSetStatusReactions(
           capabilityApi(serverId, WHATSAPP_STATUS_REACTIONS_CAPABILITY, "mobile.server.connectors.unsupported"),
+          input,
+        ),
+      ),
+    setWhatsAppSenderReadOnly: async (input, serverId) =>
+      runTeamRequest(
+        whatsappConnectorSetSenderReadOnly(
+          capabilityApi(serverId, WHATSAPP_READ_ONLY_CAPABILITY, "mobile.server.connectors.unsupported"),
           input,
         ),
       ),
@@ -1225,15 +1268,18 @@ export function createHostRequestActions({
         : has(serverId, AGENT_FAST_MODE_CAPABILITY)
           ? AGENT_FAST_MODE_ROUTES.models
           : null;
-      const [options, fast, steering] = await Promise.all([
+      const [options, fast, steering, kept] = await Promise.all([
         models,
         fastRoute ? request("POST", fastRoute, decodeAgentFastModels, {}, serverId).catch(() => []) : [],
         has(serverId, MODEL_STEERING_CAPABILITY)
           ? request("POST", MODEL_STEERING_ROUTES.list, decodeAgentSteeringModels, {}, serverId).catch(() => [])
           : [],
+        has(serverId, MODEL_VISIBILITY_KEPT_CAPABILITY)
+          ? request("POST", MODEL_VISIBILITY_KEPT_ROUTES.list, decodeAgentSteeringModels, {}, serverId).catch(() => [])
+          : [],
       ]);
       return withWorkspaceOnlyLimit(
-        withSteeringModels(withFastServiceTiers(options, fast), steering),
+        withSteeringModels(withKeptModels(withFastServiceTiers(options, fast), kept), steering),
         has(serverId, WORKSPACE_ONLY_PROCESS_LIMIT_CAPABILITY),
       );
     },
