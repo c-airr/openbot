@@ -6,6 +6,13 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.77.1] - 2026-11-23
+
+### Changed
+
+- Discord activity shows how many agent turns and subagents are running. Idle appears after ten minutes away only when no agent is running.
+- Merge the latest OpenBot changes into the fork.
+
 ## [0.76.6] - 2026-11-23
 
 ### Changed
