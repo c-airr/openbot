@@ -441,7 +441,7 @@ export class TurnLifecycle {
   readonly #codexChildren = new Map<string, CodexSubagentParent>();
   readonly #codexChildTurns = new Map<string, { turnId: string; client: AgentClient }>();
   readonly #subagentTurns = new Map<string, Set<string>>();
-  readonly #runningSubagents = new Map<string, Map<string, number>>();
+  readonly #runningSubagents = new Map<string, Map<string, { count: number; threadId: string | null }>>();
   readonly #waitingThreads = new Map<string, { agentId: string; client: AgentClient; since: number }>();
   readonly #archivableRoutineSessions = new Set<string>();
 
@@ -543,7 +543,7 @@ export class TurnLifecycle {
   runningAgentCount(): number {
     let count = this.#runningTurns.size;
     for (const turns of this.#runningSubagents.values()) {
-      for (const running of turns.values()) count += running;
+      for (const running of turns.values()) count += running.count;
     }
     return count;
   }
@@ -634,7 +634,14 @@ export class TurnLifecycle {
         endedChildren.push(threadId);
       }
     const lostThreads = [...this.#waitingThreads].filter(([, work]) => work.client === client);
-    for (const [threadId, work] of lostThreads) this.#loseBackgroundWork(threadId, work.agentId);
+    for (const [threadId, work] of lostThreads) {
+      const counts = this.#runningSubagents.get(work.agentId);
+      if (counts) {
+        for (const [turnId, running] of counts) if (running.threadId === threadId) counts.delete(turnId);
+        if (counts.size === 0) this.#runningSubagents.delete(work.agentId);
+      }
+      this.#loseBackgroundWork(threadId, work.agentId);
+    }
     if (lostThreads.length > 0) this.#hooks.emitRuntimeSnapshot();
     for (const [turnId, turn] of this.#runningTurns) {
       if (turn.client !== client) continue;
@@ -3380,8 +3387,16 @@ export class TurnLifecycle {
   #trackSubagents(agentId: string, turnId: string, subagents: readonly ConversationSubagent[] | undefined): boolean {
     const count = subagents?.filter((subagent) => subagent.status === "running").length ?? 0;
     const counts = this.#runningSubagents.get(agentId);
-    const countChanged = (counts?.get(turnId) ?? 0) !== count;
-    if (count > 0) this.#runningSubagents.set(agentId, (counts ?? new Map()).set(turnId, count));
+    const previous = counts?.get(turnId);
+    const countChanged = (previous?.count ?? 0) !== count;
+    if (count > 0)
+      this.#runningSubagents.set(
+        agentId,
+        (counts ?? new Map()).set(turnId, {
+          count,
+          threadId: this.#runningTurns.get(turnId)?.threadId ?? previous?.threadId ?? null,
+        }),
+      );
     else if (counts) {
       counts.delete(turnId);
       if (counts.size === 0) this.#runningSubagents.delete(agentId);
