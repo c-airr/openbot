@@ -400,6 +400,18 @@
 .message-bubble-commentary > .ui-bubble-content,
 .message-bubble-commentary .message-copy {
   font-size: var(--openbot-text-sm);
+  line-height: 1.35;
+}
+
+.message-commentary-collapsed {
+  max-height: 4.1em;
+  overflow: hidden;
+}
+
+.message-commentary-toggle {
+  font-size: var(--openbot-text-xs);
+  min-height: 0;
+  padding: 2px 0;
 }
 
 .ui-bubble.message-bubble-answer.ui-bubble-variant-muted > .ui-bubble-content {

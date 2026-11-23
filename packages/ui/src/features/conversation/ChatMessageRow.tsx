@@ -10,7 +10,7 @@ import {
   MessageHeader,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { children, createMemo, For, Show } from "solid-js";
+import { children, createMemo, createSignal, For, Show } from "solid-js";
 import { avatarHeadColor } from "../../bloub-avatar";
 import type { AgentMessage, AgentProfile } from "../../data";
 import { useText } from "../../text";
@@ -78,6 +78,10 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
   const own = () => props.author.kind === "you";
   const member = () => props.author.kind === "member";
   const person = () => own() || member();
+  const commentary = () => !person() && props.message.itemType === "commentary";
+  const longCommentary = () =>
+    commentary() && (props.message.body.length > 180 || props.message.body.split("\n").length > 3);
+  const [commentaryExpanded, setCommentaryExpanded] = createSignal(false);
   const variant = createMemo(() => conversationBubbleVariant(props.message));
   const seed = () => props.author.agent?.avatarSeed ?? props.author.avatarSeed;
   const backdropBubbles = useBackdropBubbles();
@@ -100,13 +104,13 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
   const bubbleClass = () => {
     const solid = solidColor();
     const itemType = props.message.itemType;
-    const commentary = !person() && itemType === "commentary";
+    const isCommentary = commentary();
     return {
       "message-bubble-member": member(),
-      "message-bubble-colored": !commentary && chatColor() !== undefined,
+      "message-bubble-colored": !isCommentary && chatColor() !== undefined,
       "message-bubble-solid": solid !== undefined,
       "message-bubble-solid-dark-text": solid !== undefined && solidBubbleTakesDarkText(solid),
-      "message-bubble-commentary": commentary,
+      "message-bubble-commentary": isCommentary,
       "message-bubble-answer":
         !person() &&
         (itemType === "agentMessage" || itemType === "final_answer") &&
@@ -315,7 +319,26 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
           </MessageHeader>
         </Show>
         <div class="message-shell">
-          <Show when={person()} fallback={bubble(messageBody())}>
+          <Show
+            when={person()}
+            fallback={bubble(
+              <>
+                <div class={longCommentary() && !commentaryExpanded() ? "message-commentary-collapsed" : undefined}>
+                  {messageBody()}
+                </div>
+                <Show when={longCommentary()}>
+                  <Button
+                    variant="ghost"
+                    class="message-commentary-toggle"
+                    aria-expanded={commentaryExpanded() ? "true" : "false"}
+                    onClick={() => setCommentaryExpanded(!commentaryExpanded())}
+                  >
+                    {commentaryExpanded() ? t("chat.message.showLess") : t("chat.message.showFull")}
+                  </Button>
+                </Show>
+              </>,
+            )}
+          >
             <div class="message-stack">
               {messageBody((content, imagesOnly) => (
                 <Show when={!imagesOnly() || (props.reactions?.length ?? 0) > 0 || extra.toArray().length > 0}>
