@@ -17,11 +17,14 @@ import { connect, type Socket } from "node:net";
 import { join } from "node:path";
 import type { DiscordPresenceInput } from "@openbot/contracts/ipc";
 import { Option, Schema } from "effect";
-import { app } from "electron";
+import { app, BrowserWindow } from "electron";
 
 const CONFIG_FILE = "openbot-discord-presence-v1.json";
 const RETRY_MS = 60_000;
 const CONNECT_TIMEOUT_MS = 1_000;
+const IDLE_MS = 10 * 60_000;
+const FOCUS_CHECK_MS = 15_000;
+const APP_STARTED_AT = Date.now();
 const OP_HANDSHAKE = 0;
 const OP_FRAME = 1;
 
@@ -86,13 +89,14 @@ function encodeFrame(opcode: number, payload: unknown): Buffer {
  * The card that Discord shows: the app line, then the model and the provider of the open chat. Nothing
  * else of the app goes out, so the card shows what the user chose, not what they talk about.
  */
-function presenceActivity(input: DiscordPresenceInput, config: PresenceConfig) {
+function presenceActivity(input: DiscordPresenceInput, config: PresenceConfig, idle: boolean) {
   const model = input.model ? modelLabel(input.model, input.effort) : null;
   const provider = input.provider ? providerLabel(input.provider, input.model) : null;
   const state = [model, provider].filter((part): part is string => Boolean(part)).join(" · ");
   return {
-    details: APP_LINE,
+    details: idle ? `${APP_LINE} · Idle` : APP_LINE,
     ...(state ? { state: state.slice(0, 128) } : {}),
+    timestamps: { start: APP_STARTED_AT },
     // The uploaded image of the config file wins; without one, the card shows the fork's own icon.
     assets: { large_image: config.largeImageKey ?? LOGO_URL, large_text: APP_LINE },
     instance: false,
@@ -134,6 +138,28 @@ class DiscordPresence {
   #pending: DiscordPresenceInput | null = null;
   #retryAt = 0;
   #retryTimer: ReturnType<typeof setTimeout> | null = null;
+  #lastFocused = Date.now();
+  #idle = false;
+
+  constructor() {
+    app.on("browser-window-focus", () => {
+      this.#lastFocused = Date.now();
+      if (!this.#idle) return;
+      this.#idle = false;
+      if (this.#pending && this.#ready) this.#publish(this.#pending);
+    });
+    app.on("browser-window-blur", () => {
+      this.#lastFocused = Date.now();
+    });
+    const timer = setInterval(() => {
+      if (BrowserWindow.getAllWindows().some((window) => window.isFocused())) this.#lastFocused = Date.now();
+      const idle = Date.now() - this.#lastFocused >= IDLE_MS;
+      if (idle === this.#idle) return;
+      this.#idle = idle;
+      if (this.#pending && this.#ready) this.#publish(this.#pending);
+    }, FOCUS_CHECK_MS);
+    timer.unref();
+  }
 
   async update(input: DiscordPresenceInput): Promise<void> {
     this.#config ??= await readConfig();
@@ -152,12 +178,10 @@ class DiscordPresence {
     const socket = this.#socket;
     const config = this.#config;
     if (!socket || socket.destroyed || !config) return;
-    const open = Boolean(input.model ?? input.provider);
     socket.write(
       encodeFrame(OP_FRAME, {
         cmd: "SET_ACTIVITY",
-        // A window with no chat open clears the card.
-        args: { pid: process.pid, activity: open ? presenceActivity(input, config) : null },
+        args: { pid: process.pid, activity: presenceActivity(input, config, this.#idle) },
         nonce: randomUUID(),
       }),
     );
@@ -212,7 +236,7 @@ class DiscordPresence {
   #armRetry(): void {
     this.#retryAt = Date.now() + RETRY_MS;
     const pending = this.#pending;
-    if (!pending || !(pending.model || pending.provider)) return;
+    if (!pending) return;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = setTimeout(() => {
       this.#retryTimer = null;

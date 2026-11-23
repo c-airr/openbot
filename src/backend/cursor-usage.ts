@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Option, Schema } from "effect";
 import { type AccountRateLimitsReadResult, type AccountRateLimitWindowResult, getRecord } from "./protocol";
@@ -40,6 +40,13 @@ const CursorAuth = Schema.Struct({
   storedIn: Schema.optional(Schema.String),
 });
 const decodeCursorAuth = Schema.decodeUnknownOption(Schema.fromJsonString(CursorAuth));
+const WINDOWS_DPAPI_SCRIPT = `
+Add-Type -AssemblyName System.Security
+$stored = Get-Content -LiteralPath $env:OPENBOT_CURSOR_DPAPI_FILE -Raw | ConvertFrom-Json
+$encrypted = [Convert]::FromBase64String($stored.dpapi)
+$plain = [Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+[Console]::Out.Write([Text.Encoding]::UTF8.GetString($plain))
+`;
 
 function secretServiceEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   if (env.DBUS_SESSION_BUS_ADDRESS || !env.XDG_RUNTIME_DIR) return env;
@@ -102,8 +109,21 @@ const readAccessToken = Effect.fn("Cursor.readAccessToken")(function* () {
   const auth = decodeCursorAuth(text.value);
   if (Option.isNone(auth)) return null;
   if (auth.value.accessToken) return auth.value.accessToken;
-  if (auth.value.storedIn !== "os-secret-store" || platform() !== "linux") return null;
-  return yield* readSecretServiceAccessToken(authFile);
+  if (auth.value.storedIn !== "os-secret-store") return null;
+  if (platform() === "linux") return yield* readSecretServiceAccessToken(authFile);
+  if (platform() !== "win32") return null;
+  const decrypted = yield* Effect.tryPromise({
+    try: () =>
+      execFileAsync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_DPAPI_SCRIPT], {
+        timeout: CURSOR_USAGE_TIMEOUT_MS,
+        windowsHide: true,
+        env: { ...process.env, OPENBOT_CURSOR_DPAPI_FILE: join(dirname(authFile), "auth.dpapi") },
+      }),
+    catch: (cause) => new CursorUsageFailed({ cause }),
+  }).pipe(Effect.option);
+  if (Option.isNone(decrypted)) return null;
+  const stored = decodeCursorAuth(decrypted.value.stdout);
+  return Option.isSome(stored) ? stored.value.accessToken || null : null;
 });
 
 const postDashboard = Effect.fn("Cursor.postDashboard")(function* (

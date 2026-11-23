@@ -393,6 +393,11 @@
   color: var(--openbot-text-muted);
 }
 
+.message-entry-agent .ui-bubble.message-bubble-commentary {
+  max-width: min(100%, max(240px, 33%), 400px);
+  font-size: var(--openbot-text-sm);
+}
+
 .ui-bubble.message-bubble-answer.ui-bubble-variant-muted > .ui-bubble-content {
   border-color: color-mix(in srgb, var(--openbot-text-muted) 42%, transparent);
   background: var(--openbot-bg-surface-raised);
