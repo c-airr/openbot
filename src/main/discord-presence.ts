@@ -240,8 +240,7 @@ class DiscordPresence {
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = setTimeout(() => {
       this.#retryTimer = null;
-      if (this.#pending !== pending) return;
-      void this.update(pending).catch(() => undefined);
+      if (this.#pending) void this.update(this.#pending).catch(() => undefined);
     }, RETRY_MS);
     this.#retryTimer.unref();
   }

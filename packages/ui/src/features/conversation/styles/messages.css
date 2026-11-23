@@ -395,6 +395,10 @@
 
 .message-entry-agent .ui-bubble.message-bubble-commentary {
   max-width: min(100%, max(240px, 33%), 400px);
+}
+
+.message-bubble-commentary > .ui-bubble-content,
+.message-bubble-commentary .message-copy {
   font-size: var(--openbot-text-sm);
 }
 

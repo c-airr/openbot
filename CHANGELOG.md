@@ -6,6 +6,18 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.76.6] - 2026-11-23
+
+### Changed
+
+- Make intermediate agent messages more compact.
+- Show idle and keep the session timer in Discord activity.
+
+### Fixed
+
+- Restore Cursor usage for Windows sign-ins stored with DPAPI.
+- Reconnect Discord activity after its model changes during a reconnect delay.
+
 ## [0.76.5] - 2026-11-23
 
 ### Changed
