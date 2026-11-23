@@ -93,6 +93,8 @@ export const messages = {
     "Los miembros de este canal aún no tienen una conversación que compactar. Compáctalo después de que un miembro responda en el canal.",
   "error.backend.channelCompactNotSupported":
     "Ningún miembro de este canal puede compactar a petición. Los miembros que lo admiten compactan su contexto automáticamente cuando está casi lleno.",
+  "error.backend.channelCompactProviderUnavailable":
+    "El proveedor de los miembros del canal no funciona ahora. Actualiza los proveedores y vuelve a compactar el canal.",
   "error.backend.channelArchived": "Restaura este canal antes de enviar mensajes o cambiar tareas.",
   "error.backend.channelArchiveRunning": "Detén el trabajo en curso en este canal y luego elimínalo.",
   "error.backend.channelReferenceUnavailable": "El mensaje del canal al que se hace referencia no está disponible.",
@@ -256,6 +258,8 @@ export const messages = {
   "error.backend.mcpServerInvalid": "OpenBot no puede guardar esta configuración del servidor MCP.",
   "error.backend.mcpServerNoAnswer": "El servidor no respondió en {seconds} segundos.",
   "error.backend.mcpSignInNotAccepted": "El servidor no aceptó ese inicio de sesión.",
+  "error.backend.mcpSignInGrantRefused":
+    "El servidor no aceptó el inicio de sesión. Inicia sesión de nuevo. Si el problema continúa, comprueba que tu cuenta esté en el mismo sitio o región que esta app.",
   "error.backend.mcpSignInAccountRefused":
     "El servidor rechazó la cuenta con la que iniciaste sesión. Comprueba que esa cuenta puede usar el servicio. Para usar otra cuenta, cierra sesión y vuelve a iniciar sesión.",
   "error.backend.mcpSignInClientRefused":
@@ -280,6 +284,8 @@ export const messages = {
     "Este servidor pide un inicio de sesión. Inicia sesión en él desde OpenBot en el equipo host.",
   "error.backend.mcpSignInNeedsHttps":
     "Este servidor pide un inicio de sesión, y OpenBot solo inicia sesión por https. Cambia la URL a {url}.",
+  "error.backend.mcpSignInOtherAddress":
+    "Este servidor solo inicia sesión en {url}. Cambia la URL a esta dirección y vuelve a iniciar sesión.",
   "error.backend.mcpSignInCancelled": "Se canceló el inicio de sesión.",
   "error.backend.mcpSignInTimedOut": "El inicio de sesión no se completó en el navegador.",
   "error.backend.mcpSignInRefused": "La página de inicio de sesión rechazó el acceso. Inicia sesión de nuevo.",
@@ -381,6 +387,7 @@ export const messages = {
     "Solo la app de OpenBot del teléfono puede enviar este informe, porque añade la versión y el registro de soporte del teléfono. Abre este chat en el teléfono. Si ves este mensaje allí, actualiza la app del teléfono.",
   "error.backend.takeoverInactive": "Esta toma de control del navegador ya no está activa.",
   "error.backend.authSubmitting": "Ya se están enviando los datos de autenticación.",
+  "error.backend.apiKeyListFailed": "OpenBot no pudo leer las claves de API guardadas.",
   "error.backend.apiKeySaveFailed": "OpenBot no pudo guardar la clave de API. Inténtalo de nuevo.",
   "error.backend.apiKeySaving": "La clave de API ya se está guardando.",
   "error.backend.apiKeyAnswerUnreadable":

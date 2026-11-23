@@ -96,6 +96,7 @@ export const messages = {
   "app.socialFollow.redditTitle": "Jak używam OpenBota",
   "app.rail.usageRings": "Użycie {name}: {windows}. Otwórz użycie",
   "app.rail.freeLlm": "FreeLLMAPI: zużyto {percent}% dzisiejszego budżetu. Otwórz wszystkie modele",
+  "app.rail.usageUnavailable": "Użycie {name} niedostępne. Otwórz użycie",
   "app.rail.customAgentUsage": "Użycie {name}. Otwórz użycie",
   "app.rail.moreUsage": {
     one: "Jeszcze {count} konto. Otwórz użycie",

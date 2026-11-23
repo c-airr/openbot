@@ -93,6 +93,8 @@ export const messages = {
     "Die Mitglieder dieses Kanals haben noch keine Unterhaltung zum Komprimieren. Komprimiere ihn, nachdem ein Mitglied im Kanal geantwortet hat.",
   "error.backend.channelCompactNotSupported":
     "Kein Mitglied dieses Kanals kann auf Anfrage komprimieren. Mitglieder, die es unterstützen, komprimieren ihren Kontext automatisch, wenn er fast voll ist.",
+  "error.backend.channelCompactProviderUnavailable":
+    "Der Anbieter der Kanalmitglieder funktioniert gerade nicht. Aktualisiere die Anbieter und komprimiere den Kanal dann erneut.",
   "error.backend.channelArchived":
     "Stelle diesen Kanal wieder her, bevor du Nachrichten sendest oder Aufgaben änderst.",
   "error.backend.channelArchiveRunning": "Stoppe die laufende Arbeit in diesem Kanal und lösche ihn dann.",
@@ -267,6 +269,8 @@ export const messages = {
   "error.backend.mcpServerInvalid": "OpenBot kann diese MCP-Server-Konfiguration nicht speichern.",
   "error.backend.mcpServerNoAnswer": "Der Server hat innerhalb von {seconds} Sekunden nicht geantwortet.",
   "error.backend.mcpSignInNotAccepted": "Der Server hat diese Anmeldung nicht akzeptiert.",
+  "error.backend.mcpSignInGrantRefused":
+    "Der Server hat die Anmeldung nicht akzeptiert. Melde dich erneut an. Wenn das Problem bleibt, prüfe, ob dein Konto auf derselben Site oder in derselben Region wie diese App ist.",
   "error.backend.mcpSignInAccountRefused":
     "Der Server hat das Konto abgelehnt, mit dem du dich angemeldet hast. Prüfe, ob dieses Konto den Dienst nutzen darf. Für ein anderes Konto melde dich ab und dann wieder an.",
   "error.backend.mcpSignInClientRefused":
@@ -291,6 +295,8 @@ export const messages = {
     "Dieser Server verlangt eine Anmeldung. Melde dich in OpenBot auf dem Host-Computer bei ihm an.",
   "error.backend.mcpSignInNeedsHttps":
     "Dieser Server verlangt eine Anmeldung, und OpenBot meldet sich nur über https an. Ändere die URL in {url}.",
+  "error.backend.mcpSignInOtherAddress":
+    "Dieser Server meldet sich nur unter {url} an. Ändere die URL in diese Adresse und melde dich dann erneut an.",
   "error.backend.mcpSignInCancelled": "Die Anmeldung wurde abgebrochen.",
   "error.backend.mcpSignInTimedOut": "Die Anmeldung wurde im Browser nicht abgeschlossen.",
   "error.backend.mcpSignInRefused": "Die Anmeldeseite hat den Zugriff abgelehnt. Melde dich erneut an.",
@@ -397,6 +403,7 @@ export const messages = {
     "Nur die OpenBot-Telefon-App kann diesen Bericht senden, weil sie Version und Supportprotokoll des Telefons hinzufügt. Öffne diesen Chat auf dem Telefon. Wenn du diese Meldung dort siehst, aktualisiere die Telefon-App.",
   "error.backend.takeoverInactive": "Diese Browserübernahme ist nicht mehr aktiv.",
   "error.backend.authSubmitting": "Die Authentifizierung wird bereits übermittelt.",
+  "error.backend.apiKeyListFailed": "OpenBot konnte die gespeicherten API-Schlüssel nicht lesen.",
   "error.backend.apiKeySaveFailed": "OpenBot konnte den API-Schlüssel nicht speichern. Versuche es erneut.",
   "error.backend.apiKeySaving": "Der API-Schlüssel wird bereits gespeichert.",
   "error.backend.apiKeyAnswerUnreadable":

@@ -501,6 +501,10 @@ interface ProviderModelCatalog {
   ): Effect.Effect<{ source: ProviderModelSource | null; startSettings: string | null }, unknown>;
 }
 
+function steeringFields(model: ModelListResponse["data"][number]): Pick<AgentModelOption, "steersTurns"> {
+  return model.steersTurns ? { steersTurns: true } : {};
+}
+
 export interface BuiltInProviderDriver {
   id: AgentProviderId;
   signIn: ProviderSignIn;
@@ -549,7 +553,7 @@ function piClient(
           },
         }
       : {}),
-    extraEnv: () => ({ ...context.agentEnvironment?.() }),
+    extraEnv: () => ({ ...piCacheEnvironment(context), ...context.agentEnvironment?.() }),
     ...piKeyProvider(provider, context),
     ...(context.providerStateDirectory ? { providerStateDirectory: context.providerStateDirectory } : {}),
     mcpServers: context.mcpServers,
@@ -558,6 +562,10 @@ function piClient(
     ...(context.mcpEndpoint ? { mcpEndpoint: context.mcpEndpoint } : {}),
     ...(history ? { history } : {}),
   });
+}
+
+function piCacheEnvironment(context: ProviderClientContext): Readonly<Record<string, string>> {
+  return (context.promptCacheTtl?.() ?? DEFAULT_PROMPT_CACHE_TTL.ttl) === "1h" ? { PI_CACHE_RETENTION: "long" } : {};
 }
 
 function piKeyProvider(provider: "pi" | KeyOnlyProviderId, context: ProviderClientContext) {
@@ -809,6 +817,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
       hiddenWhenSignedOut: true,
       partialListAtStart: true,
       relistAfterStart: true,
+      modelFields: steeringFields,
       fallback: modelsAfterOpenCodeDiscoveryFailure,
     },
     resolveCli: resolveOpencodeCli,
@@ -897,7 +906,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
       timeoutMs: 30_000,
       acpLogout: true,
     },
-    catalog: { slowList: true, ownOrder: true },
+    catalog: { slowList: true, ownOrder: true, relistWhileRunning: true },
     resolveCli: resolveAntigravityCli,
     createClient: (cli, timeout, context, confinement) =>
       new AcpAgentClient(cli, timeout, {
@@ -1347,7 +1356,7 @@ export const BUILT_IN_PROVIDER_DRIVERS: readonly BuiltInProviderDriver[] = [
       slowList: true,
       partialListAtStart: true,
       relistAfterStart: true,
-      modelFields: (model) => (model.steersTurns ? { steersTurns: true } : {}),
+      modelFields: steeringFields,
     },
     resolveCli: () => Effect.succeed(CUSTOM_AGENTS_CLI),
     createClient: (_cli, timeout, context, confinement) =>

@@ -46,7 +46,7 @@ import {
   withWhatsAppWorkingMessages,
   withWorkspaceOnlyLimit,
 } from "@openbot/contracts/ipc";
-import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { AGENT_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-access-v1";
 import { AGENT_ADMIN_CAPABILITY, AGENT_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/agent-admin-v1";
@@ -150,6 +150,7 @@ import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-r
 import { HOST_RESTART_CAPABILITY } from "@openbot/contracts/team-protocol/host-restart-v1";
 import { HOST_TIMEZONE_CAPABILITY } from "@openbot/contracts/team-protocol/host-timezone-v1";
 import { HOST_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/host-update-v1";
+import { HOST_VOICE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/host-voice-model-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
 import { INSTANCE_TRANSFER_CAPABILITY } from "@openbot/contracts/team-protocol/instance-transfer-v1";
 import {
@@ -228,6 +229,7 @@ import {
   browseChannelFolders,
   cancelHostUpdate,
   cancelSignInRelay,
+  changeHostVoiceModel,
   checkHostForUpdate,
   checkHostRelease,
   clearHostBrowserData,
@@ -253,6 +255,7 @@ import {
   getHostSkillLearning,
   getHostTimezone,
   getHostUpdateStatus,
+  getHostVoiceModel,
   getRoutineResultDestination,
   githubConnectorRepositories,
   githubConnectorRequest,
@@ -521,6 +524,8 @@ type HostRequestActions = Pick<
   | "restartServerItself"
   | "loadServerTimezone"
   | "setServerTimezone"
+  | "loadServerVoiceModel"
+  | "changeServerVoiceModel"
   | "loadAgentMemoryLimit"
   | "setAgentMemoryLimit"
   | "loadMemoryReview"
@@ -637,10 +642,15 @@ type HostRequestActions = Pick<
   | "downloadMessageFile"
 >;
 
-function decodeHostFile(value: unknown): RemoteFileUpload {
+function decodeHostFile(value: unknown, savedFile?: string): RemoteFileUpload {
   if (!isDynamicRecord(value) || !isString(value.name) || !isString(value.mimeType) || !isString(value.base64))
     throw new Error("The host returned an invalid file.");
-  return { name: value.name, mimeType: value.mimeType, base64: value.base64 };
+  const file = value.file;
+  const saved =
+    savedFile !== undefined && isDynamicRecord(file) && file.ref === savedFile && isNumber(file.size)
+      ? { ref: savedFile, size: file.size }
+      : null;
+  return { name: value.name, mimeType: value.mimeType, base64: value.base64, ...(saved ? { file: saved } : {}) };
 }
 
 function hidesAgentsOnHost(capabilities: readonly string[] | undefined): boolean {
@@ -799,6 +809,8 @@ export function createHostRequestActions({
     capabilityApi(serverId, HOST_RESTART_CAPABILITY, "mobile.server.settings.restartUnsupported");
   const timezoneAdmin = (serverId: string) =>
     capabilityApi(serverId, HOST_TIMEZONE_CAPABILITY, "mobile.server.settings.timezoneUnsupported");
+  const voiceModelAdmin = (serverId: string) =>
+    capabilityApi(serverId, HOST_VOICE_MODEL_CAPABILITY, "mobile.server.settings.voiceModelUnsupported");
   const memoryLimitAdmin = (serverId: string) =>
     capabilityApi(serverId, AGENT_MEMORY_LIMIT_CAPABILITY, "mobile.server.settings.memoryLimitUnsupported");
   const memoryReviewAdmin = (serverId: string) =>
@@ -872,6 +884,9 @@ export function createHostRequestActions({
     restartServerItself: async (serverId) => runTeamRequest(requestHostRestart(restartAdmin(serverId))),
     loadServerTimezone: async (serverId) => runTeamRequest(getHostTimezone(timezoneAdmin(serverId))),
     setServerTimezone: async (timezone, serverId) => runTeamRequest(setHostTimezone(timezoneAdmin(serverId), timezone)),
+    loadServerVoiceModel: async (serverId) => runTeamRequest(getHostVoiceModel(voiceModelAdmin(serverId))),
+    changeServerVoiceModel: async (change, serverId) =>
+      runTeamRequest(changeHostVoiceModel(voiceModelAdmin(serverId), change)),
     loadAgentMemoryLimit: async (serverId) => runTeamRequest(getHostAgentMemoryLimit(memoryLimitAdmin(serverId))),
     setAgentMemoryLimit: async (limit, serverId) =>
       runTeamRequest(setHostAgentMemoryLimit(memoryLimitAdmin(serverId), limit)),
@@ -1702,7 +1717,7 @@ export function createHostRequestActions({
         request(
           "GET",
           TEAM_API_ROUTES.attachment(attachmentId),
-          decodeHostFile,
+          (value) => decodeHostFile(value, largeDownload?.file),
           undefined,
           serverId,
           undefined,

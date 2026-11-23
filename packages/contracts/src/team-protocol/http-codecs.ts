@@ -1,6 +1,8 @@
 import { TEAM_API_ROUTES } from "../team-api-routes";
 import { decodeAgentCreateOperation } from "./agent-create-operation-v1";
 import { isAgentCreateRoute } from "./current";
+import { withUsageReadFailed } from "./usage-read-failed-v1";
+import { isUsageRoute } from "./usage-tertiary-v1";
 import {
   decodeTeamProtocolV1CurrentHttpRequest,
   decodeTeamProtocolV1CurrentHttpResponse,
@@ -62,6 +64,7 @@ export interface TeamHttpCodecOptions {
   videoGeneration?: boolean;
   usageTertiary?: boolean;
   usageGroups?: boolean;
+  usageReadFailed?: boolean;
   agentPendingRuntime?: boolean;
   memoryChanges?: boolean;
   queueHold?: boolean;
@@ -160,11 +163,17 @@ const V10_CODEC: TeamHttpCodec = {
   encodeResponse: (method, path, status, value, options) =>
     isCompatibilityRead(method, path, status)
       ? JSON.stringify(decodeTeamProtocolSupportV10(value))
-      : V9_CODEC.encodeResponse(method, path, status, value, options),
+      : options.usageReadFailed && status < 400 && isUsageRoute(method, path)
+        ? JSON.stringify(
+            withUsageReadFailed(JSON.parse(V9_CODEC.encodeResponse(method, path, status, value, options)), value, true),
+          )
+        : V9_CODEC.encodeResponse(method, path, status, value, options),
   decodeResponse: (method, path, status, value) =>
     isCompatibilityRead(method, path, status)
       ? { ...decodeTeamProtocolSupportV10(value) }
-      : V9_CODEC.decodeResponse(method, path, status, value),
+      : status < 400 && isUsageRoute(method, path)
+        ? withUsageReadFailed(V9_CODEC.decodeResponse(method, path, status, value), value)
+        : V9_CODEC.decodeResponse(method, path, status, value),
 };
 
 function isCompatibilityRead(method: string, path: string, status: number): boolean {

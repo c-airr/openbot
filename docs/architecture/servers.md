@@ -430,6 +430,14 @@ Node kinds, port types, statuses, run sources, trigger types and version kinds c
 so a newer host can add one. A client shows a workflow with a node kind or a port type that it does
 not know as read-only (`needsNewerApp`), and keeps the node when it saves.
 
+One registry (`packages/contracts/src/ipc-workflow-nodes.ts`) lists the fields of each node kind:
+which fields the host reads at run time, which take `{{name}}` values, the values that a field can
+have, the values that need an admin, and the fields that hold an ID. A client also shows a workflow
+as read-only when a field has a value that is not in the registry. The host asks for an admin when a
+trigger type or an output target is not in the registry. The agent `edit_workflow` tool refuses a
+value that is not in the registry. To add a node kind or a value, add it to the registry and keep
+every released value.
+
 `workflows-media-v1` lets the host run the `image` and `asset` nodes of `workflows-v1`. An image
 step makes a picture or a video with the subscription of the model's provider and keeps it as a
 generated attachment; a client fetches it through `GET /v1/attachments/:id`. An asset step names a
@@ -509,6 +517,26 @@ step and a webhook trigger, the `check` field of a condition, and `{{name}}` in 
 [Workflows](agents.md#workflows)). The capability adds no route: the fields are text in the graph,
 and a host before it keeps them but does not use them. A client shows the editors and the problems
 only on a host that advertises it.
+
+Each workflow detail has `format` and `hostFormat`; no capability marks them. `format` is the
+lowest workflow format that can show the graph (`workflowGraphFormat` in
+`packages/contracts/src/ipc-workflow-format.ts`). `hostFormat` is `WORKFLOW_FORMAT` of the host. The
+format number goes up without a new capability. A client opens a graph read-only (`needsNewerApp`)
+when its `format` is higher than the client's `WORKFLOW_FORMAT`, or when a node, edge, stroke or
+size has a property that the client does not know. The Team API codec drops unknown properties, so
+the format number is the protection for older clients. The host refuses a create or a save that adds
+or changes a step value that it does not know (`error.workflow.unknownValue`), and keeps a value that
+is already saved. A server transfer copies saved values as they are. A client shows content of a
+newer format only when `hostFormat` is at least that format.
+
+Format 2 adds the output `message` and `{{name}}` in the output title, labels and person. A host of
+format 1 sends the input and keeps `{{...}}` text as it is, so a client shows the message field only
+when `hostFormat` is 2 or higher, or when the field already has a value.
+
+Format 3 adds the built-in fields of schedule, GitHub, Discord, Telegram and Slack triggers. A graph
+is format 3 when a step after the trigger reads one of these names in `{{name}}` or in a check, and no
+step declares that name. A host of format 2 does not give these fields, so the editor offers them,
+and checks names against them, only when `hostFormat` is 3 or higher (`WorkflowAnswerScope`).
 
 `workflows-media-catalog-v1` shows all the models of Sunra and Higgsfield that the canvas can run, not
 only the models of `WORKFLOW_MEDIA_MODELS`. The host reads Sunra's `list_models` and Higgsfield's
@@ -1040,6 +1068,7 @@ host advertises a capability only when its `TeamApiAdmin` member exists.
 | `host-admin-v1` | Server name and logo | `hostAdmin` |
 | `host-update-v1` | Check for, download and restart into an app update; cancel a restart that waits | `hostAdmin` |
 | `host-timezone-v1` | Read and set the server timezone | `hostAdmin` |
+| `host-voice-model-v1` | Read the speech recognition model of the host and its downloads, and select, download, stop or remove a model. Owner or admin. Only a server in server mode, a hosted server or a server on a computer advertises it: the desktop app of a person keeps the model in its own Settings > Voice. Protocol 10 only | `hostAdmin` |
 | `host-turn-limits-v1` | Read and set the turns at the same time on the host (1 to 128, unlimited, or automatic) and the default task limit of an agent (1 to 64). Owner or admin. Protocol 9 only | `hostAdmin` |
 | `host-personality-v1` | Read (any member) and set (owner or admin) the response style of the agents | `hostAdmin` |
 | `host-key-rotation-v1` | Change the host's key. Owner only: an admin gets 403 | none: only the mobile app sends it |
@@ -1114,6 +1143,14 @@ through `hostSetupProviderProps`, and Continue stays blocked until a provider is
 then opens with that provider. The choice stays in memory for the server; it is not written to the
 setup file of this computer. A member, the local server, and a host without `providers-v1` open the
 form directly.
+
+`host-voice-model-v1` gives the dictation model of the host to a remote admin
+(`HostVoiceModelService`, `src/main/host-voice-model.ts`). `read_video` transcribes the sound of a
+video without captions with this model, and it never starts a download. Only the models that the host
+downloads can be selected; a cloud model gets 400. The download route answers when the first status
+of the download arrives, and the download continues on the host; a client reads the route again each
+second while a model downloads. The desktop and web clients show it in Server settings > Agent
+defaults for a joined server; mobile shows it in Server settings > Agents.
 
 `host-timezone-v1` reads and sets the server timezone (`openbot-server-timezone-v1.json`; `null` is
 automatic, the system zone of the host). When an agent creates a routine, the zone comes from the tool

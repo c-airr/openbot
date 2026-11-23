@@ -342,6 +342,7 @@ export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
   mcpListLimit: { ms: 5_000, since: "1.5.11" },
   sessionMeta: { antigravity: { disabledTools: ["schedule", "run_workflow"] } },
   approvedEditSweep: /^\s*Tool call was approved but never executed\.?\s*$/u,
+  mcpCallInputNamesServer: true,
   sessionNotFound: (error, sessionId) => {
     if (error.code === -32603 && error.message.startsWith(`Failed to read session ${sessionId};`)) return true;
     if (error.code === -32602 && error.message === `Session not found: ${sessionId}`) return true;
@@ -389,5 +390,6 @@ export const ANTIGRAVITY_ACP_FLAVOR: AcpFlavor = {
   contextCompaction: "handoff",
   closeKeepsSession: true,
   sessionProcesses: true,
+  modelsLoadWithSession: true,
   keepModelsOnRefreshFailure: true,
 };

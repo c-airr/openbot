@@ -20,6 +20,8 @@ export const messages = {
   "server.connection.loadingHint": "Du kannst einen anderen Server auswählen, während dieser geladen wird.",
   "server.connection.cachedHint":
     "Geladene Inhalte und Entwürfe bleiben erhalten. Serveraktionen werden nach dem erneuten Verbinden fortgesetzt.",
+  "server.connection.computerOffline":
+    "{name} ist offline. Prüfe, ob sein Computer eingeschaltet und OpenBot geöffnet ist und Server veröffentlichen unter Servereinstellungen > Mitglieder aktiviert ist.",
   "server.connection.conversationFailed": "Die Unterhaltung konnte nicht geladen werden. Versuche es erneut.",
   "server.connection.panelsFailed":
     "Einige Bereiche des Arbeitsbereichs konnten nicht geladen werden. Versuche es erneut.",
@@ -396,6 +398,12 @@ export const messages = {
     "Neue Routinen verwenden diese Zeitzone, wenn die Nachricht die Zeitzone des Absenders nicht angibt. Auf einem Server verwendet auch der Browser sie nach dem nächsten Neustart.",
   "server.settings.timezoneAutomatic": "Automatisch ({zone})",
   "server.settings.timezoneLoadFailed": "Die Zeitzone des Servers konnte nicht geladen werden.",
+  "server.settings.voiceModel.section": "Spracherkennung",
+  "server.settings.voiceModel.description":
+    "Agenten auf diesem Server verwenden dieses Modell, um den Ton von Videos ohne Untertitel zu transkribieren.",
+  "server.settings.voiceModel.loadFailed": "Das Spracherkennungsmodell des Servers konnte nicht geladen werden.",
+  "server.settings.voiceModel.group": "Auf diesem Server",
+  "server.settings.voiceModel.removeLabel": "{name} von diesem Server entfernen",
   "server.settings.turnLimit": "Threads gleichzeitig",
   "server.settings.turnLimitDescription":
     "Wie viele Agent-Threads auf diesem Server gleichzeitig laufen können. Mehr Threads brauchen mehr Arbeitsspeicher.",
@@ -559,6 +567,7 @@ export const messages = {
     "Es gibt kein separates Passwort für den Remotedesktop. Die Einstellungen unten legen fest, wer diesen Computer steuern darf.",
   "server.desktop.componentInstalled": "Host-Komponente installiert",
   "server.desktop.componentNotInstalled": "Host-Komponente nicht installiert",
+  "server.desktop.needsX11Session": "X11-Sitzung nötig",
   "server.desktop.sessions": "Unbeaufsichtigt: {unattended} · Aktive Sitzungen: {active}/{max}",
   "server.desktop.unattendedEnabled": "aktiviert",
   "server.desktop.unattendedUnavailable": "nicht verfügbar",

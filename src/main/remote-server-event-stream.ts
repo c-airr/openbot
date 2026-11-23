@@ -20,6 +20,10 @@ import type { LiveVoiceEvent } from "@openbot/contracts/team-protocol/live-voice
 import type { MachineAlertEvent } from "@openbot/contracts/team-protocol/machine-resources-v1";
 import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contracts/team-protocol/optional-events";
 import { addSkillSuggestionNames, SKILL_LEARNING_CAPABILITY } from "@openbot/contracts/team-protocol/skill-learning-v1";
+import {
+  addUsageEventReadFailed,
+  TEAM_USAGE_READ_FAILED_CAPABILITY,
+} from "@openbot/contracts/team-protocol/usage-read-failed-v1";
 import { TEAM_PROTOCOL_V1_WEBSOCKET } from "@openbot/contracts/team-protocol/v1";
 import {
   encodeTeamProtocolV1CurrentClientEvent,
@@ -540,6 +544,7 @@ export class RemoteEventStream {
               return;
             }
             const event = decoded.event;
+            if (this.#advertises(serverId, TEAM_USAGE_READ_FAILED_CAPABILITY)) addUsageEventReadFailed(event, value);
             if (this.#advertises(serverId, SKILL_LEARNING_CAPABILITY)) addSkillSuggestionNames(event, value);
             if (event.type === "team-identity") {
               this.#onServerIdentity(serverId, { serverName: event.serverName, logoVersion: event.logoVersion });

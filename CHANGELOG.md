@@ -6,6 +6,13 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.76.5] - 2026-11-23
+
+### Changed
+
+- Show agent progress messages in gray and add a border and a raised background to completed text replies.
+- Merge OpenBot main into the fork and keep the fork's chat, provider, and usage changes.
+
 ## [0.76.4] - 2026-11-22
 
 ### Fixed

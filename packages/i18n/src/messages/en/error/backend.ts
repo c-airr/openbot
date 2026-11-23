@@ -87,6 +87,8 @@ export const messages = defineMessages("error.backend", {
     "The members of this channel have no conversation to compact yet. Compact it after a member answers in the channel.",
   "error.backend.channelCompactNotSupported":
     "No member of this channel can compact on request. Members that support it compact their context automatically when it is almost full.",
+  "error.backend.channelCompactProviderUnavailable":
+    "The provider of the channel members does not work now. Refresh the providers, then compact the channel again.",
   "error.backend.channelArchived": "Restore this channel before sending messages or changing tasks.",
   "error.backend.channelArchiveRunning": "Stop the running work in this channel, then delete it.",
   "error.backend.channelReferenceUnavailable": "The referenced channel message is unavailable.",
@@ -242,6 +244,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.mcpServerInvalid": "OpenBot cannot save this MCP server configuration.",
   "error.backend.mcpServerNoAnswer": "The server did not answer in {seconds} seconds.",
   "error.backend.mcpSignInNotAccepted": "The server did not accept that sign-in.",
+  "error.backend.mcpSignInGrantRefused":
+    "The server did not accept the sign-in. Sign in again. If the problem continues, make sure that your account is on the same site or region as this app.",
   "error.backend.mcpSignInAccountRefused":
     "The server refused the account that you signed in with. Check that this account can use the service. To use another account, sign out, then sign in again.",
   "error.backend.mcpSignInClientRefused":
@@ -266,6 +270,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.mcpSignInOnHost": "This server asks for a sign-in. Sign in to it in OpenBot on the host computer.",
   "error.backend.mcpSignInNeedsHttps":
     "This server asks for a sign-in, and OpenBot signs in only over https. Change the URL to {url}.",
+  "error.backend.mcpSignInOtherAddress":
+    "This server signs in only at {url}. Change the URL to this address, then sign in again.",
   "error.backend.mcpSignInCancelled": "The sign-in was cancelled.",
   "error.backend.mcpSignInTimedOut": "The sign-in was not finished in the browser.",
   "error.backend.mcpSignInRefused": "The sign-in page refused access. Sign in again.",
@@ -380,6 +386,7 @@ export const messages = defineMessages("error.backend", {
     "Only the OpenBot phone app can send this report, because it adds the phone's version and support log. Open this chat on the phone. If you see this message there, update the phone app.",
   "error.backend.takeoverInactive": "This browser takeover is no longer active.",
   "error.backend.authSubmitting": "Authentication submission is already in progress.",
+  "error.backend.apiKeyListFailed": "OpenBot could not read the saved API keys.",
   "error.backend.apiKeySaveFailed": "OpenBot could not save the API key. Try again.",
   "error.backend.apiKeySaving": "The API key is already being saved.",
   "error.backend.apiKeyAnswerUnreadable":

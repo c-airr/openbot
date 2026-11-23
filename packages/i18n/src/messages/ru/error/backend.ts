@@ -90,6 +90,8 @@ export const messages = {
     "У участников этого канала ещё нет разговора для сжатия. Сожмите его после того, как участник ответит в канале.",
   "error.backend.channelCompactNotSupported":
     "Ни один участник этого канала не может сжимать по запросу. Участники, которые это поддерживают, сжимают контекст автоматически, когда он почти заполнен.",
+  "error.backend.channelCompactProviderUnavailable":
+    "Провайдер участников канала сейчас не работает. Обновите провайдеров, затем снова сожмите канал.",
   "error.backend.channelArchived": "Восстановите этот канал, прежде чем отправлять сообщения или менять задачи.",
   "error.backend.channelArchiveRunning": "Остановите текущую работу в этом канале, затем удалите его.",
   "error.backend.channelReferenceUnavailable": "Сообщение канала, на которое сделана ссылка, недоступно.",
@@ -248,6 +250,8 @@ export const messages = {
   "error.backend.mcpServerInvalid": "OpenBot не может сохранить эту конфигурацию сервера MCP.",
   "error.backend.mcpServerNoAnswer": "Сервер не ответил за {seconds} с.",
   "error.backend.mcpSignInNotAccepted": "Сервер не принял этот вход.",
+  "error.backend.mcpSignInGrantRefused":
+    "Сервер не принял вход. Войдите снова. Если проблема повторится, убедитесь, что ваш аккаунт находится на том же сайте или в том же регионе, что и это приложение.",
   "error.backend.mcpSignInAccountRefused":
     "Сервер отклонил аккаунт, с которым вы вошли. Проверьте, что у этого аккаунта есть доступ к сервису. Чтобы использовать другой аккаунт, выйдите и войдите снова.",
   "error.backend.mcpSignInClientRefused":
@@ -270,6 +274,8 @@ export const messages = {
   "error.backend.mcpSignInOnHost": "Этот сервер просит войти. Войдите в него в OpenBot на компьютере-хосте.",
   "error.backend.mcpSignInNeedsHttps":
     "Этот сервер просит войти, а OpenBot входит только по https. Измените URL на {url}.",
+  "error.backend.mcpSignInOtherAddress":
+    "Этот сервер выполняет вход только по адресу {url}. Измените URL на этот адрес, затем войдите снова.",
   "error.backend.mcpSignInCancelled": "Вход отменён.",
   "error.backend.mcpSignInTimedOut": "Вход в браузере не был завершён.",
   "error.backend.mcpSignInRefused": "Страница входа отказала в доступе. Войдите снова.",
@@ -373,6 +379,7 @@ export const messages = {
     "Этот отчёт может отправить только приложение OpenBot на телефоне: оно добавляет версию и журнал поддержки телефона. Откройте этот чат на телефоне. Если вы видите это сообщение там, обновите приложение на телефоне.",
   "error.backend.takeoverInactive": "Этот перехват браузера больше не активен.",
   "error.backend.authSubmitting": "Отправка аутентификации уже выполняется.",
+  "error.backend.apiKeyListFailed": "OpenBot не удалось прочитать сохранённые ключи API.",
   "error.backend.apiKeySaveFailed": "OpenBot не удалось сохранить ключ API. Повторите попытку.",
   "error.backend.apiKeySaving": "Ключ API уже сохраняется.",
   "error.backend.apiKeyAnswerUnreadable":

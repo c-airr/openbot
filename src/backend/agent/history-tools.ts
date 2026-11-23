@@ -279,6 +279,7 @@ interface HistoryEntry {
   author: string;
   sentTo?: string[];
   createdAt: string;
+  answeredBy?: { id: string; name: string };
   text: string;
   offset: number;
   nextOffset: number | null;
@@ -554,11 +555,13 @@ export class HistoryTools {
       if (search) offset = Math.max(0, match - 100);
       const excerpt = text.slice(offset, offset + (search ? 400 : 12000));
       const sentTo = message.exchange?.direction === "outgoing" ? message.exchange.recipientAgentIds : null;
+      const answeredBy = message.uiBlock?.state.respondedBy;
       const entry: HistoryEntry = {
         messageId: message.id,
         author: sentTo ? "assistant" : message.author,
         ...(sentTo ? { sentTo } : {}),
         createdAt: message.createdAt,
+        ...(answeredBy ? { answeredBy: { id: answeredBy.id, name: redact(answeredBy.name) } } : {}),
         ...(row.beforeReset ? { beforeNewChat: true as const } : {}),
         text: excerpt,
         offset,

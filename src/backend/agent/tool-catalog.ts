@@ -114,13 +114,17 @@ const kimiCallShape = {
   arguments: callShape.arguments.meta({ additionalProperties: KIMI_ARGUMENT_VALUE }),
 };
 
-function toolDefinitions(catalog: typeof BUILTIN_TOOL_CATALOG) {
-  const names = catalogNames(catalog);
+const TOOL_SEARCH_DESCRIPTION =
+  "Find built-in tools by keywords or qualified name: queries (array) or query. Returns short descriptions, default 5, max 10; the best matches also give inputSchema and guidance. Run found tools with tool_call, not directly. Describe others before use.";
+
+function toolDefinitions(catalog: typeof BUILTIN_TOOL_CATALOG, catalogInSearch = true) {
   return [
     ...OPENBOT_TOOL_DEFINITIONS.filter((tool) => DIRECT_NAMES.has(tool.name)),
     {
       name: "tool_search",
-      description: `Find built-in tools by keywords or qualified name: queries (array) or query. Returns short descriptions, default 5, max 10; the best matches also give inputSchema and guidance. Run found tools with tool_call, not directly. Describe others before use. Catalog: ${names}`,
+      description: catalogInSearch
+        ? `${TOOL_SEARCH_DESCRIPTION} Catalog: ${catalogNames(catalog)}`
+        : `${TOOL_SEARCH_DESCRIPTION} Your instructions list the catalog.`,
       shape: searchShape,
     },
     {
@@ -163,6 +167,11 @@ const KIMI_DYNAMIC_TOOLS = dynamicTools(
     definition.name === "tool_call" ? { ...definition, shape: kimiCallShape } : definition,
   ),
 );
+const ANTIGRAVITY_DYNAMIC_TOOLS = dynamicTools(toolDefinitions(catalogFor("antigravity"), false));
+
+export function toolCatalogNames(provider: AgentProviderId): string {
+  return catalogNames(catalogFor(provider));
+}
 
 export function visibleToolDefinitions(provider: AgentProviderId) {
   return OWN_WEB_SEARCH_PROVIDERS.has(provider) ? OWN_WEB_SEARCH_TOOL_DEFINITIONS : ALL_TOOL_DEFINITIONS;
@@ -202,6 +211,7 @@ export function visibleDynamicTools(provider: AgentProviderId, agent?: { leanMod
   if (agent?.leanMode === true)
     return OWN_WEB_SEARCH_PROVIDERS.has(provider) ? LEAN_OWN_WEB_SEARCH_DYNAMIC_TOOLS : LEAN_DYNAMIC_TOOLS;
   if (provider === "kimi") return KIMI_DYNAMIC_TOOLS;
+  if (provider === "antigravity") return ANTIGRAVITY_DYNAMIC_TOOLS;
   return OWN_WEB_SEARCH_PROVIDERS.has(provider) ? OWN_WEB_SEARCH_DYNAMIC_TOOLS : ALL_DYNAMIC_TOOLS;
 }
 

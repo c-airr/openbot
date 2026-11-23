@@ -99,11 +99,20 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
   };
   const bubbleClass = () => {
     const solid = solidColor();
+    const itemType = props.message.itemType;
+    const commentary = !person() && itemType === "commentary";
     return {
       "message-bubble-member": member(),
-      "message-bubble-colored": chatColor() !== undefined,
+      "message-bubble-colored": !commentary && chatColor() !== undefined,
       "message-bubble-solid": solid !== undefined,
       "message-bubble-solid-dark-text": solid !== undefined && solidBubbleTakesDarkText(solid),
+      "message-bubble-commentary": commentary,
+      "message-bubble-answer":
+        !person() &&
+        (itemType === "agentMessage" || itemType === "final_answer") &&
+        !props.message.streaming &&
+        !props.message.status &&
+        props.message.body.trim().length > 0,
     };
   };
   const rowClass = () => [

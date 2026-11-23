@@ -7,6 +7,7 @@ import {
   type AgentAccessChange,
   type StorageUsage,
   type StoredFileRow,
+  WORKFLOW_FORMAT,
   WORKFLOW_GROUP_FIELDS,
   WORKFLOW_STEP_NAME_FIELD,
   type WorkflowDetail,
@@ -43,6 +44,11 @@ import { WORKFLOWS_AGENT_FILES_CAPABILITY } from "@openbot/contracts/team-protoc
 import { WORKFLOWS_ANSWERS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-answers-v1";
 import { WORKFLOWS_CHANNELS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-channels-v1";
 import { WORKFLOWS_CHATS_CAPABILITY } from "@openbot/contracts/team-protocol/workflows-chats-v1";
+import {
+  WORKFLOWS_CREDIT_MEDIA_CAPABILITY,
+  WORKFLOWS_CREDIT_MEDIA_CODECS,
+  WORKFLOWS_CREDIT_MEDIA_ROUTES,
+} from "@openbot/contracts/team-protocol/workflows-credit-media-v1";
 import {
   WORKFLOWS_HIGGSFIELD_CAPABILITY,
   WORKFLOWS_HIGGSFIELD_CODECS,
@@ -175,6 +181,22 @@ const CINEMA_MODEL: WorkflowMediaCatalogModel = {
   transparent: false,
 };
 let liveModels: readonly WorkflowMediaCatalogModel[] = [LIVE_MODEL];
+const CREDIT_MODEL: WorkflowMediaCatalogModel = {
+  id: "openbot-video_e2e",
+  provider: "openbot",
+  providerModel: "video_e2e",
+  name: "Video e2e",
+  maker: "ByteDance",
+  kinds: ["video"],
+  aspects: ["16:9", "9:16"],
+  durations: [5, 10],
+  resolutions: ["720p"],
+  transparent: false,
+  options: [{ name: "generate_audio", kind: "switch", values: ["off", "on"], default: "on" }],
+  inputs: ["frames"],
+};
+let creditModels: readonly WorkflowMediaCatalogModel[] = [];
+let creditBalance: { available: number; quota: number | null } | null = null;
 const sizeRequests: { attachmentId: string; width: number; height: number }[] = [];
 let sizeFails = false;
 const handoffs: { agentId: string; text: string; sourcePaths: readonly string[] }[] = [];
@@ -430,8 +452,15 @@ async function startHost(): Promise<Host> {
           sunra: sunraSignedIn ? { available: 120, quota: 500 } : null,
           higgsfield: higgsfieldSignedIn ? { available: 42, quota: null } : null,
           accounts: serviceAccounts,
+          openbot: creditBalance,
         }),
-      mediaCatalog: () => Effect.succeed({ models: higgsfieldSignedIn ? liveModels : [] }),
+      mediaCatalog: (only) =>
+        Effect.succeed({
+          models:
+            only === "openbot"
+              ? creditModels
+              : [...(higgsfieldSignedIn ? liveModels : []), ...(only === undefined ? creditModels : [])],
+        }),
       mediaPrice: (request) =>
         Effect.sync(() => {
           priceRequests.push(request);
@@ -624,6 +653,7 @@ function v9Headers(token: string): Record<string, string> {
 
 type RefusalKey =
   | "error.workflow.missing"
+  | "error.workflow.unknownValue"
   | "error.workflow.versionMissing"
   | "error.workflow.tooLargeToSend"
   | "error.team.agentViewOnly"
@@ -1278,6 +1308,168 @@ try {
     assert.throws(() => WORKFLOWS_CODECS.get(WORKFLOWS_ROUTES.runs)?.request({ workflowId: "w", limit: 51 }));
     return { placeholder: "note, locked", edges: 0, run: "manual/stopped", save: save.status };
   });
+
+  await step(
+    "format: the host sends its format, refuses a new unknown value, keeps a saved one, and a newer format opens read-only",
+    async () => {
+      const model: WorkflowNode = { id: "model", kind: "llm", at: at(300), fields: { prompt: "Hi.", effort: "high" } };
+      const graph: WorkflowGraph = { nodes: [promptNode, model], edges: [], strokes: [] };
+      const withEffort = (effort: string, x = 300): WorkflowGraph => ({
+        ...graph,
+        nodes: [promptNode, { ...model, at: at(x), fields: { ...model.fields, effort } }],
+      });
+      const target = await hostWorkflow("Format", graph);
+      const read = await ok(WORKFLOWS_ROUTES.get, ownerToken, { workflowId: target.id });
+      assert.deepEqual([read.format, read.hostFormat], [1, WORKFLOW_FORMAT]);
+      const save = (next: WorkflowGraph) => ({ workflowId: target.id, baseRevision: target.revision, graph: next });
+      await refused(
+        WORKFLOWS_ROUTES.saveGraph,
+        ownerToken,
+        save(withEffort("ludicrous")),
+        400,
+        "error.workflow.unknownValue",
+      );
+      await refused(
+        WORKFLOWS_ROUTES.create,
+        ownerToken,
+        { title: "Format copy", graph: withEffort("ludicrous") },
+        400,
+        "error.workflow.unknownValue",
+      );
+      current()
+        .database.connection.prepare(
+          "UPDATE workflow_nodes SET fields_json = ? WHERE workflow_id = ? AND node_id = 'model'",
+        )
+        .run(JSON.stringify({ ...model.fields, effort: "ludicrous" }), target.id);
+      const kept = await ok(WORKFLOWS_ROUTES.saveGraph, ownerToken, save(withEffort("ludicrous", 420)));
+      assert.equal(kept.ok, true, JSON.stringify(kept));
+      const stored = current()
+        .workflowStore.detail(target.id)
+        ?.graph.nodes.find((node) => node.id === "model");
+      assert.deepEqual([stored?.fields.effort, stored?.at.x], ["ludicrous", 420]);
+      const copy = await ok(WORKFLOWS_ROUTES.create, ownerToken, {
+        title: "Format duplicate",
+        graph: withEffort("ludicrous", 452),
+      });
+      const copyId = text(record(copy.summary, "summary").id, "workflow id");
+      const copied = current()
+        .workflowStore.detail(copyId)
+        ?.graph.nodes.find((node) => node.id === "model");
+      assert.equal(copied?.fields.effort, "ludicrous", "A duplicate of a saved unknown value was not kept.");
+      await refused(
+        WORKFLOWS_ROUTES.create,
+        ownerToken,
+        { title: "Format changed copy", graph: withEffort("plaid") },
+        400,
+        "error.workflow.unknownValue",
+      );
+      const newer = answer(WORKFLOWS_ROUTES.get, { ...read, format: WORKFLOW_FORMAT + 1 }, decodeRemoteWorkflowDetail);
+      assert.equal(newer.needsNewerApp, true, "A graph of a newer format was not read-only.");
+      const same = answer(WORKFLOWS_ROUTES.get, read, decodeRemoteWorkflowDetail);
+      assert.equal(same.needsNewerApp, undefined, "A graph of this format was marked read-only.");
+      const unknownKey = decodeRemoteWorkflowDetail({
+        ...read,
+        graph: { ...graph, nodes: [{ ...promptNode, group: "a" }, model] },
+      });
+      assert.equal(unknownKey.needsNewerApp, true, "A node with an unknown property was not read-only.");
+      return { format: read.format, hostFormat: read.hostFormat, refused: 3, kept: "ludicrous", duplicated: true };
+    },
+  );
+
+  await step(
+    "registry values: an unknown setting value shows read-only; an unknown trigger type needs an admin",
+    async () => {
+      const shownWith = (node: WorkflowNode) =>
+        answer(
+          WORKFLOWS_ROUTES.get,
+          {
+            summary: { id: "w", title: "Values", steps: 2, updatedAt: "2026-11-22T00:00:00.000Z", lastRun: null },
+            graph: { nodes: [promptNode, node], edges: [], strokes: [] },
+            revision: 1,
+            triggers: [],
+          },
+          decodeRemoteWorkflowDetail,
+        ).needsNewerApp;
+      const node = (kind: WorkflowNode["kind"], fields: WorkflowNode["fields"]): WorkflowNode => ({
+        id: "step",
+        kind,
+        at: at(300),
+        fields,
+      });
+      const unknown = {
+        effort: node("llm", { provider: "codex", effort: "turbo" }),
+        conditionEffort: node("condition", { rule: "x", effort: "turbo" }),
+        action: node("output", { target: "discord", action: "edit" }),
+        emoji: node("output", { target: "slack", action: "react", emoji: "🚀" }),
+        reason: node("output", { target: "github", action: "close", reason: "duplicate" }),
+        media: node("image", { media: "audio" }),
+        aspect: node("image", { media: "image", aspect: "2:1" }),
+        voice: node("image", { media: "video", voice: "zed" }),
+        event: node("trigger", { trigger: "github", event: "release.published" }),
+        filter: node("trigger", { trigger: "github", event: "issue.opened", filters: "notBot\nnewFilter" }),
+      };
+      for (const [name, value] of Object.entries(unknown))
+        assert.equal(shownWith(value), true, `An unknown ${name} value was not shown read-only.`);
+      const known = {
+        effort: node("llm", { provider: "codex", effort: "ultra" }),
+        emptyEffort: node("llm", { provider: "codex", effort: "" }),
+        telegramEmoji: node("output", { target: "telegram", action: "react", emoji: "👌" }),
+        discordEmoji: node("output", { target: "discord", action: "react", emoji: "❌" }),
+        githubAction: node("output", { target: "github", action: "label.add", labelsFrom: "agent", item: "input" }),
+        reason: node("output", { target: "github", action: "close", reason: "notPlanned" }),
+        aspect: node("image", { media: "image", aspect: "custom", width: 512, height: 512, background: "transparent" }),
+        voice: node("image", { media: "video", voice: "eve" }),
+        filters: node("trigger", { trigger: "github", event: "pr.merged", filters: "notBot\ntitle\nbranch" }),
+        mention: node("trigger", { trigger: "slack", event: "mention" }),
+        chatChannel: node("output", { target: "chat-channel", channelId: "channel-e2e" }),
+      };
+      for (const [name, value] of Object.entries(known))
+        assert.equal(shownWith(value), undefined, `A known ${name} value was shown read-only.`);
+      const created = await ok(WORKFLOWS_ROUTES.create, ownerToken, { title: "Registry", graph: agentGraph(open) });
+      const workflowId = text(record(created.summary, "summary").id, "workflow id");
+      const before = Number((await ok(WORKFLOWS_ROUTES.get, member, { workflowId })).revision);
+      const triggerGraph = (fields: WorkflowNode["fields"]): WorkflowGraph => ({
+        nodes: [{ id: "newer-trigger", kind: "trigger", at: at(0), fields }, agentNode("agent", open)],
+        edges: [{ id: "edge", from: "newer-trigger", to: "agent", type: "text" }],
+        strokes: [],
+      });
+      const newerFields = { trigger: "newchat", event: "mention" };
+      const newer = triggerGraph(newerFields);
+      const denied = await refused(
+        WORKFLOWS_ROUTES.saveGraph,
+        member,
+        { workflowId, baseRevision: before, graph: newer },
+        403,
+        "error.team.adminRequired",
+      );
+      const ownerNew = await refused(
+        WORKFLOWS_ROUTES.saveGraph,
+        ownerToken,
+        { workflowId, baseRevision: before, graph: newer },
+        400,
+        "error.workflow.unknownValue",
+      );
+      const owner = await ok(WORKFLOWS_ROUTES.saveGraph, ownerToken, {
+        workflowId,
+        baseRevision: before,
+        graph: triggerGraph({ trigger: "manual" }),
+      });
+      assert.equal(owner.ok, true);
+      current()
+        .database.connection.prepare(
+          "UPDATE workflow_nodes SET fields_json = ? WHERE workflow_id = ? AND node_id = 'newer-trigger'",
+        )
+        .run(JSON.stringify(newerFields), workflowId);
+      const memberView = await ok(WORKFLOWS_ROUTES.get, member, { workflowId });
+      assert.equal(decodeRemoteWorkflowDetail(memberView).needsNewerApp, true);
+      return {
+        unknown: Object.keys(unknown).length,
+        known: Object.keys(known).length,
+        memberNewTrigger: denied,
+        ownerNewTrigger: ownerNew,
+      };
+    },
+  );
 
   await step("webhook: the URL goes to the owner only, and only the owner makes a new secret", async () => {
     const graph: WorkflowGraph = {
@@ -2024,6 +2216,63 @@ try {
       } finally {
         higgsfieldSignedIn = false;
         liveModels = [LIVE_MODEL];
+      }
+    },
+  );
+
+  await step(
+    "credit media: the host advertises workflows-credit-media-v1 to protocol 10; its catalog and credits routes return the credit models and balance, and the service catalogs never list a credit model",
+    async () => {
+      const capabilities = async (protocol: number) =>
+        decodeTeamProtocolSupportExpanded((await call("GET", TEAM_API_ROUTES.compatibility, { protocol })).body)
+          .capabilities;
+      assert.ok((await capabilities(TEAM_PROTOCOL_V10)).includes(WORKFLOWS_CREDIT_MEDIA_CAPABILITY));
+      assert.ok(!(await capabilities(TEAM_PROTOCOL_V9)).includes(WORKFLOWS_CREDIT_MEDIA_CAPABILITY));
+      const codec = (route: string) => {
+        const found =
+          WORKFLOWS_CREDIT_MEDIA_CODECS.get(route) ??
+          WORKFLOWS_MEDIA_CATALOG_V2_CODECS.get(route) ??
+          WORKFLOWS_MEDIA_CATALOG_CODECS.get(route);
+        assert.ok(found, `No codec for ${route}.`);
+        return found;
+      };
+      const raw = async (route: string, capabilities: readonly string[] = TEAM_CURRENT_CAPABILITIES) =>
+        call("POST", route, { token: member, body: {}, protocol: TEAM_PROTOCOL_V10, capabilities });
+      const read = async (route: string) => {
+        codec(route).request({});
+        const response = await raw(route);
+        assert.equal(response.status, 200, JSON.stringify(response.body));
+        return codec(route).response(response.status, response.body);
+      };
+      higgsfieldSignedIn = true;
+      creditModels = [CREDIT_MODEL];
+      creditBalance = { available: 350.5, quota: null };
+      try {
+        const catalog = await read(WORKFLOWS_CREDIT_MEDIA_ROUTES.catalog);
+        assert.deepEqual(catalog, { models: [CREDIT_MODEL] });
+        const credits = await read(WORKFLOWS_CREDIT_MEDIA_ROUTES.credits);
+        assert.deepEqual(credits, { openbot: { available: 350.5, quota: null } });
+        const catalogV2 = await read(WORKFLOWS_MEDIA_CATALOG_V2_ROUTES.catalog);
+        assert.deepEqual(catalogV2, { models: [LIVE_MODEL] });
+        const catalogV1 = await read(WORKFLOWS_MEDIA_CATALOG_ROUTES.catalog);
+        assert.deepEqual(catalogV1, { models: [LIVE_MODEL] });
+        creditBalance = null;
+        const signedOut = await read(WORKFLOWS_CREDIT_MEDIA_ROUTES.credits);
+        assert.deepEqual(signedOut, { openbot: null });
+        const old = await raw(
+          WORKFLOWS_CREDIT_MEDIA_ROUTES.catalog,
+          TEAM_CURRENT_CAPABILITIES.filter((capability) => capability !== WORKFLOWS_CREDIT_MEDIA_CAPABILITY),
+        );
+        assert.equal(old.status, 400, JSON.stringify(old.body));
+        assert.ok(
+          JSON.stringify(old.body).includes(sourceText("error.workflow.serverTooOld")),
+          JSON.stringify(old.body),
+        );
+        return { catalog, credits, catalogV2, catalogV1, signedOut, old: old.status };
+      } finally {
+        higgsfieldSignedIn = false;
+        creditModels = [];
+        creditBalance = null;
       }
     },
   );

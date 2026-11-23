@@ -12,6 +12,11 @@ import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contract
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import { addSkillSuggestionNames } from "@openbot/contracts/team-protocol/skill-learning-v1";
 import {
+  addUsageEventReadFailed,
+  addUsageReadFailed,
+  isUsageRoute,
+} from "@openbot/contracts/team-protocol/usage-read-failed-v1";
+import {
   type TeamProtocolV1CurrentEventControl,
   toWireTeamProtocolV1ClientEvent,
 } from "@openbot/contracts/team-protocol/v1-adapter";
@@ -63,6 +68,7 @@ const CONNECT_RETRY_LIMIT_MILLISECONDS = 30_000;
 
 const CONNECT_LIMIT_MILLISECONDS = 30_000;
 const HOST_WAIT_LIMIT_MILLISECONDS = 60_000;
+const SIGNAL_HOLD_LIMIT_MILLISECONDS = 70_000;
 
 interface TeamWebRtcClientTransportEvents {
   connected: [hostId: string];
@@ -570,7 +576,16 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
                     routineResultsWhatsApp: true,
                     storageWorkflowFiles: true,
                   })
-                : decodeTeamProtocolV10WebRtcHttpResponse(method, path, status, envelope.body),
+                : (() => {
+                    const decoded = decodeTeamProtocolV10WebRtcHttpResponse(method, path, status, envelope.body);
+                    if (
+                      (this.#hostProtocols.get(hostId) ?? 0) >= TEAM_PROTOCOL_V10 &&
+                      status < 400 &&
+                      isUsageRoute(method, path)
+                    )
+                      addUsageReadFailed(decoded, envelope.body);
+                    return decoded;
+                  })(),
             ).pipe(
               Effect.mapError(
                 () =>
@@ -986,6 +1001,7 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
         this.off("error", onError);
         bridge.off("hostWaiting", onHostWaiting);
         bridge.off("signalReady", onSignalReady);
+        bridge.off("signalHeld", onSignalHeld);
       };
       cleanupConnectionWait = cleanup;
       active.cancelConnectionWait = (cause = new Error(sourceText("error.remote.connectionCancelled"))) => {
@@ -1014,6 +1030,12 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
           HOST_WAIT_LIMIT_MILLISECONDS,
         );
       };
+      const onSignalHeld = (heldHostId: string, retryInMs: number) => {
+        if (heldHostId !== hostId) return;
+        hostWaited = false;
+        clearTimeout(timer);
+        timer = setTimeout(timeOut, Math.min(retryInMs, SIGNAL_HOLD_LIMIT_MILLISECONDS) + CONNECT_LIMIT_MILLISECONDS);
+      };
       const onSignalReady = (readyHostId: string) => {
         if (readyHostId !== hostId) return;
         signalReady = true;
@@ -1035,6 +1057,7 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
       this.on("connected", onConnected);
       this.on("error", onError);
       bridge.on("signalReady", onSignalReady);
+      bridge.on("signalHeld", onSignalHeld);
       if (waitForHost) bridge.on("hostWaiting", onHostWaiting);
     }
     active.authentication = {
@@ -1434,6 +1457,8 @@ export class TeamWebRtcClientTransport extends EventEmitter<TeamWebRtcClientTran
         return;
       }
       if (decoded.status === "known") {
+        if ((this.#hostProtocols.get(hostId) ?? 0) >= TEAM_PROTOCOL_V10)
+          addUsageEventReadFailed(decoded.event, frame.payload);
         if (this.#sendsSkillSuggestionNames(hostId)) addSkillSuggestionNames(decoded.event, frame.payload);
         this.emit("event", hostId, decoded.event);
       }

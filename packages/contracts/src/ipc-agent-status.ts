@@ -244,6 +244,7 @@ export interface AccountUsageLimit {
    * reads it with `usage-credits-v1`, and a reading without it keeps the last one (`keepUsageCredits`).
    */
   creditsAvailable?: boolean;
+  readFailed?: true;
 }
 
 export interface AccountUsage {
@@ -271,7 +272,8 @@ export function isAccountUsage(value: unknown): value is AccountUsage {
           (isDynamicRecord(limit.freeRequests) &&
             isFiniteNumber(limit.freeRequests.used) &&
             isFiniteNumber(limit.freeRequests.limit))) &&
-        (limit.creditsAvailable === undefined || typeof limit.creditsAvailable === "boolean"),
+        (limit.creditsAvailable === undefined || typeof limit.creditsAvailable === "boolean") &&
+        (limit.readFailed === undefined || limit.readFailed === true),
     )
   );
 }

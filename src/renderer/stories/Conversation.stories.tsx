@@ -1592,6 +1592,35 @@ export const MarkdownInChat: Story = {
   },
 };
 
+export const IntermediateAndFinalReplies: Story = {
+  args: {
+    messages: [
+      {
+        id: "report-request",
+        author: "you",
+        body: "Check the installer and report the result.",
+        time: "10:00",
+      },
+      {
+        id: "report-progress",
+        turnId: "report-turn",
+        author: "agent",
+        itemType: "commentary",
+        body: "I will compare the installer with the update manifest.",
+        time: "10:00",
+      },
+      {
+        id: "report-result",
+        turnId: "report-turn",
+        author: "agent",
+        itemType: "final_answer",
+        body: "The installer passed verification. Its checksum matches the update manifest.",
+        time: "10:01",
+      },
+    ],
+  },
+};
+
 export const LongFilePathInReply: Story = {
   name: "Long file path in a reply",
   args: {

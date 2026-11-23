@@ -79,6 +79,7 @@ export const messages = {
     "此频道现在没有成员可以压缩上下文。成员必须先在频道中回答,且其提供方必须支持压缩。",
   "error.backend.channelCompactNoSession": "此频道的成员还没有可压缩的对话。请在成员于频道中回答后再压缩。",
   "error.backend.channelCompactNotSupported": "此频道没有成员可以按需压缩。支持的成员会在上下文快满时自动压缩。",
+  "error.backend.channelCompactProviderUnavailable": "频道成员的提供方目前无法使用。请刷新服务商，然后再次压缩频道。",
   "error.backend.channelArchived": "请先恢复该频道，再发送消息或更改任务。",
   "error.backend.channelArchiveRunning": "请先停止该频道中正在运行的工作，再删除它。",
   "error.backend.channelReferenceUnavailable": "引用的频道消息不可用。",
@@ -220,6 +221,8 @@ export const messages = {
   "error.backend.mcpServerInvalid": "OpenBot 无法保存此 MCP 服务器配置。",
   "error.backend.mcpServerNoAnswer": "服务器未在 {seconds} 秒内响应。",
   "error.backend.mcpSignInNotAccepted": "服务器未接受该登录。",
+  "error.backend.mcpSignInGrantRefused":
+    "服务器未接受此次登录。请重新登录。如果问题仍然存在，请确认你的账号与此应用位于同一站点或区域。",
   "error.backend.mcpSignInAccountRefused":
     "服务器拒绝了你登录所用的账号。请确认该账号可以使用此服务。要使用其他账号，请先退出登录，再重新登录。",
   "error.backend.mcpSignInClientRefused":
@@ -241,6 +244,7 @@ export const messages = {
   "error.backend.mcpSignInRequired": "该服务器要求登录。请选择“登录”，在浏览器中继续。",
   "error.backend.mcpSignInOnHost": "该服务器要求登录。请在主机电脑上的 OpenBot 中登录它。",
   "error.backend.mcpSignInNeedsHttps": "该服务器要求登录，而 OpenBot 仅通过 https 登录。请把地址改为 {url}。",
+  "error.backend.mcpSignInOtherAddress": "此服务器只能在 {url} 登录。请将 URL 改为此地址，然后重新登录。",
   "error.backend.mcpSignInCancelled": "登录已取消。",
   "error.backend.mcpSignInTimedOut": "未在浏览器中完成登录。",
   "error.backend.mcpSignInRefused": "登录页面拒绝了访问。请重新登录。",
@@ -336,6 +340,7 @@ export const messages = {
     "只有 OpenBot 手机应用可以发送这份报告，因为它会附上手机的版本和支持日志。请在手机上打开此对话。如果在手机上也看到这条消息，请更新手机应用。",
   "error.backend.takeoverInactive": "该浏览器接管已不再有效。",
   "error.backend.authSubmitting": "身份验证正在提交中。",
+  "error.backend.apiKeyListFailed": "OpenBot 无法读取已保存的 API 密钥。",
   "error.backend.apiKeySaveFailed": "OpenBot 无法保存 API 密钥，请重试。",
   "error.backend.apiKeySaving": "API 密钥正在保存中。",
   "error.backend.apiKeyAnswerUnreadable":

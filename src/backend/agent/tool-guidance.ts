@@ -1,4 +1,4 @@
-import { SIDEBAR_FOLDER_LEVELS } from "@openbot/contracts/ipc";
+import { SIDEBAR_FOLDER_LEVELS, workflowTriggerFields } from "@openbot/contracts/ipc";
 import { OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import { ROUTINE_INSTRUCTION_RULE } from "../routine-tool-schema";
 
@@ -8,6 +8,17 @@ export interface ToolGuidanceOptions {
 
 const RECIPIENT_RULE =
   "Choose recipients for new work from your own sidebar section first: a section_teammates block in your instructions, or the latest openbot_section_teammates block in a user message, lists them. Go outside it only when no section teammate fits, more expertise is needed, or the user names another agent. With no section list, choose by name, title, and description, and give ungrouped agents no priority. Recipients that the user names and replies to existing messages come first. Use openbot.list_agents to compare descriptions and status, and openbot.list_sections only to see other sections. Send only to the selected stable ids.";
+
+const TRIGGER_FIELD_RULE = `A trigger with no answer gives fixed fields: ${(
+  ["schedule", "github", "discord", "telegram", "slack"] as const
+)
+  .map(
+    (trigger) =>
+      `${trigger} ${workflowTriggerFields({ kind: "trigger", fields: { trigger } })
+        .map((field) => field.name)
+        .join(" ")}`,
+  )
+  .join("; ")}.`;
 
 export function toolGuidance(
   namespace: string,
@@ -93,11 +104,11 @@ function openbotGuidance(namespace: string, tool: string): string {
     case "uninstall_skill":
       return [
         "Use openbot.create_agent when the user asks for a new persistent teammate: take its name, title, description, and optional generated avatar from the request, and give its first task. Keep create_agent simple and configure the agent after it exists. When the new agent needs scheduled work, create that routine yourself with openbot.create_routine and the new agent's id; do not ask the new agent to schedule it. For a specific provider, model, or reasoning effort, call openbot.list_models and pass only values that it lists; otherwise omit them, and the new agent uses yours. When the user names a provider or model for helpers or subagents, make them with openbot.create_agent and exactly that provider and model. Never substitute an existing agent on a different model or choose a local endpoint unless asked. OpenBot can use any OpenAI-compatible API (a gateway or a local model server) as a custom provider: the user adds it in Server settings > Providers > Custom provider, and list_models shows it in customProviders. Never say that OpenBot cannot use such an API.",
-        "Call openbot.read_agent (without agentId for yourself) before you change an agent: it shows the profile, model, account, backup models, access, Computer Use, notifications, auto-approve, browser profile, skills, routines, and MCP servers. openbot.update_profile changes a local agent's profile, provider, model, reasoning effort, account, and backup models; pass only the values and account ids that openbot.list_models lists. You see account ids and labels, never credentials. For the same change on several agents, call openbot.update_agents once, then report which agents failed and why. Change another agent only when the user's request calls for it.",
+        "Call openbot.read_agent (without agentId for yourself) before you change an agent: it shows the profile, model, account, backup models, access, Computer Use, notifications, permissions, browser profile, skills, routines, and MCP servers. openbot.update_profile changes a local agent's profile, provider, model, reasoning effort, account, and backup models; pass only the values and account ids that openbot.list_models lists. You see account ids and labels, never credentials. For the same change on several agents, call openbot.update_agents once, then report which agents failed and why. Change another agent only when the user's request calls for it.",
         "For a color, pass avatarHue, never an image. For an image the user gives or asks for, pass avatarPath: a square PNG, JPEG, or WebP copy up to 512 KB; keep the original. Make a GIF an animated WebP, or tell the user Upload image in agent settings keeps it animated. Only avatarSeed removes an image.",
         "To delete agents, call openbot.delete_agent once with all their ids; the owner approves one card. First move what the user wants to keep to an agent that stays. The user deletes you from your sidebar menu.",
         "To keep the sign-ins of clients or teams apart when the user asks, put each team on one browser profile with openbot.set_browser_profile. Reuse a name from read_agent's browserProfileNames. Do not suggest another browser.",
-        "To give an agent a local skill, call openbot.list_local_skills, then openbot.install_local_skill with its agentId. Use openbot.set_skill_enabled and openbot.uninstall_skill with the skillId from read_agent. update_profile can limit access to the workspace, turn Computer Use off, or change notifications. Only the user can give Full access, turn Computer Use on, or change auto-approve, so say when a task needs that. Change MCP servers with the MCP server tools, only when the user asks.",
+        "To give an agent a local skill, call openbot.list_local_skills, then openbot.install_local_skill with its agentId. Use openbot.set_skill_enabled and openbot.uninstall_skill with the skillId from read_agent. update_profile can limit access to the workspace, turn Computer Use off, or change notifications. Only the user can widen Access or turn Computer Use on, so say when a task needs that. Change MCP servers with the MCP server tools, only when the user asks.",
       ].join("\n");
     case "list_sections":
     case "create_section":
@@ -131,7 +142,8 @@ function openbotGuidance(namespace: string, tool: string): string {
     case "read_workflow_runs":
       return [
         "Read a workflow, change it in one openbot.edit_workflow call: give each new node a ref; add with from also connects. To insert: disconnect, add with from, connect on. Send no at; move if asked; tidy cleans up. The result maps refs to ids; do not reread.",
-        "Fields by kind: trigger trigger (manual|schedule|webhook|github|discord|telegram|slack), schedule {kind:daily|weekdays|weekly|hourly|custom,time:HH:mm,weekday:0-6,minute,expression:cron}; agent agentId (openbot.list_agents), task; llm prompt, system; condition rule (yes/no) or check (priority = high and count > 2), edges branch yes|no; both: provider, model, effort only if asked; approval question; output target notify|chat-channel channelId|channel connectionId, placeId (openbot.messaging_list_places)|github|discord|telegram|slack; prompt text; image prompt, media image|video, model only if asked. text, note, shape have no edges. answer on agent, llm, webhook trigger: lines name: text|number|yes/no|list|a|b, name? optional. {{name}} gives an earlier field.",
+        "Fields by kind: trigger trigger (manual|schedule|webhook|github|discord|telegram|slack), schedule {kind:daily|weekdays|weekly|hourly|custom,time:HH:mm,weekday:0-6,minute,expression:cron}; agent agentId (openbot.list_agents), task; llm prompt, system; condition rule (yes/no) or check (priority = high and count > 2), edges branch yes|no; both: provider, model, effort only if asked; approval question; output target notify|chat-channel channelId|channel connectionId, placeId (openbot.messaging_list_places)|github|discord|telegram|slack, message (sent in place of the input); prompt text; image prompt, media image|video, model only if asked. text, note, shape have no edges. answer on agent, llm, webhook trigger: lines name: text|number|yes/no|list|a|b, name? optional. {{name}} gives an earlier field in task, prompt, system, question and output message, title, labels, person.",
+        TRIGGER_FIELD_RULE,
         "Only a person-started turn can change, delete or run a workflow; OpenBot confirms deletes. Run one only if asked or to test a build, with a case as input. No tool waits for a run: read it once; report what ran and runs.",
       ].join("\n");
     case "crm_find":

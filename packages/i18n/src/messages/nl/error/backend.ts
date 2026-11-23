@@ -92,6 +92,8 @@ export const messages = {
     "De leden van dit kanaal hebben nog geen gesprek om te comprimeren. Comprimeer het nadat een lid in het kanaal heeft geantwoord.",
   "error.backend.channelCompactNotSupported":
     "Geen lid van dit kanaal kan op verzoek comprimeren. Leden die het ondersteunen, comprimeren hun context automatisch als die bijna vol is.",
+  "error.backend.channelCompactProviderUnavailable":
+    "De aanbieder van de kanaalleden werkt nu niet. Vernieuw de aanbieders en comprimeer het kanaal daarna opnieuw.",
   "error.backend.channelArchived": "Herstel dit kanaal voordat je berichten stuurt of taken wijzigt.",
   "error.backend.channelArchiveRunning": "Stop het lopende werk in dit kanaal en verwijder het daarna.",
   "error.backend.channelReferenceUnavailable": "Het genoemde kanaalbericht is niet beschikbaar.",
@@ -255,6 +257,8 @@ export const messages = {
   "error.backend.mcpServerInvalid": "OpenBot kan deze MCP-serverconfiguratie niet opslaan.",
   "error.backend.mcpServerNoAnswer": "De server reageerde niet binnen {seconds} seconden.",
   "error.backend.mcpSignInNotAccepted": "De server heeft die inlog niet geaccepteerd.",
+  "error.backend.mcpSignInGrantRefused":
+    "De server heeft de aanmelding niet geaccepteerd. Meld je opnieuw aan. Als het probleem blijft, controleer dan of je account op dezelfde site of in dezelfde regio staat als deze app.",
   "error.backend.mcpSignInAccountRefused":
     "De server heeft het account geweigerd waarmee je bent ingelogd. Controleer of dit account de dienst mag gebruiken. Log uit en log opnieuw in om een ander account te gebruiken.",
   "error.backend.mcpSignInClientRefused":
@@ -278,6 +282,8 @@ export const messages = {
   "error.backend.mcpSignInOnHost": "Deze server vraagt om in te loggen. Log in via OpenBot op de hostcomputer.",
   "error.backend.mcpSignInNeedsHttps":
     "Deze server vraagt om in te loggen, en OpenBot logt alleen in via https. Wijzig de URL in {url}.",
+  "error.backend.mcpSignInOtherAddress":
+    "Deze server meldt alleen aan op {url}. Wijzig de URL in dit adres en meld je daarna opnieuw aan.",
   "error.backend.mcpSignInCancelled": "Het inloggen is geannuleerd.",
   "error.backend.mcpSignInTimedOut": "Het inloggen is niet afgerond in de browser.",
   "error.backend.mcpSignInRefused": "De inlogpagina weigerde de toegang. Log opnieuw in.",
@@ -382,6 +388,7 @@ export const messages = {
     "Alleen de OpenBot-app op de telefoon kan dit rapport sturen, omdat die de versie en het ondersteuningslog van de telefoon toevoegt. Open deze chat op de telefoon. Zie je dit bericht daar, werk dan de telefoon-app bij.",
   "error.backend.takeoverInactive": "Deze overname van de browser is niet meer actief.",
   "error.backend.authSubmitting": "De verificatie wordt al verstuurd.",
+  "error.backend.apiKeyListFailed": "OpenBot kon de opgeslagen API-sleutels niet lezen.",
   "error.backend.apiKeySaveFailed": "OpenBot kon de API-sleutel niet opslaan. Probeer het opnieuw.",
   "error.backend.apiKeySaving": "De API-sleutel wordt al opgeslagen.",
   "error.backend.apiKeyAnswerUnreadable":

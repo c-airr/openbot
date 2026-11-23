@@ -50,6 +50,7 @@ export interface AccountUsageProviderRow {
   ringWindows: AccountUsageWindowRow[];
   reportsUsage: boolean;
   sharedQuotaWith: AgentProviderId | null;
+  readFailed: boolean;
 }
 
 export function accountUsageProviderRows(
@@ -214,6 +215,7 @@ function usageRow(
     // Fork: OpenRouter reports only its free-model allowance, read apart from Pi.
     reportsUsage: agentProviderDescriptor(provider).reportsUsage || limit !== null,
     sharedQuotaWith: limit?.sharedQuotaWith ?? null,
+    readFailed: limit?.readFailed === true && windows.length === 0,
   };
 }
 

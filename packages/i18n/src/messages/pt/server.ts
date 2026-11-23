@@ -21,6 +21,8 @@ export const messages = {
   "server.connection.loadingHint": "Você pode selecionar outro servidor enquanto este carrega.",
   "server.connection.cachedHint":
     "O conteúdo carregado e os rascunhos são mantidos. As ações do servidor serão retomadas após a reconexão.",
+  "server.connection.computerOffline":
+    "{name} está offline. Verifique se o computador dele está ligado, se o OpenBot está aberto e se Publicar este servidor está ativado em Configurações do servidor > Membros.",
   "server.connection.conversationFailed": "A conversa não pôde ser carregada. Tente de novo.",
   "server.connection.panelsFailed": "Alguns painéis do espaço de trabalho não puderam ser carregados. Tente de novo.",
   "server.connection.retry": "Repetir",
@@ -391,6 +393,12 @@ export const messages = {
     "As novas rotinas usam este fuso horário quando a mensagem não informa o fuso horário do remetente. Em um servidor, o navegador também o usa após a próxima reinicialização.",
   "server.settings.timezoneAutomatic": "Automático ({zone})",
   "server.settings.timezoneLoadFailed": "Não foi possível carregar o fuso horário do servidor.",
+  "server.settings.voiceModel.section": "Reconhecimento de fala",
+  "server.settings.voiceModel.description":
+    "Os agentes deste servidor usam este modelo para transcrever o som de vídeos que não têm legendas.",
+  "server.settings.voiceModel.loadFailed": "Não foi possível carregar o modelo de reconhecimento de fala do servidor.",
+  "server.settings.voiceModel.group": "Neste servidor",
+  "server.settings.voiceModel.removeLabel": "Remover {name} deste servidor",
   "server.settings.turnLimit": "Tópicos ao mesmo tempo",
   "server.settings.turnLimitDescription":
     "Quantos tópicos de agentes podem ser executados ao mesmo tempo neste servidor. Mais tópicos usam mais memória.",
@@ -543,6 +551,7 @@ export const messages = {
     "Não há uma senha separada para a área de trabalho remota. As configurações abaixo escolhem quem pode controlar este computador.",
   "server.desktop.componentInstalled": "Componente instalado",
   "server.desktop.componentNotInstalled": "Componente não instalado",
+  "server.desktop.needsX11Session": "Requer sessão X11",
   "server.desktop.sessions": "Acesso não supervisionado: {unattended} · Sessões ativas: {active}/{max}",
   "server.desktop.unattendedEnabled": "ativado",
   "server.desktop.unattendedUnavailable": "indisponível",

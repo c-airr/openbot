@@ -389,6 +389,15 @@
   --message-plain-danger: var(--openbot-danger);
 }
 
+.ui-bubble.message-bubble-commentary {
+  color: var(--openbot-text-muted);
+}
+
+.ui-bubble.message-bubble-answer.ui-bubble-variant-muted > .ui-bubble-content {
+  border-color: color-mix(in srgb, var(--openbot-text-muted) 42%, transparent);
+  background: var(--openbot-bg-surface-raised);
+}
+
 :root .ui-bubble.message-bubble-colored.message-bubble-solid.message-bubble-solid-dark-text {
   --message-solid-text: var(--openbot-paper-text);
 }
@@ -2057,7 +2066,7 @@ button.chat-action-target:active,
   border-start-end-radius: var(--openbot-radius-sm);
 }
 
-.virtual-chat-row:has(+ .virtual-chat-row[data-grouped="sender"] > .message-entry-agent:first-child)
+.virtual-chat-row[data-next-grouped="agent"]
   > .message-entry-agent:last-child
   .message-shell
   > .ui-bubble
@@ -2065,7 +2074,7 @@ button.chat-action-target:active,
   border-end-start-radius: var(--openbot-radius-sm);
 }
 
-.virtual-chat-row:has(+ .virtual-chat-row[data-grouped="sender"] > .message-entry-user:first-child)
+.virtual-chat-row[data-next-grouped="user"]
   > .message-entry-user:last-child
   .message-stack
   > .ui-bubble:last-child

@@ -32,6 +32,7 @@ import {
   TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
   TEAM_USAGE_GROUPS_CAPABILITY,
+  TEAM_USAGE_READ_FAILED_CAPABILITY,
   TEAM_USAGE_TERTIARY_CAPABILITY,
   TEAM_VIDEO_GENERATION_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
@@ -58,6 +59,11 @@ import {
   TEAM_UI_BLOCK_VAULT_CAPABILITY,
   withUiBlockVaultRequests,
 } from "@openbot/contracts/team-protocol/ui-block-vault-v1";
+import {
+  isUsageRoute,
+  withUsageEventReadFailed,
+  withUsageReadFailed,
+} from "@openbot/contracts/team-protocol/usage-read-failed-v1";
 import { encodeTeamProtocolV1ClientEvent } from "@openbot/contracts/team-protocol/v1";
 import {
   decodeTeamProtocolV2AuthFrame,
@@ -848,6 +854,7 @@ export class TeamWebRtcHostPeer {
             memoryChanges: peerCapabilities.has(TEAM_MEMORY_CHANGES_CAPABILITY),
             usageTertiary: peerCapabilities.has(TEAM_USAGE_TERTIARY_CAPABILITY),
             usageGroups: peerCapabilities.has(TEAM_USAGE_GROUPS_CAPABILITY),
+            usageReadFailed: peerCapabilities.has(TEAM_USAGE_READ_FAILED_CAPABILITY),
             agentPendingRuntime: peerCapabilities.has(AGENT_PENDING_RUNTIME_CAPABILITY),
             queueHold: peerCapabilities.has(QUEUE_HOLD_CAPABILITY),
             queueHoldSignIn: peerCapabilities.has(QUEUE_HOLD_SIGN_IN_CAPABILITY),
@@ -865,7 +872,27 @@ export class TeamWebRtcHostPeer {
                   : peerCapabilities.has(TEAM_LONG_CAPABILITY_LISTS_CAPABILITY) &&
                       isCompatibilityRead(input.method, input.path, response.status)
                     ? { ...decodeTeamProtocolSupportV9(body) }
-                    : webRtcResponseEncoder(protocol)(input.method, input.path, response.status, body, responseOptions),
+                    : peerCapabilities.has(TEAM_USAGE_READ_FAILED_CAPABILITY) &&
+                        response.status < 400 &&
+                        isUsageRoute(input.method, input.path)
+                      ? withUsageReadFailed(
+                          webRtcResponseEncoder(protocol)(
+                            input.method,
+                            input.path,
+                            response.status,
+                            body,
+                            responseOptions,
+                          ),
+                          body,
+                          true,
+                        )
+                      : webRtcResponseEncoder(protocol)(
+                          input.method,
+                          input.path,
+                          response.status,
+                          body,
+                          responseOptions,
+                        ),
             ),
           }));
         }),
@@ -933,6 +960,11 @@ export class TeamWebRtcHostPeer {
                 memoryChanges: this.#peerCapabilities.has(TEAM_MEMORY_CHANGES_CAPABILITY),
               }),
         );
+        if (this.#peerCapabilities.has(TEAM_USAGE_READ_FAILED_CAPABILITY)) {
+          const parsed = JSON.parse(frame);
+          parsed.payload = withUsageEventReadFailed(parsed.payload, event, true);
+          frame = JSON.stringify(parsed);
+        }
         if (this.#peerCapabilities.has(TEAM_UI_BLOCK_AUTO_ANSWER_CAPABILITY))
           frame = withUiBlockAutoAnswers(frame, event);
         if (this.#peerCapabilities.has(TEAM_UI_BLOCK_VAULT_CAPABILITY)) frame = withUiBlockVaultRequests(frame, event);

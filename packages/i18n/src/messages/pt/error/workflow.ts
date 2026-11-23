@@ -6,6 +6,8 @@ export const messages = {
   "error.workflow.versionMissing": "Esta versão do fluxo de trabalho não existe mais.",
   "error.workflow.annotation": "Textos, notas e formas não podem ter conexões.",
   "error.workflow.port": "Uma etapa não pode receber este tipo de entrada.",
+  "error.workflow.unknownValue":
+    "Este OpenBot não conhece uma configuração de uma etapa. Atualize o OpenBot e tente novamente.",
   "error.workflow.branch": "Somente uma condição pode ter conexões de sim e não.",
   "error.workflow.conditionBranch": "Cada conexão de uma condição deve ser sim ou não.",
   "error.workflow.duplicateEdge": "Estas duas etapas já têm esta conexão.",
@@ -21,6 +23,14 @@ export const messages = {
   "error.workflow.conditionUnclear": "O modelo não respondeu sim ou não.",
   "error.workflow.answerInvalid":
     "A resposta não tinha os campos que esta etapa pede: {fields}. Execute a etapa novamente.",
+  "error.workflow.answerSetup":
+    "Os campos de resposta deste fluxo de trabalho têm um problema aqui: {fields}. Corrija o fluxo de trabalho e execute a etapa novamente.",
+  "error.workflow.answerSourceEnded":
+    "Estes campos não têm valor, porque a etapa que os fornece não terminou: {fields}. Execute essa etapa novamente primeiro.",
+  "error.workflow.runInputInvalid":
+    "A entrada da execução não corresponde aos campos de resposta do gatilho: {fields}. Envie um objeto JSON com estes campos.",
+  "error.workflow.sourceNotDone":
+    "Uma etapa anterior falhou ou foi parada na última vez que foi executada. Execute essa etapa novamente primeiro.",
   "error.workflow.checkInvalid": "A verificação desta etapa não é válida. Corrija-a e execute a etapa novamente.",
   "error.workflow.modelFailed": "O modelo não conseguiu responder. Execute a etapa novamente.",
   "error.workflow.modelTimedOut":

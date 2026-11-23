@@ -98,7 +98,12 @@ export function isCodexThreadInUse(error: unknown): boolean {
 }
 
 function isForeignReasoningError(message: string): boolean {
-  return /\bencrypted_content\b.*\bnot issued to this caller\b/i.test(message);
+  return (
+    /\bencrypted_content\b.*\bnot issued to this caller\b/i.test(message) ||
+    /\binvalid_encrypted_content\b/.test(message) ||
+    /\bencrypted[ _]content\b.*\bcould not be (?:verified|decrypted)\b/i.test(message) ||
+    /\bcould not decrypt the provided encrypted_content\b/i.test(message)
+  );
 }
 
 function isBlankHistoryText(message: string): boolean {
@@ -125,6 +130,10 @@ function isRejectedOpenCodeRequest(provider: AgentProvider, message: string): bo
     provider === "opencode" &&
     /\bthe request contains invalid parameters\b|\bInternal error: Invalid request parameters\b/i.test(message)
   );
+}
+
+function isRefusedOpenCodeInput(provider: AgentProvider, message: string): boolean {
+  return provider === "opencode" && /\bInternal error: Invalid input\s*$/.test(message);
 }
 
 function isRejectedAntigravityRequest(provider: AgentProvider, message: string): boolean {
@@ -199,6 +208,7 @@ export function refusedSessionFailure(provider: AgentProvider, message: string):
   if (provider === "opencode" && isUnreadableContentDiagnostic(message))
     return sourceText("error.provider.opencodeUnreadableContent");
   if (isRejectedOpenCodeRequest(provider, message)) return sourceText("error.provider.opencodeSessionRejected");
+  if (isRefusedOpenCodeInput(provider, message)) return sourceText("error.provider.opencodeInputRefused");
   if (isRejectedAntigravityRequest(provider, message)) return sourceText("error.provider.antigravitySessionRejected");
   if (isClearedAntigravityHistory(provider, message) || isUnencodableAntigravityHistory(provider, message))
     return sourceText("error.provider.antigravityHistoryUnreadable");
