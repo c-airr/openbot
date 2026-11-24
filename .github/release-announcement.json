@@ -1,10 +1,8 @@
 {
-  "version": "0.77.0",
+  "version": "0.77.3",
   "highlights": [
-    "Update your joined servers to this version too, so that OpenBot credit models, paused workflows, WhatsApp read-only chats and location requests work there.",
-    "Buy OpenBot credits and use OpenBot image and video models in workflows, with up to 4 results at a time.",
-    "Pause a workflow, or export it to a file and import it on another computer or server.",
-    "An agent can ask for your location when a request needs it, such as restaurants near you.",
-    "Make an allowed WhatsApp contact or group read only: your agents can read it, and OpenBot never writes there."
+    "DeepSeek reasoning from OpenRouter now shows in a collapsible thinking section instead of as plain text in the chat.",
+    "Short progress notes between tool calls are smaller and collapsed, so the chat reads more clearly.",
+    "A chat name you set by hand is kept; automatic renaming no longer overwrites it."
   ]
 }

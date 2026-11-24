@@ -6,6 +6,24 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.77.3] - 2026-11-24
+
+### Changed
+
+- Intermediate agent messages take less space in the conversation.
+- Discord activity shows idle after ten minutes away and keeps the session timer across chats.
+- Discord activity shows running agents and becomes idle only when no agent is running and the app has been unfocused for ten minutes.
+
+### Fixed
+
+- On a Mac, Connect and Add account for Claude now open the Claude sign-in page from OpenBot, as they do for ChatGPT. Before, on some Macs no page opened, and the sign-in waited with no way to continue.
+- When ChatGPT could not start an MCP server in a chat, a passing **Test connection** now gives the agent the server's tools again from the next message, also for a server with no sign-in. Before, the tools stayed missing in that chat until you started a new chat.
+- Cursor usage is available when Windows stores the sign-in with DPAPI.
+- A question that a routine run asks no longer closes an open question that the agent asked you earlier in the same chat. After you answer the routine's question, the earlier question shows again, and you can still answer it.
+- DeepSeek reasoning from OpenRouter shows in the collapsible thinking section, not as plain text in the chat.
+- Short progress notes between tool calls are smaller and collapsed instead of filling the chat.
+- A chat name you set by hand is kept: automatic renaming no longer overwrites it.
+
 ## [0.77.2] - 2026-11-23
 
 ### Fixed
