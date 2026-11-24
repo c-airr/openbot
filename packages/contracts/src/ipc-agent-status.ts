@@ -228,6 +228,34 @@ export interface AccountUsageGroup {
   secondary: AccountUsageWindow | null;
 }
 
+/**
+ * Fork, OpenRouter only: what the account has left of the credits it bought, from
+ * `GET /api/v1/credits`, with the NBP rate of the day for the reading in PLN.
+ */
+export interface OpenRouterBalance {
+  /** The credits bought, in USD. */
+  totalUsd: number;
+  /** The credits spent, in USD. */
+  usedUsd: number;
+  /** What is left, in USD; it can be negative when the free grant is spent. */
+  remainingUsd: number;
+  /** NBP table A mid rate of the day, or null when the rate could not be read. */
+  plnPerUsd: number | null;
+  /** Unix seconds of the reading. */
+  readAt: number;
+}
+
+export function isOpenRouterBalance(value: unknown): value is OpenRouterBalance {
+  return (
+    isDynamicRecord(value) &&
+    isFiniteNumber(value.totalUsd) &&
+    isFiniteNumber(value.usedUsd) &&
+    isFiniteNumber(value.remainingUsd) &&
+    (value.plnPerUsd === null || isFiniteNumber(value.plnPerUsd)) &&
+    isFiniteNumber(value.readAt)
+  );
+}
+
 export interface AccountUsageLimit {
   id: string;
   accountId?: string;
@@ -238,6 +266,8 @@ export interface AccountUsageLimit {
   sharedQuotaWith?: AgentProviderId;
   /** Fork, OpenRouter only: the free-model requests of the UTC day. The Team API does not send this field. */
   freeRequests?: { used: number; limit: number };
+  /** Fork, OpenRouter only: the credit balance of the account, read apart from the free models. */
+  balance?: OpenRouterBalance;
   /**
    * Codex: whether the account can keep working on credits when a plan window is spent. Absent when
    * the provider sends no credit state. The released usage routes do not send it: a joined server
@@ -272,6 +302,7 @@ export function isAccountUsage(value: unknown): value is AccountUsage {
           (isDynamicRecord(limit.freeRequests) &&
             isFiniteNumber(limit.freeRequests.used) &&
             isFiniteNumber(limit.freeRequests.limit))) &&
+        (limit.balance === undefined || isOpenRouterBalance(limit.balance)) &&
         (limit.creditsAvailable === undefined || typeof limit.creditsAvailable === "boolean") &&
         (limit.readFailed === undefined || limit.readFailed === true),
     )

@@ -201,6 +201,15 @@
   opacity: 0.15;
 }
 
+.window-rail-button .window-rail-usage-dollar {
+  display: grid;
+  place-items: center;
+  color: var(--openbot-provider-current);
+  font-size: var(--openbot-text-xs);
+  font-weight: var(--openbot-weight-bold);
+  line-height: 1;
+}
+
 .window-rail-usage-arc {
   stroke: var(--openbot-success);
 }

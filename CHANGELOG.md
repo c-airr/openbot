@@ -6,6 +6,12 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.77.4] - 2026-11-24
+
+### Added
+
+- The OpenRouter credit balance shows as its own circle on the left rail, beside the ring of the free models: green above 2 USD, orange from 0.50 to 2 USD, red below 0.50 USD. The hover card reads the balance in USD and in PLN at the NBP rate of the day.
+
 ## [0.77.3] - 2026-11-24
 
 ### Changed

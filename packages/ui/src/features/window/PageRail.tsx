@@ -1,5 +1,5 @@
 import { AppLogo, type AppLogoVariant, ProviderLogo } from "@openbot/brand";
-import type { FreeLlmBudget } from "@openbot/contracts/ipc";
+import type { FreeLlmBudget, OpenRouterBalance } from "@openbot/contracts/ipc";
 import { usageTone } from "@openbot/team-client/plan-limits";
 import {
   Bot,
@@ -358,6 +358,109 @@ function FreeLlmButton(props: { budget: FreeLlmBudget; onOpen: () => void }) {
   );
 }
 
+/** Fork: the money of the OpenRouter balance, in USD and, with the NBP rate, in PLN. */
+type UsageFormat = ReturnType<typeof useText>["format"];
+
+function openRouterMoney(balance: OpenRouterBalance, format: UsageFormat): string {
+  const usd = format.currencyUsd(balance.remainingUsd);
+  const pln = plnOf(balance, format);
+  return pln === null ? usd : `${usd} (${pln})`;
+}
+
+function plnOf(balance: OpenRouterBalance, format: UsageFormat): string | null {
+  return balance.plnPerUsd === null
+    ? null
+    : format.number(balance.remainingUsd * balance.plnPerUsd, { style: "currency", currency: "PLN" });
+}
+
+/** Under 0.50 USD left is critical, under 2.00 a warning, above that green. */
+function openRouterBalanceTone(balance: OpenRouterBalance): "critical" | "warning" | undefined {
+  return balance.remainingUsd < 0.5 ? "critical" : balance.remainingUsd < 2 ? "warning" : undefined;
+}
+
+function OpenRouterBalanceCard(props: { balance: OpenRouterBalance }) {
+  const { t, format } = useText();
+  return (
+    <>
+      <header class="account-usage-popover-header">
+        <div class="account-usage-popover-heading">
+          <ProviderLogo provider="openrouter" aria-hidden="true" />
+          <h2 class="account-usage-popover-title">{t("account.openrouter.balance.title")}</h2>
+        </div>
+      </header>
+      <p class="account-usage-empty">
+        <strong>{openRouterMoney(props.balance, format)}</strong>
+      </p>
+      <p class="account-usage-empty">
+        {t("account.openrouter.balance.spent", {
+          spent: format.currencyUsd(props.balance.usedUsd),
+          total: format.currencyUsd(props.balance.totalUsd),
+        })}
+      </p>
+      <Show when={props.balance.plnPerUsd}>
+        {(rate) => (
+          <p class="account-usage-empty">
+            {t("account.openrouter.balance.rate", {
+              rate: format.number(rate(), { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
+            })}
+          </p>
+        )}
+      </Show>
+      <p class="account-usage-empty">
+        {t("account.openrouter.balance.readAt", {
+          time: format.date(new Date(props.balance.readAt * 1_000), { hour: "numeric", minute: "2-digit" }),
+        })}
+      </p>
+    </>
+  );
+}
+
+/**
+ * Fork: the credits of the OpenRouter account as a circle of its own, beside the ring of its free
+ * models. The arc is the share of the bought credits spent, in the tone of what is left; the hover
+ * card reads the balance in USD and PLN, and a click opens usage.
+ */
+function OpenRouterBalanceButton(props: { balance: OpenRouterBalance; onOpen: (button: HTMLElement) => void }) {
+  const { t, format } = useText();
+  const spent = () =>
+    props.balance.totalUsd > 0
+      ? Math.min(100, Math.round((props.balance.usedUsd / props.balance.totalUsd) * 100))
+      : 100;
+  const outerRadius = (RING.size - RING.stroke) / 2;
+  return (
+    <RailButton
+      label={t("app.rail.openrouterBalance", { amount: openRouterMoney(props.balance, format) })}
+      card={() => <OpenRouterBalanceCard balance={props.balance} />}
+      class="window-rail-usage"
+      onClick={props.onOpen}
+    >
+      <svg class="window-rail-usage-ring" viewBox={`0 0 ${RING.size} ${RING.size}`} fill="none" aria-hidden="true">
+        <circle
+          class="window-rail-usage-track"
+          cx={RING.size / 2}
+          cy={RING.size / 2}
+          r={outerRadius}
+          stroke-width={RING.stroke}
+        />
+        <circle
+          class="window-rail-usage-arc"
+          data-usage-tone={openRouterBalanceTone(props.balance)}
+          cx={RING.size / 2}
+          cy={RING.size / 2}
+          r={outerRadius}
+          stroke-width={RING.stroke}
+          stroke-linecap="round"
+          pathLength={100}
+          stroke-dasharray={`${spent()} 100`}
+        />
+      </svg>
+      <span class="window-rail-usage-logo window-rail-usage-dollar" aria-hidden="true">
+        $
+      </span>
+    </RailButton>
+  );
+}
+
 /** The credits of a media service that a canvas step spends, such as Sunra. */
 export interface MediaCreditsRailRow {
   key: string;
@@ -641,6 +744,10 @@ export function PageRail(props: PageRailProps) {
       .filter((row) => !owner(row))
       .map((row) => ({ row, shared: rows.filter((other) => owner(other) === row) }));
   });
+  /** Fork: the OpenRouter account credits, a circle beside the ring of its free models. */
+  const openRouterBalance = createMemo(
+    () => props.usageRows.find((row) => row.provider === "openrouter")?.balance ?? null,
+  );
   const [ringSlots, setRingSlots] = createSignal(START_RING_PLACES);
   const ringLayout = createMemo(() => {
     if (rings().length <= ringSlots()) return { shown: rings(), more: [] };
@@ -780,6 +887,9 @@ export function PageRail(props: PageRailProps) {
           </For>
           <Show when={ringLayout().more.length > 0}>
             <MoreUsageRings rings={ringLayout().more} onOpen={props.onUsage} />
+          </Show>
+          <Show when={openRouterBalance()}>
+            {(balance) => <OpenRouterBalanceButton balance={balance()} onOpen={props.onUsage} />}
           </Show>
           <For each={props.customAgentUsage ?? []} keyed={(row) => row.id}>
             {(row) => <CustomAgentUsageButton row={row()} onOpen={props.onUsage} />}

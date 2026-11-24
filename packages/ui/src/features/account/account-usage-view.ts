@@ -7,6 +7,7 @@ import {
   agentProviderName,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   isAgentProvider,
+  type OpenRouterBalance,
   type ProviderAccountStatus,
 } from "@openbot/contracts/ipc";
 import {
@@ -51,6 +52,8 @@ export interface AccountUsageProviderRow {
   reportsUsage: boolean;
   sharedQuotaWith: AgentProviderId | null;
   readFailed: boolean;
+  /** Fork, OpenRouter only: the credit balance, drawn as a circle of its own on the rail. */
+  balance: OpenRouterBalance | null;
 }
 
 export function accountUsageProviderRows(
@@ -216,6 +219,7 @@ function usageRow(
     reportsUsage: agentProviderDescriptor(provider).reportsUsage || limit !== null,
     sharedQuotaWith: limit?.sharedQuotaWith ?? null,
     readFailed: limit?.readFailed === true && windows.length === 0,
+    balance: limit?.balance ?? null,
   };
 }
 
