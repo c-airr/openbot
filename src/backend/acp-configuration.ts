@@ -65,6 +65,8 @@ export interface AcpConfigurationOptions {
   keepProbeSession?: () => boolean;
   probeCloseDelayMs?: number | undefined;
   effortCategories?: readonly string[] | undefined;
+  /** Fork: session config options that no request may change; they are forced to these values. */
+  forcedConfig?: Readonly<Record<string, string>> | undefined;
   deletesSessions?: () => boolean;
   discarded?: (sessionId: string) => void;
   stillStarting?: ((error: unknown) => boolean) | undefined;
@@ -466,6 +468,7 @@ export class AcpConfiguration {
       thread.configOptions = response.configOptions;
       if (category === "model") thread.currentModelId = selected;
     }
+    yield* this.#forceConfig(thread);
   });
 
   readonly set = Effect.fn("AcpConfiguration.set")(function* (
@@ -474,23 +477,64 @@ export class AcpConfiguration {
     configId: string,
     value: AgentSessionSettingValue,
   ): Effect.fn.Return<AgentSessionSettingsSnapshot, ProviderClientOperationError> {
+    const forced = this.options.forcedConfig?.[configId];
+    const wanted: AgentSessionSettingValue = forced ?? value;
     const option = this.sessionSettings(thread.configOptions).options.find((entry) => entry.id === configId);
     if (!option) return yield* providerFailure(new Error(sourceText("error.provider.sessionSettingUnavailable")));
     if (
       option.type === "boolean"
-        ? typeof value !== "boolean"
-        : typeof value !== "string" || !option.options.some((choice) => choice.value === value)
+        ? typeof wanted !== "boolean"
+        : typeof wanted !== "string" || !option.options.some((choice) => choice.value === wanted)
     ) {
       return yield* providerFailure(new Error(sourceText("error.provider.sessionSettingInvalid")));
     }
-    const response = yield* this.#setConfigOption(thread, configId, value, () =>
-      typeof value === "boolean"
-        ? this.#connection(thread).setSessionConfigOption({ sessionId: thread.id, configId, value, type: "boolean" })
-        : this.#connection(thread).setSessionConfigOption({ sessionId: thread.id, configId, value }),
+    const response = yield* this.#setConfigOption(thread, configId, wanted, () =>
+      typeof wanted === "boolean"
+        ? this.#connection(thread).setSessionConfigOption({
+            sessionId: thread.id,
+            configId,
+            value: wanted,
+            type: "boolean",
+          })
+        : this.#connection(thread).setSessionConfigOption({ sessionId: thread.id, configId, value: wanted }),
     );
     thread.configOptions = response.configOptions;
     return this.sessionSettings(thread.configOptions);
   });
+
+  /**
+   * Fork: keep a forced session config option at its value. Cursor's `fast` tier costs more, so a
+   * session that arrives with `fast=true` is set back to `false` before any turn is sent.
+   */
+  #forceConfig(thread: AcpConfigurationState): Effect.Effect<void, ProviderClientOperationError> {
+    const forced = this.options.forcedConfig;
+    if (!forced) return Effect.void;
+    return Effect.suspend(() => {
+      const pending = Object.entries(forced).filter(([configId, value]) => {
+        const option = thread.configOptions.find((candidate) => candidate.id === configId);
+        return (
+          option?.type === "select" &&
+          option.currentValue !== value &&
+          selectValues(option).some((entry) => entry.value === value)
+        );
+      });
+      if (pending.length === 0) return Effect.void;
+      return Effect.forEach(
+        pending,
+        ([configId, value]) =>
+          this.#setConfigOption(thread, configId, value, () =>
+            this.#connection(thread).setSessionConfigOption({ sessionId: thread.id, configId, value }),
+          ).pipe(
+            Effect.tap((response) =>
+              Effect.sync(() => {
+                thread.configOptions = response.configOptions;
+              }),
+            ),
+          ),
+        { discard: true },
+      ).pipe(Effect.asVoid);
+    });
+  }
 
   #setModel(thread: AcpConfigurationState, value: string): Effect.Effect<void, ProviderClientOperationError> {
     this.#processModel = null;

@@ -26,36 +26,22 @@ export function isGptModel(model: ClientAgentModelOption): boolean {
 
 /**
  * Fork: the preferred /compact chain. Gemini models first (Gemini 3.8 Flash on medium,
- * Gemini 2.5 Flash, etc.), then OpenRouter models (Nemotron, free-tier models, MiMo).
- * Strictly excludes any GPT/Codex models to protect the user's free GPT quota.
+ * Gemini 2.5 Flash, etc.), then OpenCode and smaller models from other providers.
  */
 const COMPACT_PREFERENCE: readonly { pattern: RegExp; effort?: AgentReasoningEffort }[] = [
-  // 1. Gemini / Google (Antigravity, FreeLLMAPI, or OpenRouter)
   { pattern: /gemini.*3\.8.*flash/iu, effort: "medium" },
   { pattern: /gemini.*2\.5.*flash/iu },
   { pattern: /gemini.*flash/iu },
   { pattern: /auto:gemini/iu },
   { pattern: /gemini/iu },
-  // 2. OpenRouter & High-Value Free models
-  { pattern: /nemotron.*3\.5.*super.*vl/iu },
-  { pattern: /nemotron/iu },
-  { pattern: /mimo.*2\.6/iu },
-  { pattern: /:free$/iu },
 ];
 
 /** Fork: lower is cheaper. Strictly non-GPT models only. */
-const CHEAP_RANK: readonly RegExp[] = [
-  /flash.*low|low.*flash|flash-?lite/iu,
-  /deepseek/iu,
-  /flash|haiku|nano|lite/iu,
-  /openrouter/iu,
-];
+const CHEAP_RANK: readonly RegExp[] = [/flash.*low|low.*flash|flash-?lite/iu, /deepseek/iu, /flash|haiku|nano|lite/iu];
 
 /**
- * The cheapest model of a provider that still has room: prefers Gemini, then free OpenRouter
- * models, then small Flash/Lite/Haiku/DeepSeek models.
- * Strictly avoids any GPT / Codex / OpenAI models so the user's free tier quota is never spent on compaction.
- * Returns `null` if no non-GPT model matches or has quota.
+ * Pick a model with room. Compaction reads the full chat history, so exclude OpenRouter and
+ * routed OpenRouter models. Exclude GPT / Codex / OpenAI to preserve the user's quota.
  */
 export function cheapestCompactModel(
   models: readonly ClientAgentModelOption[],
@@ -66,22 +52,27 @@ export function cheapestCompactModel(
       .filter((row) => row.remainingPercent !== null && row.remainingPercent <= 0)
       .map((row) => row.provider),
   );
-  // The OpenRouter reading counts free requests. It cannot show whether a paid model can answer.
   const usable = models.filter(
     (model): model is CompactAgentModel =>
       isAgentProvider(model.provider) &&
       !isGptModel(model) &&
       !exhausted.has(model.provider) &&
-      (model.provider !== "openrouter" || model.id.endsWith(":free") || model.id === "openrouter/free"),
+      model.provider !== "openrouter" &&
+      !/(?:^|\/)openrouter(?:\/|$)|:free$/iu.test(model.id),
   );
 
-  // 1. Preferred chain (Gemini -> Nemotron -> MiMo -> OpenRouter :free)
+  const openCode = usable.filter((model) => model.provider === "opencode");
+  const openCodeFree = openCode.find((model) => /^opencode\/(?:big-pickle|[^/]+-free)$/iu.test(model.id));
+  const openCodeBackup = openCodeFree ?? openCode.find((model) => model.id.startsWith("opencode-go/"));
+  if (exhausted.has("antigravity") && openCodeBackup) return { model: openCodeBackup };
+
   for (const { pattern, effort } of COMPACT_PREFERENCE) {
     const match = usable.find((model) => pattern.test(`${model.id} ${model.name}`));
     if (!match) continue;
     const reasoningEffort = effort && match.supportedReasoningEfforts.includes(effort) ? effort : undefined;
     return reasoningEffort ? { model: match, reasoningEffort } : { model: match };
   }
+  if (openCodeBackup) return { model: openCodeBackup };
 
   // 2. Ranked fallback among remaining usable models
   let best: { model: CompactAgentModel; rank: number } | null = null;
@@ -92,16 +83,7 @@ export function cheapestCompactModel(
   }
   if (best) return { model: best.model };
 
-  // 3. Any Gemini or OpenRouter model that is usable
-  const geminiOrOpenRouter = usable.find(
-    (model) =>
-      /gemini/iu.test(`${model.id} ${model.name}`) ||
-      model.provider === "openrouter" ||
-      model.provider === "antigravity",
-  );
-  if (geminiOrOpenRouter) return { model: geminiOrOpenRouter };
-
-  // 4. Any other non-GPT usable model
+  // Other non-GPT models come last.
   const anyNonGpt = usable[0];
   return anyNonGpt ? { model: anyNonGpt } : null;
 }

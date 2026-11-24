@@ -162,6 +162,11 @@ export interface AcpFlavor {
   childSessionUpdates?: true;
   retryNotice?: (method: string, params: DynamicRecord) => AcpRetryNotice | null;
   clientMeta?: DynamicRecord;
+  /**
+   * Fork: session config options that no request may change. Cursor's `fast` tier costs more,
+   * so every session is forced to `fast=false` before a turn is sent.
+   */
+  forcedConfig?: Readonly<Record<string, string>>;
   replyEvent?: (method: string, params: DynamicRecord) => AcpReplyEvent | null;
   retryUpdate?: (update: SessionUpdate) => AcpRetryUpdate | null;
   modelRetryUpdate?: (update: SessionUpdate) => boolean;
@@ -472,6 +477,8 @@ function cursorTurnFailure(error: unknown, detail: string): string {
 
 export const CURSOR_ACP_FLAVOR: AcpFlavor = {
   hideFastModels: true,
+  clientMeta: { parameterizedModelPicker: true },
+  forcedConfig: { fast: "false" },
   sessionNotFound: (error, sessionId) =>
     error.code === -32602 ? isRecord(error.data) && error.data.message === `Session "${sessionId}" not found` : null,
   noiseChunk: /^\s*Error: (?:[\w$]+: )?WritableIterable is closed\s*$/u,

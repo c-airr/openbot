@@ -13,15 +13,19 @@ const root = await mkdtemp(join(tmpdir(), "openbot-antigravity-quota-failover-")
 const userData = join(root, "user-data");
 const home = join(root, "home");
 const install = join(root, "antigravity");
-const fakeAgy = join(install, "1.5.4", "bin", "antigravity");
+const launcherExtension = process.platform === "win32" ? ".cmd" : "";
+const fakeAgy = join(install, "1.5.4", "bin", `antigravity${launcherExtension}`);
+const fakeOpenCode = join(root, `opencode${launcherExtension}`);
 const logPath = join(root, "agy.jsonl");
 const BACKUP = "gemini-flash";
+const COMPACT_BACKUP = "opencode/beam-free";
 const CONTINUATION =
   "The previous provider stopped after starting this task: it reached its usage limit or failed with an error.";
 
 process.env.HOME = home;
 process.env.GEMINI_HOME = join(home, ".gemini");
 process.env.OPENBOT_ANTIGRAVITY_PATH = fakeAgy;
+process.env.OPENBOT_OPENCODE_PATH = fakeOpenCode;
 process.env.FAKE_AGY_LOG = logPath;
 mkdirSync(home, { recursive: true });
 
@@ -35,13 +39,14 @@ const { providerResetDelayMs } = await import("../src/backend/agent/provider-dia
 const FAKE_AGY = `#!/usr/bin/env node
 const fs = require("node:fs");
 const NL = String.fromCharCode(10);
-if (process.argv[2] === "--version") {
-  process.stdout.write("1.5.4" + NL);
+const openCode = process.argv[1].endsWith("opencode") || process.argv[1].endsWith("opencode.cjs");
+if (process.argv.includes("--version")) {
+  process.stdout.write((openCode ? "1.19.3" : "1.5.4") + NL);
   process.exit(0);
 }
 const log = (entry) => fs.appendFileSync(process.env.FAKE_AGY_LOG, JSON.stringify(entry) + NL);
 const write = (message) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + NL);
-const MODELS = ["gemini-quota-a", "gemini-quota-b", "gemini-quota-c", "gemini-quota-d", "gemini-quota-e", "gemini-spent", "gemini-rate", "gemini-rate-b", "gemini-net", "gemini-gone", "gemini-gone-b", "gemini-gone-c", "gemini-gone-d", "gemini-credits-a", "gemini-credits-b", "gemini-lost", "gemini-reset", "gemini-flash"];
+const MODELS = openCode ? ["${COMPACT_BACKUP}"] : ["gemini-quota-a", "gemini-quota-b", "gemini-quota-c", "gemini-quota-d", "gemini-quota-e", "gemini-quota-compact", "gemini-spent", "gemini-rate", "gemini-rate-b", "gemini-net", "gemini-gone", "gemini-gone-b", "gemini-gone-c", "gemini-gone-d", "gemini-credits-a", "gemini-credits-b", "gemini-lost", "gemini-reset", "gemini-flash"];
 const models = { availableModels: MODELS.map((modelId) => ({ modelId, name: modelId })) };
 const current = new Map();
 const setup = (sessionId) => ({ sessionId, models: { ...models, currentModelId: current.get(sessionId) ?? MODELS[0] } });
@@ -192,7 +197,15 @@ function prompts(): Prompt[] {
 }
 
 await mkdir(join(install, "1.5.4", "bin"), { recursive: true });
-await writeFile(fakeAgy, FAKE_AGY, { mode: 0o755 });
+for (const path of [fakeAgy, fakeOpenCode]) {
+  if (process.platform === "win32") {
+    const script = path.replace(/\.cmd$/u, ".cjs");
+    await writeFile(script, FAKE_AGY);
+    await writeFile(path, `@echo off\r\nnode "${script}" %*\r\n`);
+  } else {
+    await writeFile(path, FAKE_AGY, { mode: 0o755 });
+  }
+}
 const database = new OpenBotDatabase(userData);
 const store = new AgentStore(userData, home, database);
 const mailbox = new MailboxStore(userData, store.sharedRoot, store.database);
@@ -201,7 +214,7 @@ const agents = new AgentService({
   mailbox,
   browser,
   preferredProvider: "antigravity",
-  offProviders: AGENT_PROVIDERS.filter((provider) => provider !== "antigravity"),
+  offProviders: AGENT_PROVIDERS.filter((provider) => provider !== "antigravity" && provider !== "opencode"),
 });
 const events: AgentEvent[] = [];
 agents.on("event", (event) => events.push(event));
@@ -270,6 +283,47 @@ async function runCase(
 
 try {
   await runCauseEffect(agents.initialize());
+
+  await waitFor("OpenCode model catalogue", () => agents.listModels().some((model) => model.id === COMPACT_BACKUP));
+  const parent = await runCauseEffect(
+    agents.createAgent({
+      name: "Chat to compact",
+      description: "",
+      avatarSeed: "parent",
+      avatarHue: null,
+      provider: "antigravity",
+      model: "gemini-quota-compact",
+      initialMessage: "",
+      blank: true,
+    }),
+  );
+  const beforeCompact = prompts().length;
+  const helper = await runCauseEffect(
+    agents.createAgent({
+      name: "Compaction helper",
+      description: `compact:${Date.now()} parent:${parent.id}`,
+      avatarSeed: "compact",
+      avatarHue: null,
+      provider: "antigravity",
+      model: "gemini-quota-compact",
+      initialMessage: "QUOTA-NOW: Compact the parent chat.",
+    }),
+  );
+  await waitFor("compaction finishes on the backup", () =>
+    agents.listQueue(helper.id).deliveries.some((delivery) => delivery.status === "completed"),
+  );
+  const compactPrompts = prompts().slice(beforeCompact);
+  assert.deepEqual(
+    compactPrompts.map(({ model }) => model),
+    ["gemini-quota-compact", COMPACT_BACKUP],
+  );
+  assert.equal(compactPrompts[0]?.quota, true);
+  assert.equal(
+    events.some((event) => event.type === "error" && event.agentId === helper.id),
+    false,
+  );
+  assert.equal(store.get(parent.id)?.model, "gemini-quota-compact");
+  assert.equal(store.get(helper.id)?.provider, "opencode");
 
   const before = await runCase("quota before work", "gemini-quota-a", true, "QUOTA-NOW");
   assert.deepEqual(

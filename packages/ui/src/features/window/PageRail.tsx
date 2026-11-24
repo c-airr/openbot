@@ -165,6 +165,8 @@ const RING = { size: 34, stroke: 2.25, spacing: 4.5 };
  * weekly ones included, with their reset times. `shared` are the readings that count the same quota,
  * such as Cursor on a merged Grok plan: the card lists them, with no ring of their own. The ring
  * draws the reading with the least left, so a shared reading that runs out first still shows.
+ * Fork: an OpenRouter row adds its credit balance as one arc inside those windows, in the tone of
+ * what is left, so the account keeps a single circle; the hover card reads it in USD and PLN.
  */
 function UsageRings(props: {
   row: AccountUsageProviderRow;
@@ -173,8 +175,14 @@ function UsageRings(props: {
 }) {
   const { t, format } = useText();
   const rows = () => [props.row, ...props.shared];
-  const label = () =>
-    unavailable()
+  const balance = () => props.row.balance;
+  const balanceLabel = () => {
+    const value = balance();
+    return value ? t("app.rail.openrouterBalance", { amount: openRouterMoney(value, format) }) : null;
+  };
+  const label = () => {
+    const money = balanceLabel();
+    const usage = unavailable()
       ? t("app.rail.usageUnavailable", { name: format.list(rows().map((row) => row.name)) })
       : t("app.rail.usageRings", {
           name: format.list(rows().map((row) => row.name)),
@@ -183,6 +191,8 @@ function UsageRings(props: {
             .map((window) => t("account.usage.row.windowUsed", { window: window.label, percent: window.usedPercent }))
             .join(", "),
         });
+    return money ? `${usage}, ${money}` : usage;
+  };
   const ringRow = () => {
     const read = rows().filter((row) => !row.readFailed);
     return (read.length > 0 ? read : rows()).reduce((lowest, row) =>
@@ -195,7 +205,12 @@ function UsageRings(props: {
   return (
     <RailButton
       label={label()}
-      card={() => <UsageCard rows={rows()} />}
+      card={() => (
+        <>
+          <UsageCard rows={rows()} />
+          <Show when={balance()}>{(value) => <OpenRouterBalanceCard balance={value()} />}</Show>
+        </>
+      )}
       class="window-rail-usage"
       onClick={props.onOpen}
     >
@@ -226,6 +241,15 @@ function UsageRings(props: {
             </g>
           )}
         </For>
+        <Show when={windows().length === 0 && balance() !== null}>
+          <circle
+            class="window-rail-usage-track"
+            cx={RING.size / 2}
+            cy={RING.size / 2}
+            r={outerRadius}
+            stroke-width={RING.stroke}
+          />
+        </Show>
         <Show when={unavailable()}>
           <circle
             class="window-rail-usage-track"
@@ -236,6 +260,21 @@ function UsageRings(props: {
             pathLength={100}
             stroke-dasharray="4 6"
           />
+        </Show>
+        <Show when={balance()}>
+          {(value) => (
+            <circle
+              class="window-rail-usage-arc"
+              data-usage-tone={openRouterBalanceTone(value())}
+              cx={RING.size / 2}
+              cy={RING.size / 2}
+              r={outerRadius - windows().length * RING.spacing}
+              stroke-width={RING.stroke}
+              stroke-linecap="round"
+              pathLength={100}
+              stroke-dasharray={`${openRouterSpentPercent(value())} 100`}
+            />
+          )}
         </Show>
       </svg>
       <ProviderLogo provider={props.row.provider} class="window-rail-usage-logo" />
@@ -268,7 +307,14 @@ function MoreUsageRings(props: { rings: readonly UsageRing[]; onOpen: (button: H
   return (
     <RailButton
       label={t("app.rail.moreUsage", { count: rows().length })}
-      card={() => <UsageCard rows={rows()} />}
+      card={() => (
+        <>
+          <UsageCard rows={rows()} />
+          <For each={rows().flatMap((row) => (row.balance ? [row.balance] : []))}>
+            {(balance) => <OpenRouterBalanceCard balance={balance} />}
+          </For>
+        </>
+      )}
       class="window-rail-usage window-rail-usage-more"
       onClick={props.onOpen}
     >
@@ -378,6 +424,11 @@ function openRouterBalanceTone(balance: OpenRouterBalance): "critical" | "warnin
   return balance.remainingUsd < 0.5 ? "critical" : balance.remainingUsd < 2 ? "warning" : undefined;
 }
 
+/** The share of the bought credits already spent, which the balance arc draws. */
+function openRouterSpentPercent(balance: OpenRouterBalance): number {
+  return balance.totalUsd > 0 ? Math.min(100, Math.round((balance.usedUsd / balance.totalUsd) * 100)) : 100;
+}
+
 function OpenRouterBalanceCard(props: { balance: OpenRouterBalance }) {
   const { t, format } = useText();
   return (
@@ -412,52 +463,6 @@ function OpenRouterBalanceCard(props: { balance: OpenRouterBalance }) {
         })}
       </p>
     </>
-  );
-}
-
-/**
- * Fork: the credits of the OpenRouter account as a circle of its own, beside the ring of its free
- * models. The arc is the share of the bought credits spent, in the tone of what is left; the hover
- * card reads the balance in USD and PLN, and a click opens usage.
- */
-function OpenRouterBalanceButton(props: { balance: OpenRouterBalance; onOpen: (button: HTMLElement) => void }) {
-  const { t, format } = useText();
-  const spent = () =>
-    props.balance.totalUsd > 0
-      ? Math.min(100, Math.round((props.balance.usedUsd / props.balance.totalUsd) * 100))
-      : 100;
-  const outerRadius = (RING.size - RING.stroke) / 2;
-  return (
-    <RailButton
-      label={t("app.rail.openrouterBalance", { amount: openRouterMoney(props.balance, format) })}
-      card={() => <OpenRouterBalanceCard balance={props.balance} />}
-      class="window-rail-usage"
-      onClick={props.onOpen}
-    >
-      <svg class="window-rail-usage-ring" viewBox={`0 0 ${RING.size} ${RING.size}`} fill="none" aria-hidden="true">
-        <circle
-          class="window-rail-usage-track"
-          cx={RING.size / 2}
-          cy={RING.size / 2}
-          r={outerRadius}
-          stroke-width={RING.stroke}
-        />
-        <circle
-          class="window-rail-usage-arc"
-          data-usage-tone={openRouterBalanceTone(props.balance)}
-          cx={RING.size / 2}
-          cy={RING.size / 2}
-          r={outerRadius}
-          stroke-width={RING.stroke}
-          stroke-linecap="round"
-          pathLength={100}
-          stroke-dasharray={`${spent()} 100`}
-        />
-      </svg>
-      <span class="window-rail-usage-logo window-rail-usage-dollar" aria-hidden="true">
-        $
-      </span>
-    </RailButton>
   );
 }
 
@@ -744,10 +749,6 @@ export function PageRail(props: PageRailProps) {
       .filter((row) => !owner(row))
       .map((row) => ({ row, shared: rows.filter((other) => owner(other) === row) }));
   });
-  /** Fork: the OpenRouter account credits, a circle beside the ring of its free models. */
-  const openRouterBalance = createMemo(
-    () => props.usageRows.find((row) => row.provider === "openrouter")?.balance ?? null,
-  );
   const [ringSlots, setRingSlots] = createSignal(START_RING_PLACES);
   const ringLayout = createMemo(() => {
     if (rings().length <= ringSlots()) return { shown: rings(), more: [] };
@@ -887,9 +888,6 @@ export function PageRail(props: PageRailProps) {
           </For>
           <Show when={ringLayout().more.length > 0}>
             <MoreUsageRings rings={ringLayout().more} onOpen={props.onUsage} />
-          </Show>
-          <Show when={openRouterBalance()}>
-            {(balance) => <OpenRouterBalanceButton balance={balance()} onOpen={props.onUsage} />}
           </Show>
           <For each={props.customAgentUsage ?? []} keyed={(row) => row.id}>
             {(row) => <CustomAgentUsageButton row={row()} onOpen={props.onUsage} />}

@@ -613,6 +613,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       deletesSessions: () => this.#deletesSessions,
       discarded: (sessionId) => this.#discardedSessions.add(sessionId),
       effortCategories: options.flavor.effortCategories,
+      forcedConfig: options.flavor.forcedConfig,
       stillStarting: options.flavor.stillStarting,
     });
   }

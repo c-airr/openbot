@@ -6,6 +6,17 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.77.5] - 2026-11-24
+
+### Changed
+
+- The OpenRouter usage ring also shows the account balance in its hover card.
+
+### Fixed
+
+- Compact chats can switch to an available OpenCode model when Gemini reaches a usage limit. OpenRouter is excluded from automatic compaction.
+- Cursor sessions request fast mode off and keep it off before turns.
+
 ## [0.77.4] - 2026-11-24
 
 ### Added

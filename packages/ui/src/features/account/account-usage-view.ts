@@ -52,7 +52,7 @@ export interface AccountUsageProviderRow {
   reportsUsage: boolean;
   sharedQuotaWith: AgentProviderId | null;
   readFailed: boolean;
-  /** Fork, OpenRouter only: the credit balance, drawn as a circle of its own on the rail. */
+  /** Fork, OpenRouter only: the credit balance, drawn as an arc inside that provider's ring. */
   balance: OpenRouterBalance | null;
 }
 

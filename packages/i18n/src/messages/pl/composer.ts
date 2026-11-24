@@ -47,8 +47,7 @@ export const messages = {
   "composer.compact.done": "Skompaktowano czat w tle.",
   "composer.compact.running": "Kompaktowanie tego czatu już trwa.",
   "composer.compact.failed": "Nie udało się skompaktować czatu",
-  "composer.compact.noModel":
-    "Brak modelu do automatycznej kompresji. Podłącz innego dostawcę lub wybierz darmowy model OpenRouter.",
+  "composer.compact.noModel": "Brak modelu do automatycznej kompresji. Podłącz OpenCode lub innego dostawcę.",
   "composer.command.compact": "Streść ten czat na tanim modelu w tle",
   "composer.command.claude": "Najpierw przeczytaj pamięć Claude Code, potem odpowiedz",
   "composer.picker.badge.file": "Plik",

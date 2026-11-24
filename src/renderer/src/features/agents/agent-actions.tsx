@@ -92,7 +92,8 @@ const AgentActions = createSimpleContext({
     const { initializeConversation, removeConversation } = useConversation();
     const { conversationErrors } = useConversationController();
     const threads = useAgentThreads();
-    const { activeTurns, failedTurns, setActiveTurns, setFailedTurns, setQueues, setPendingPrompts } = useTurns();
+    const { activeTurns, failedTurns, queues, setActiveTurns, setFailedTurns, setQueues, setPendingPrompts } =
+      useTurns();
     const { sidebarLayout, setSidebarLayout, applySidebarLayoutAction, removePinnedSidebarItemEverywhere } =
       useSidebar();
     const { selectAgent, openCreatedAgent } = useNavigation();
@@ -372,16 +373,20 @@ const AgentActions = createSimpleContext({
           const helperMessages = (helperPage?.messages ?? []).filter(
             (message) => message.author === "assistant" && Date.parse(message.createdAt) >= run.startedAt,
           );
-          // Only the final answer ends the helper: its thinking notes are complete messages too.
+          // A provider switch can leave an interrupted answer while the backup is still queued.
           const helperDone = helperMessages.some(
-            (message) => message.itemType === "final_answer" && message.status !== "streaming",
+            (message) => message.itemType === "final_answer" && message.status === "completed",
           );
           const elapsed = Date.now() - run.startedAt;
-          const helperWorking = helperMessages.length > 0 || (activeTurns()[run.helperId] ?? null) !== null;
+          const helperActive = (activeTurns()[run.helperId] ?? null) !== null;
+          const retryPending = queues()[run.helperId]?.deliveries.some(
+            ({ status }) => status === "queued" || status === "starting" || status === "running",
+          );
+          const helperWorking = helperMessages.length > 0 || helperActive;
           // The marker is written before the helper answers, so a finished helper without one failed.
           if (
             elapsed > COMPACT_TIMEOUT_MS ||
-            (parentPage && (helperDone || failedTurns()[run.helperId])) ||
+            (parentPage && !helperActive && !retryPending && (helperDone || failedTurns()[run.helperId])) ||
             (parentPage && !helperWorking && elapsed > COMPACT_IDLE_MS)
           )
             await finishCompactRun(parentId, run, false);

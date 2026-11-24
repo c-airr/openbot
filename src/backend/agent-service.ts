@@ -8,6 +8,7 @@ import {
   agentProviderDescriptor,
   agentSteersTurns,
   customAgentIdOfModel,
+  OPENCODE_RECOMMENDED_FREE_MODELS,
 } from "@openbot/contracts/agent-providers";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import { developmentStartingModel } from "@openbot/contracts/development-defaults";
@@ -3495,6 +3496,18 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         if (input.workspaceFolder === undefined) yield* this.#prepareAgentWorkspace(agent);
         agent = yield* this.#assignNewAgentModel(agent, input, true);
         if (configure) agent = yield* configure(agent);
+        if (COMPACT_HELPER.test(agent.description)) {
+          const order = this.#compactBackupModels(agent);
+          if (order.length > 0) {
+            agent = yield* this.#store
+              .updateAgent({ agentId: agent.id, backupModels: { automatic: true, order } })
+              .pipe(
+                Effect.mapError(
+                  (failure) => new AgentLifecycleFailed({ operation: "create agent", cause: failure.cause }),
+                ),
+              );
+          }
+        }
         // The first message and thread are omitted when the user opens a blank chat.
         if (initialMessage) {
           yield* this.#store
@@ -4514,6 +4527,33 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   #channelHeld(agentId: string): boolean {
     return !this.#usageLimits.mayDrain(agentId) && !this.#usageLimits.mayTry(agentId);
+  }
+
+  /** Compaction can retry on OpenCode or a small direct model without passing history to OpenRouter. */
+  #compactBackupModels(agent: AgentSummary): AgentModelChoice[] {
+    const candidates = this.listModels();
+    const openCode = candidates.filter((model) => model.provider === "opencode");
+    const ordered = [
+      ...OPENCODE_RECOMMENDED_FREE_MODELS.flatMap((id) => openCode.filter((model) => model.id === id)),
+      ...openCode.filter((model) => /^opencode\/[^/]+-free$/iu.test(model.id)),
+      ...openCode.filter((model) => model.id.startsWith("opencode-go/")),
+      ...candidates.filter((model) => model.provider === "antigravity" && /^gemini.*flash/iu.test(model.id)),
+      ...candidates.filter((model) => model.provider === "deepseek" && /chat|flash/iu.test(model.id)),
+    ];
+    const current = agentModelChoice(agent);
+    const order: AgentModelChoice[] = [];
+    for (const candidate of ordered) {
+      const choice = { provider: candidate.provider, model: candidate.id };
+      if (
+        !sameAgentModelChoice(choice, current) &&
+        !order.some((entry) => sameAgentModelChoice(entry, choice)) &&
+        this.#usageLimitReady(choice)
+      ) {
+        order.push(choice);
+        if (order.length === 3) break;
+      }
+    }
+    return order;
   }
 
   #usageLimitBackup(agentId: string, startedWork = false): AgentModelChoice | undefined {

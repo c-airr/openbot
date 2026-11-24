@@ -25,7 +25,7 @@ describe("compact-model", () => {
     expect(isGptModel(fakeModel({ id: "nvidia/nemotron-3.5-super-vl:free", provider: "openrouter" }))).toBe(false);
   });
 
-  it("prefers Gemini and OpenRouter over GPT models", () => {
+  it("prefers Gemini over GPT models", () => {
     const models = [
       fakeModel({ id: "gpt-6-luna", name: "GPT-6 Luna", provider: "codex" }),
       fakeModel({ id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", provider: "antigravity" }),
@@ -36,23 +36,24 @@ describe("compact-model", () => {
     expect(pick?.reasoningEffort).toBe("medium");
   });
 
-  it("falls back to OpenRouter Nemotron when Gemini is absent", () => {
-    const models = [
-      fakeModel({ id: "gpt-4o", name: "GPT-4o", provider: "codex" }),
-      fakeModel({ id: "nvidia/nemotron-3.5-super-vl:free", name: "Nemotron 3.5 Super VL", provider: "openrouter" }),
-    ];
-    const pick = cheapestCompactModel(models, null);
-    expect(pick?.model.id).toBe("nvidia/nemotron-3.5-super-vl:free");
-    expect(pick?.model.provider).toBe("openrouter");
+  it("starts on OpenCode when the Gemini account is at its limit", () => {
+    const backup = fakeModel({ id: "opencode/beam-free", provider: "opencode" });
+    const models = [fakeModel({ id: "gemini-3.8-flash", provider: "antigravity" }), backup];
+    const usage = {
+      limits: [
+        { id: "antigravity", primary: { usedPercent: 100, windowDurationMins: 60, resetsAt: null }, secondary: null },
+      ],
+    };
+    expect(cheapestCompactModel(models, usage)?.model).toBe(backup);
   });
 
-  it("skips a paid OpenRouter Gemini model when a free model can compact the chat", () => {
+  it("keeps both paid and free OpenRouter routes out of chat compaction", () => {
     const paid = fakeModel({ id: "google/gemini-3.8-flash", provider: "openrouter" });
-    const deepseek = fakeModel({ id: "deepseek-v41-flash-1017", provider: "opencode" });
-    const models = [paid, fakeModel({ id: "nvidia/nemotron-3.5-super-vl:free", provider: "openrouter" }), deepseek];
-    expect(cheapestCompactModel(models, null)?.model.id).toBe("nvidia/nemotron-3.5-super-vl:free");
-    expect(cheapestCompactModel([paid, deepseek], null)?.model.id).toBe(deepseek.id);
-    expect(cheapestCompactModel([paid], null)).toBeNull();
+    const free = fakeModel({ id: "nvidia/nemotron-3.5-super-vl:free", provider: "openrouter" });
+    const routed = fakeModel({ id: "openrouter/google/gemini-3.8-flash", provider: "opencode" });
+    const backup = fakeModel({ id: "opencode-go/deepseek-v4-flash", provider: "opencode" });
+    expect(cheapestCompactModel([paid, free, routed], null)).toBeNull();
+    expect(cheapestCompactModel([paid, free, routed, backup], null)?.model).toBe(backup);
   });
 
   it("returns null when only GPT models are available", () => {

@@ -45,8 +45,7 @@ export const messages = defineMessages("composer", {
   "composer.compact.done": "Chat compacted in the background.",
   "composer.compact.running": "Compaction of this chat is already running.",
   "composer.compact.failed": "Could not compact this chat",
-  "composer.compact.noModel":
-    "No model is available for automatic compaction. Connect another provider or a free OpenRouter model.",
+  "composer.compact.noModel": "No model is available for automatic compaction. Connect OpenCode or another provider.",
   "composer.command.compact": "Summarise this chat on a cheap model in the background",
   "composer.command.claude": "Read the Claude Code memory first, then answer",
   "composer.picker.badge.file": "File",
