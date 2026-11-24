@@ -7051,10 +7051,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       if (restored) this.#emit({ type: "hidden-agents-changed", agents: this.listHiddenAgents().agents });
     }
     // Fork: a chat still called "New chat" takes its name from the user's first message, so the list
-    // never shows a row of "New chat"; the model can rename it later with name_chat.
+    // never shows a row of "New chat".
     const chatName = !task && DEFAULT_CHAT_NAMES.has(agent.name) ? chatNameFrom(input.text) : "";
     if (chatName)
-      yield* this.#store.updateAgent({ agentId: agent.id, name: chatName }).pipe(Effect.catch(() => Effect.void));
+      yield* this.#store
+        .updateAgent({ agentId: agent.id, name: chatName }, undefined, true)
+        .pipe(Effect.catch(() => Effect.void));
     const waitingTurnId = snapshot.activeTurnId;
     const releaseQuestions = Effect.sync(() => {
       if (!targetThreadId) return;

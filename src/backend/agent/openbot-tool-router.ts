@@ -2228,14 +2228,9 @@ export class OpenBotToolRouter {
       });
     }
 
-    // Fork: the model names its own chat.
+    // Fork: chat names belong to the user. Keep the tool for older provider sessions.
     if (params.tool === "name_chat") {
-      const name = isRecord(params.arguments) && isString(params.arguments.name) ? params.arguments.name.trim() : "";
-      if (!name) return openBotToolFailure("name is required.");
-      const updated = yield* this.#hooks
-        .updateAgent({ agentId: senderAgentId, name: name.slice(0, 60) }, senderAgentId)
-        .pipe(toToolOperationFailed);
-      return openBotToolResult({ status: "renamed", name: updated.name });
+      return openBotToolFailure("Chat names are managed by the user. Do not rename this chat.");
     }
 
     if (params.tool === "update_agents") return yield* handleUpdateAgentsTool(params, senderAgentId, this.#hooks);
@@ -3466,6 +3461,7 @@ export class OpenBotToolRouter {
       senderAgentId: string,
     ): Effect.fn.Return<OpenBotToolResponse, ToolOperationFailed> {
       const args = updateProfileToolSchema.parse(params.arguments, { reportInput: true });
+      if (args.name !== undefined) return openBotToolFailure("Chat names are managed by the user.");
       const {
         agentId,
         avatarHue,

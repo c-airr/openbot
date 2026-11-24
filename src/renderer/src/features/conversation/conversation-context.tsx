@@ -573,11 +573,12 @@ const Conversation = createSimpleContext({
         conversation.revision = event.revision;
         if (conversation.loaded !== true) conversation.loaded = true;
         const messages = conversation.messages;
-        const existing = messages.findLast((message) => message.id === event.messageId);
-        const thinking =
-          existing || !isAgentReasoningCommentary({ id: event.messageId, itemType: "commentary" })
-            ? undefined
-            : messages.find((message) => message.kind === "thinking" && message.itemIds?.includes(event.messageId));
+        const reasoning = isAgentReasoningCommentary({ id: event.messageId, itemType: "commentary" });
+        const thinking = reasoning
+          ? messages.find((message) => message.kind === "thinking" && message.itemIds?.includes(event.messageId))
+          : undefined;
+        if (reasoning && !thinking) return;
+        const existing = reasoning ? undefined : messages.findLast((message) => message.id === event.messageId);
         const thinkingItemIndex = thinking?.itemIds?.indexOf(event.messageId) ?? -1;
         const rawBody =
           (rawAgentMessageBodies.get(messageKey) ??

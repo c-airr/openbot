@@ -677,8 +677,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   },
   {
     name: "name_chat",
-    description:
-      "Rename this chat after its topic, in two to five words in the user's language. Call it after you answer in the user's own chat when the current name is generic or no longer fits; skip it when the name still fits. Takes effect at once.",
+    description: "Chat names are managed by the user. This tool no longer changes a chat name.",
     shape: { name: z.string().trim().min(1).max(60) },
   },
   {

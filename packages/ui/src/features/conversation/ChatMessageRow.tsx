@@ -10,7 +10,7 @@ import {
   MessageHeader,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { children, createMemo, createSignal, For, Show } from "solid-js";
+import { children, createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { avatarHeadColor } from "../../bloub-avatar";
 import type { AgentMessage, AgentProfile } from "../../data";
 import { useText } from "../../text";
@@ -73,15 +73,50 @@ export interface ChatMessageRowProps {
   macWindowControls?: boolean | undefined;
 }
 
+function CompactCommentary(props: { children: JSX.Element }): JSX.Element {
+  const { t } = useText();
+  const [expanded, setExpanded] = createSignal(false);
+  const [overflows, setOverflows] = createSignal(false);
+  let content: HTMLDivElement | undefined;
+  onSettled(() => {
+    if (!content || typeof ResizeObserver === "undefined") return;
+    const body = content;
+    const measure = () => {
+      const lineHeight = Number.parseFloat(getComputedStyle(body).lineHeight);
+      setOverflows(body.getBoundingClientRect().height > 2 * lineHeight + 1);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    measure();
+    return () => observer.disconnect();
+  });
+  return (
+    <>
+      <div class={expanded() ? undefined : "message-commentary-collapsed"}>
+        <div ref={content} class="message-commentary-content" inert={!expanded() && overflows()}>
+          {props.children}
+        </div>
+      </div>
+      <Show when={overflows()}>
+        <Button
+          variant="ghost"
+          class="message-commentary-toggle"
+          aria-expanded={expanded() ? "true" : "false"}
+          onClick={() => setExpanded(!expanded())}
+        >
+          {expanded() ? t("chat.message.showLess") : t("chat.message.showFull")}
+        </Button>
+      </Show>
+    </>
+  );
+}
+
 export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
   const { t } = useText();
   const own = () => props.author.kind === "you";
   const member = () => props.author.kind === "member";
   const person = () => own() || member();
   const commentary = () => !person() && props.message.itemType === "commentary";
-  const longCommentary = () =>
-    commentary() && (props.message.body.length > 180 || props.message.body.split("\n").length > 3);
-  const [commentaryExpanded, setCommentaryExpanded] = createSignal(false);
   const variant = createMemo(() => conversationBubbleVariant(props.message));
   const seed = () => props.author.agent?.avatarSeed ?? props.author.avatarSeed;
   const backdropBubbles = useBackdropBubbles();
@@ -322,21 +357,9 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
           <Show
             when={person()}
             fallback={bubble(
-              <>
-                <div class={longCommentary() && !commentaryExpanded() ? "message-commentary-collapsed" : undefined}>
-                  {messageBody()}
-                </div>
-                <Show when={longCommentary()}>
-                  <Button
-                    variant="ghost"
-                    class="message-commentary-toggle"
-                    aria-expanded={commentaryExpanded() ? "true" : "false"}
-                    onClick={() => setCommentaryExpanded(!commentaryExpanded())}
-                  >
-                    {commentaryExpanded() ? t("chat.message.showLess") : t("chat.message.showFull")}
-                  </Button>
-                </Show>
-              </>,
+              <Show when={commentary()} fallback={messageBody()}>
+                <CompactCommentary>{messageBody()}</CompactCommentary>
+              </Show>,
             )}
           >
             <div class="message-stack">

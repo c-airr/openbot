@@ -84,7 +84,12 @@ import { isRecord } from "./protocol";
 import { StoredStateFailure, storedIO, storedSync } from "./stored-state-effects";
 
 type HiddenReason = "manual" | "inactivity";
-type StoredAgent = AgentSummary & { access: AgentAccess; computerUse: boolean; hiddenReason?: HiddenReason };
+type StoredAgent = AgentSummary & {
+  access: AgentAccess;
+  computerUse: boolean;
+  hiddenReason?: HiddenReason;
+  nameLocked?: boolean;
+};
 type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access" | "computerUse"> & {
   avatarUrl?: string | null;
   provider?: AgentProviderId;
@@ -588,6 +593,7 @@ export class AgentStore {
     const previous = { ...agent };
     Object.assign(agent, {
       name: draft.name,
+      ...(draft.name !== agent.name ? { nameLocked: true } : {}),
       title: draft.title,
       description: draft.description,
       avatarSeed: draft.avatarSeed,
@@ -600,6 +606,7 @@ export class AgentStore {
       this.#persist("agent.updated");
     } catch (error) {
       Object.assign(agent, previous);
+      if (previous.nameLocked === undefined) delete agent.nameLocked;
       throw error;
     }
     return agentSummary(agent);
@@ -683,12 +690,16 @@ export class AgentStore {
       excludedFolders?: string[];
     },
     initiatingAgentId?: string,
+    automaticName = false,
   ): Effect.fn.Return<AgentSummary, StoredStateFailure> {
     try {
       const agent = this.#requireAgent(input.agentId);
+      if (automaticName && (agent.nameLocked || !["New chat", "Nowy czat"].includes(agent.name)))
+        return agentSummary(agent);
       const next = { ...agent };
       if (input.name !== undefined) {
         next.name = requiredText(input.name, "Agent name", INPUT_LIMITS.agentName);
+        if (!automaticName) next.nameLocked = true;
       }
       if (input.title !== undefined) {
         next.title = limitedText(input.title, "Agent title", INPUT_LIMITS.agentTitle);
@@ -884,6 +895,7 @@ export class AgentStore {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
         Object.assign(agent, previous);
+        if (previous.nameLocked === undefined) delete agent.nameLocked;
         if (previous.busyMessageMode === undefined) delete agent.busyMessageMode;
         if (previous.taskLimit === undefined) delete agent.taskLimit;
         if (previous.providerAccountId === undefined) delete agent.providerAccountId;
@@ -1693,7 +1705,7 @@ export class AgentStore {
   }
 }
 
-function agentSummary({ hiddenReason: _hiddenReason, ...summary }: StoredAgent): AgentSummary {
+function agentSummary({ hiddenReason: _hiddenReason, nameLocked: _nameLocked, ...summary }: StoredAgent): AgentSummary {
   return summary;
 }
 
@@ -1933,6 +1945,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.pinnedAccountId === undefined || isProviderAccountId(record.pinnedAccountId)) &&
     (record.hiddenAt === undefined || isHiddenAt(record.hiddenAt)) &&
     (record.hiddenReason === undefined || record.hiddenReason === "manual" || record.hiddenReason === "inactivity") &&
+    (record.nameLocked === undefined || isBoolean(record.nameLocked)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     (record.avatarColor === undefined || isAvatarColor(record.avatarColor)) &&
@@ -2112,6 +2125,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(pinnedAccountId === undefined ? {} : { pinnedAccountId }),
     ...(hiddenAt === undefined ? {} : { hiddenAt }),
     ...(hiddenReason === undefined ? {} : { hiddenReason }),
+    ...(value.nameLocked === true ? { nameLocked: true } : {}),
     ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
     ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),

@@ -394,18 +394,27 @@
 }
 
 .message-entry-agent .ui-bubble.message-bubble-commentary {
-  max-width: min(100%, max(240px, 33%), 400px);
+  max-width: min(100%, max(220px, 33%), 360px);
 }
 
-.message-bubble-commentary > .ui-bubble-content,
+.message-entry-agent .ui-bubble.message-bubble-commentary > .ui-bubble-content {
+  padding: 3px 8px;
+  font-size: var(--openbot-text-xs);
+  line-height: 1.35;
+}
+
 .message-bubble-commentary .message-copy {
-  font-size: var(--openbot-text-sm);
+  font-size: var(--openbot-text-xs);
   line-height: 1.35;
 }
 
 .message-commentary-collapsed {
-  max-height: 4.1em;
+  max-height: 2lh;
   overflow: hidden;
+}
+
+.message-commentary-content {
+  display: flow-root;
 }
 
 .message-commentary-toggle {
