@@ -72,14 +72,37 @@ const KEY_EXTENSIONS = {
   },
   openrouter: {
     variable: "OPENBOT_PI_OPENROUTER_API_KEY",
-    source: `export default function (pi) {${readKey("openrouter", "OPENBOT_PI_OPENROUTER_API_KEY")}
+    source: `import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export default function (pi) {${readKey("openrouter", "OPENBOT_PI_OPENROUTER_API_KEY")}
   pi.registerProvider("openrouter", { apiKey, headers: { Authorization: "Bearer " + literal, "x-api-key": literal } });
   const OUTPUT_CAP = 128000;
-  pi.on("before_provider_request", (event) => {
+  const modelsPath = join(process.env.PI_CODING_AGENT_DIR?.trim() || join(homedir(), ".pi", "agent"), "models.json");
+  const readRouting = async (model) => {
+    try {
+      const models = JSON.parse(await readFile(modelsPath, "utf8"));
+      const openrouter = models?.providers?.openrouter;
+      const customModel = Array.isArray(openrouter?.models) ? openrouter.models.find((entry) => entry?.id === model) : undefined;
+      const routing = openrouter?.modelOverrides?.[model]?.compat?.openRouterRouting ?? customModel?.compat?.openRouterRouting;
+      return routing && typeof routing === "object" && !Array.isArray(routing) ? routing : undefined;
+    } catch (error) {
+      return error?.code === "ENOENT" ? undefined : { data_collection: "deny" };
+    }
+  };
+  pi.on("before_provider_request", async (event, ctx) => {
     const payload = event.payload;
-    const field = ["max_tokens", "max_completion_tokens"].find((name) => payload?.[name] > OUTPUT_CAP);
-    if (!field || (payload.thinking?.budget_tokens ?? 0) >= OUTPUT_CAP) return undefined;
-    return { ...payload, [field]: OUTPUT_CAP };
+    if (ctx.model?.provider !== "openrouter" || !payload || typeof payload !== "object") return undefined;
+    const routing = await readRouting(ctx.model.id.replace(/^~/, ""));
+    const previous = payload.provider === ctx.model.compat?.openRouterRouting ? undefined : payload.provider;
+    const provider = { ...previous, ...routing };
+    const next = { ...payload };
+    if (Object.keys(provider).length > 0) next.provider = provider;
+    else delete next.provider;
+    const field = ["max_tokens", "max_completion_tokens"].find((name) => payload[name] > OUTPUT_CAP);
+    if (field && (payload.thinking?.budget_tokens ?? 0) < OUTPUT_CAP) next[field] = OUTPUT_CAP;
+    return next;
   });
 }
 `,

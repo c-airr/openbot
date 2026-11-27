@@ -64,7 +64,7 @@ import type { AgentMemories } from "./agent-memories";
 import { answerFilePaths } from "./answer-file-paths";
 import type { AttentionBrowserHost, AttentionRegistry, CodexSubagentParent } from "./attention-registry";
 import type { BrowserUploadTarget } from "./browser-uploads";
-import { type ContextCompaction, compactsOnRequest } from "./context-compaction";
+import { type ContextCompaction, compactsOnRequest, contextCompactionLimit } from "./context-compaction";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { HANDOFF_START } from "./delivery-content";
 import type { DeltaBuffer } from "./delta-buffer";
@@ -1650,7 +1650,9 @@ export class TurnLifecycle {
             last.totalTokens,
             usage.modelContextWindow,
             source.contextCompaction === "native" || source.compactsItself === true,
-            compactsOnRequest(source.contextCompaction) ? 0.8 : null,
+            compactsOnRequest(source.contextCompaction)
+              ? contextCompactionLimit(usage.modelContextWindow) / usage.modelContextWindow
+              : null,
             usage.estimated === true,
             isAgentContextCategories(usage.categories) ? usage.categories : undefined,
           );

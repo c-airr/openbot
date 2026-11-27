@@ -44,6 +44,7 @@ export const messages = defineMessages("conversation", {
   "conversation.header.mainChat": "Open main chat",
   "conversation.header.resumeRemote": "Resume remote control",
   "conversation.header.openRemote": "Open remote control",
+  "conversation.header.research": "Research",
   "conversation.header.leanModeOn":
     "Lean mode is on: OpenBot sends shorter instructions and fewer tools, so each step uses fewer tokens. No teammate, browser, or routine guidance. Click to turn it off.",
   "conversation.leanMode.enabled": "Lean mode on. It applies from your next message.",

@@ -1,3 +1,4 @@
+import type { SetOpenRouterRouteInput } from "@openbot/contracts/ipc";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
@@ -64,6 +65,57 @@ export const Ultrafast: Story = {
 
 export const Field: Story = {
   args: { variant: "field", label: "Model" },
+};
+
+export const OpenRouterRoutes: Story = {
+  args: {
+    provider: "openrouter",
+    value: "deepseek/deepseek-v4-flash",
+    modelOptions: [{ provider: "openrouter", id: "deepseek/deepseek-v4-flash", name: "DeepSeek V4 Flash" }],
+    agentStatus: {
+      ...STORY_AGENT_STATUS,
+      providers: [
+        ...(STORY_AGENT_STATUS.providers ?? []),
+        { id: "openrouter", state: "available", version: null, message: null, email: null },
+      ],
+    },
+    openRouterRoutes: async (model: string) => ({
+      model,
+      current: "sample-a/fp8",
+      noTraining: false,
+      options: [
+        {
+          provider: "sample-a/fp8",
+          name: "Example A",
+          promptPerMillion: 0.04,
+          completionPerMillion: 0.75,
+          contextLength: null,
+          trainsOnData: true,
+        },
+        {
+          provider: "sample-b/fp4",
+          name: "Example B",
+          promptPerMillion: 0.07,
+          completionPerMillion: 0.16,
+          contextLength: null,
+          trainsOnData: false,
+        },
+        {
+          provider: "sample-c",
+          name: "Example C",
+          promptPerMillion: 0.12,
+          completionPerMillion: 0.12,
+          contextLength: null,
+          trainsOnData: null,
+        },
+      ],
+    }),
+    setOpenRouterRoute: async ({ model, provider, noTraining }: SetOpenRouterRouteInput) => ({
+      model,
+      current: provider,
+      noTraining: noTraining === true,
+    }),
+  },
 };
 
 export const Disabled: Story = {

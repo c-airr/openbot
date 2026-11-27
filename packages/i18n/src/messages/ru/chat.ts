@@ -463,8 +463,6 @@ export const messages = {
   "chat.message.agentFallback": "Агент",
   "chat.message.memberFallback": "Участник команды",
   "chat.message.attachment": "Вложение",
-  "chat.message.showFull": "Показать всё сообщение",
-  "chat.message.showLess": "Свернуть",
   "chat.actions.userLabel": "Действия с сообщением пользователя",
   "chat.actions.label": "Действия с сообщением: {name}",
   "chat.actions.addReaction": "Добавить реакцию",

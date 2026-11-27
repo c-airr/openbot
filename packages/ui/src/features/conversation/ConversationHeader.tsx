@@ -1,4 +1,4 @@
-import { Badge, Brain, Button, Clock3, Leaf, Lock } from "@openbot/ui";
+import { Badge, Brain, Button, Clock3, Globe2, Leaf, Lock } from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
@@ -24,6 +24,7 @@ export interface ConversationHeaderProps {
   leanMode?: { active: boolean; onToggle: () => void } | undefined;
   /** Fork: the memory switch of the chat. `active` means memory is blocked. */
   memoryBlock?: { active: boolean; onToggle: () => void } | undefined;
+  research?: { disabled: boolean; onStart: () => void } | undefined;
   /** Missing when the chat has no side panel, such as a deleted channel. */
   /** The pinned messages of the chat in view. Without it, the header has no pin button. */
   pinnedMessages?: PinnedMessagesProps | undefined;
@@ -206,6 +207,21 @@ export function ConversationHeader(props: ConversationHeaderProps) {
               onClick={() => memory().onToggle()}
             >
               <Brain aria-hidden="true" />
+            </Button>
+          )}
+        </Show>
+        <Show when={props.agent && props.research}>
+          {(research) => (
+            <Button
+              variant="ghost"
+              type="button"
+              class="header-panel-toggle"
+              aria-label={t("conversation.header.research")}
+              title={t("conversation.header.research")}
+              disabled={research().disabled}
+              onClick={() => research().onStart()}
+            >
+              <Globe2 aria-hidden="true" />
             </Button>
           )}
         </Show>

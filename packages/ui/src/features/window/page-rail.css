@@ -124,6 +124,10 @@
   width: var(--openbot-icon-lg);
   height: var(--openbot-icon-lg);
 }
+
+.window-rail-discord[aria-pressed="false"] {
+  opacity: 0.45;
+}
 .window-rail-notice {
   position: absolute;
   top: var(--openbot-space-1-5);

@@ -300,10 +300,11 @@ export function parseOpenRouterModelInput(value: unknown): string {
 export function parseSetOpenRouterRouteInput(value: unknown): SetOpenRouterRouteInput {
   if (!isDynamicRecord(value)) throw new Error("Invalid OpenRouter provider choice.");
   const model = parseOpenRouterModelInput(value.model);
-  if (value.provider === null) return { model, provider: null };
-  const provider = openRouterProviderSlug(value.provider);
-  if (!provider) throw new Error("Invalid OpenRouter provider.");
-  return { model, provider };
+  const provider = value.provider === null ? null : openRouterProviderSlug(value.provider);
+  if (value.provider !== null && provider === null) throw new Error("Invalid OpenRouter provider.");
+  if (value.noTraining !== undefined && typeof value.noTraining !== "boolean")
+    throw new Error("Invalid OpenRouter training policy.");
+  return { model, provider, ...(value.noTraining === undefined ? {} : { noTraining: value.noTraining }) };
 }
 
 export function parseRenameProviderAccountInput(value: unknown): RenameProviderAccountInput {

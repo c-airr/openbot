@@ -14,6 +14,7 @@ import { WorkflowsPage } from "../../lazy-views";
 import { usePlatform } from "../../platform";
 import { useCreditModels } from "../credits/credits-context";
 import { useCustomAgents } from "../custom-agents/custom-agents-context";
+import { discordPresenceEnabled, setDiscordPresenceEnabled } from "../discord-presence/discord-presence-preference";
 import { serverHasStorage } from "../files/storage-usage";
 import { createCreditAgentsRail } from "../servers/credit-agents-rail";
 import { openCreditPrices } from "../servers/credit-prices";
@@ -126,6 +127,10 @@ export function WorkspacePageRail(props: { hidden: boolean }) {
     <>
       <PageRail
         hidden={props.hidden}
+        discordPresence={{
+          enabled: discordPresenceEnabled(),
+          onToggle: () => setDiscordPresenceEnabled(!discordPresenceEnabled()),
+        }}
         current={current()}
         pinned={layout.railPinned()}
         onPinChange={layout.setRailPinned}

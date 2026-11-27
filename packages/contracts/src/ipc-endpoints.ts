@@ -723,7 +723,7 @@ import type {
 } from "./license";
 import type { MarketplaceListingLink } from "./marketplace-links";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
-import type { OpenRouterRoutes, SetOpenRouterRouteInput } from "./openrouter-routes";
+import type { OpenRouterRouteSettings, OpenRouterRoutes, SetOpenRouterRouteInput } from "./openrouter-routes";
 import type { AcceptedOwnerTransfer, OwnerTransfer } from "./owner-transfer";
 import type { ReferralPageRequest, ReferralState } from "./referral";
 import type { AgentActiveQueues } from "./team-protocol/agent-active-queues-v1";
@@ -916,7 +916,7 @@ export const IPC_ENDPOINTS = {
     providerUsageResets: request<AgentProviderId, ProviderUsageResets[]>()("app:provider-usage-resets"),
     resetProviderUsage: request<ResetProviderUsageInput, ProviderUsageResetOutcome>()("app:reset-provider-usage"),
     openRouterRoutes: request<string, OpenRouterRoutes>()("app:openrouter-routes"),
-    setOpenRouterRoute: request<SetOpenRouterRouteInput, OpenRouterRoutes>()("app:set-openrouter-route"),
+    setOpenRouterRoute: request<SetOpenRouterRouteInput, OpenRouterRouteSettings>()("app:set-openrouter-route"),
   },
   providerRuntimes: {
     getStatus: request<undefined, ProviderRuntimeSnapshot>()("provider-runtimes:get-status"),

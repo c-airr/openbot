@@ -89,18 +89,6 @@ function sharedContentBlocks(body: string, streaming: boolean): MessageContentBl
   return lastContentBlocks.blocks;
 }
 
-const LONG_MESSAGE_CHARACTERS = 20_000;
-const MESSAGE_PREVIEW_CHARACTERS = 3_000;
-const expandedLongMessages = new Set<string>();
-
-function messagePreview(text: string): string {
-  const lineEnd = text.lastIndexOf("\n", MESSAGE_PREVIEW_CHARACTERS);
-  let end = lineEnd > MESSAGE_PREVIEW_CHARACTERS / 2 ? lineEnd : MESSAGE_PREVIEW_CHARACTERS;
-  const last = text.charCodeAt(end - 1);
-  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
-  return text.slice(0, end).trimEnd();
-}
-
 export function conversationBubbleVariant(message: AgentMessage): BubbleVariant {
   if (message.author === "you") return "secondary";
   if (message.imageGeneration || message.videoGeneration || (!message.body.trim() && message.attachments?.length))
@@ -318,8 +306,6 @@ export function MessageBody(props: {
   loadImageFile?: ((file: MessageImageFile) => Promise<string | null>) | undefined;
   onDownloadImageFile?: ((file: MessageImageFile) => void) | undefined;
   macWindowControls?: boolean | undefined;
-  showFull?: boolean | undefined;
-  open?: boolean | undefined;
 }) {
   const { t } = useText();
   const streamingBody = createStreamingBody(
@@ -336,22 +322,6 @@ export function MessageBody(props: {
   );
   const fullText = () =>
     props.message.author === "agent" ? streamedBody() : (selectionInstruction()?.instruction ?? props.message.body);
-  const longMessage = createMemo(
-    () => props.message.streaming !== true && !streamingBody.revealing() && fullText().length > LONG_MESSAGE_CHARACTERS,
-  );
-  untrack(() => {
-    if (props.message.streaming === true || streamingBody.revealing()) expandedLongMessages.add(props.message.id);
-  });
-  const [expanded, setExpanded] = createSignal(() => {
-    if (props.open === true) expandedLongMessages.add(props.message.id);
-    return expandedLongMessages.has(props.message.id);
-  });
-  const toggleExpanded = () => {
-    const next = !expanded();
-    if (next) expandedLongMessages.add(props.message.id);
-    else expandedLongMessages.delete(props.message.id);
-    setExpanded(next);
-  };
   const generatedImageShown = createMemo(() => {
     if (!props.message.imageGeneration) return false;
     const attachment = props.message.attachments?.[0];
@@ -535,16 +505,12 @@ export function MessageBody(props: {
     },
   );
   const contentBlocks = createMemo<MessageContentBlock[]>((previous) => {
-    const folded = longMessage() && !expanded() && props.showFull !== true;
-    const text = folded ? messagePreview(fullText()) : fullText();
+    const text = fullText();
     return reuseUnchangedBlocks(
       previous ?? [],
       props.message.author !== "agent"
         ? [{ type: "text", text }]
-        : // The preview stays out of the shared cache, which holds the full body.
-          folded
-          ? messageContentBlocks(text, false)
-          : sharedContentBlocks(text, streamingBody.revealing()),
+        : sharedContentBlocks(text, streamingBody.revealing()),
     );
   });
   const textTailAfter = createMemo(
@@ -825,18 +791,6 @@ export function MessageBody(props: {
                   </Switch>
                 )}
               </For>
-              <Show when={longMessage() && props.showFull !== true}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  class="message-show-full"
-                  aria-expanded={expanded() ? "true" : "false"}
-                  onClick={toggleExpanded}
-                >
-                  {expanded() ? t("chat.message.showLess") : t("chat.message.showFull")}
-                </Button>
-              </Show>
               <Show when={selectionInstruction()}>
                 {(selection) => <blockquote class="message-selection-quote">{selection().quote}</blockquote>}
               </Show>

@@ -408,21 +408,6 @@
   line-height: 1.35;
 }
 
-.message-commentary-collapsed {
-  max-height: 2lh;
-  overflow: hidden;
-}
-
-.message-commentary-content {
-  display: flow-root;
-}
-
-.message-commentary-toggle {
-  font-size: var(--openbot-text-xs);
-  min-height: 0;
-  padding: 2px 0;
-}
-
 .ui-bubble.message-bubble-answer.ui-bubble-variant-muted > .ui-bubble-content {
   border-color: color-mix(in srgb, var(--openbot-text-muted) 42%, transparent);
   background: var(--openbot-bg-surface-raised);

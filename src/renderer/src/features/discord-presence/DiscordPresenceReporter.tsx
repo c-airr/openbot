@@ -5,14 +5,17 @@
 import { createEffect } from "solid-js";
 import { appPort } from "../../app-port";
 import { useAgents } from "../agents/agents-context";
+import { discordPresenceEnabled } from "./discord-presence-preference";
 
 export function DiscordPresenceReporter() {
   const { activeAgent } = useAgents();
   /** The three values that the card names, from the agent of the open chat. */
   const presence = () => {
     const agent = activeAgent();
-    if (!agent) return { provider: null, model: null, effort: null };
+    const enabled = discordPresenceEnabled();
+    if (!agent) return { enabled, provider: null, model: null, effort: null };
     return {
+      enabled,
       provider: agent.provider,
       model: agent.model,
       effort: agent.reasoningEffort ?? null,
@@ -23,7 +26,7 @@ export function DiscordPresenceReporter() {
   createEffect(
     () => {
       const value = presence();
-      return `${value.provider ?? ""}\u0000${value.model ?? ""}\u0000${value.effort ?? ""}`;
+      return `${value.enabled}\u0000${value.provider ?? ""}\u0000${value.model ?? ""}\u0000${value.effort ?? ""}`;
     },
     () => {
       void appPort()

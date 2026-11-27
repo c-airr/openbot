@@ -22,7 +22,6 @@ import { useThreadVisualReplyCard } from "./ChatVisualReply";
 import { ConversationBrowserLocation } from "./ConversationBrowserLocation";
 import { ConversationBrowserTakeover } from "./ConversationBrowserTakeover";
 import { ConversationQuestionPrompt } from "./ConversationQuestionPrompt";
-import { chatSearchOpensMessage } from "./chat-search";
 import { latestVisibleAgentMessageId } from "./conversation-read-state";
 import { conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
@@ -256,9 +255,6 @@ export function ConversationThread() {
           <AgentThreadView
             scrollRef={setThreadScrollElement}
             failureText={props.server && props.server.kind !== "local" ? remoteAgentError : undefined}
-            showFullMessage={(message) =>
-              threadSearchOpen() && chatSearchOpensMessage(message.body, threadSearchQuery())
-            }
             task={current().threads.open ?? null}
             limit={current().threads.limit}
             agent={current().agent}

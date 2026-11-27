@@ -34,6 +34,7 @@ import { Dynamic, type JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { CreditIcon } from "../credits/CreditIcon";
 import { CreditsRailChip } from "../credits/CreditsRailChip";
+import { DiscordMark } from "../settings/brand-marks";
 import { FreeLlmBudgetCard, freeLlmUsedPercent } from "./FreeLlmBudget";
 
 interface RailMenuItem {
@@ -572,6 +573,7 @@ export interface PageRailProps {
   help: JSX.Element;
   server?: JSX.Element;
   logo?: { variant: AppLogoVariant; href?: string | undefined } | undefined;
+  discordPresence?: { enabled: boolean; onToggle: () => void } | undefined;
 }
 
 interface RailPage {
@@ -831,6 +833,24 @@ export function PageRail(props: PageRailProps) {
             pageGroup = element;
           }}
         >
+          <Show when={props.discordPresence}>
+            {(presence) => (
+              <MotionTooltip
+                content={t(presence().enabled ? "app.rail.discordPresenceOn" : "app.rail.discordPresenceOff")}
+              >
+                <Button
+                  variant="ghost"
+                  type="button"
+                  class="window-rail-button window-rail-discord"
+                  aria-label={t(presence().enabled ? "app.rail.discordPresenceOn" : "app.rail.discordPresenceOff")}
+                  aria-pressed={presence().enabled ? "true" : "false"}
+                  onClick={() => presence().onToggle()}
+                >
+                  <DiscordMark />
+                </Button>
+              </MotionTooltip>
+            )}
+          </Show>
           <RailButton label={t("app.rail.agents")} current={props.current === "agents"} onClick={props.onAgents}>
             <Bot aria-hidden="true" />
           </RailButton>

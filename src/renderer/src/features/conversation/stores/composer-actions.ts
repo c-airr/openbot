@@ -6,6 +6,7 @@ import {
   rewriteAttachmentReferences,
   serializeAttachmentReference,
 } from "@openbot/contracts/attachment-references";
+import { RESEARCH_COMMAND } from "@openbot/contracts/chat-research";
 import { fileQuoteTarget } from "@openbot/contracts/chat-tag-references";
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
@@ -809,6 +810,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       return true;
     }
     if (!agentId || !target || deps.submitting() || (!text.trim() && draft.attachments.length === 0)) return false;
+    if (!deps.props.channel && text.trim() === RESEARCH_COMMAND) return false;
     const provider =
       deps.props.agent?.id === agentId
         ? deps.props.agent.provider

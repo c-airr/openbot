@@ -45,6 +45,7 @@ export const messages = {
   "conversation.header.mainChat": "Otwórz główny czat",
   "conversation.header.resumeRemote": "Wznów zdalne sterowanie",
   "conversation.header.openRemote": "Otwórz zdalne sterowanie",
+  "conversation.header.research": "Research",
   "conversation.header.leanModeOn":
     "Tryb oszczędny włączony: OpenBot wysyła krótsze instrukcje i mniej narzędzi, więc każdy krok zużywa mniej tokenów. Bez wskazówek o innych agentach, przeglądarce i rutynach. Kliknij, aby wyłączyć.",
   "conversation.leanMode.enabled": "Tryb oszczędny włączony. Działa od następnej wiadomości.",

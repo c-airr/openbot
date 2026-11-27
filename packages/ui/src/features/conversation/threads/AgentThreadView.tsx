@@ -241,7 +241,6 @@ export interface AgentThreadViewProps {
   backgroundWorkSince?: number | undefined;
   stepsOpenByDefault?: boolean | undefined;
   scrollRef?: ((element: HTMLElement) => void) | undefined;
-  showFullMessage?: ((message: AgentMessage) => boolean) | undefined;
   sendShortcut?: SendShortcut | undefined;
   onCopyMessage?: ((message: AgentMessage) => void) | undefined;
   copiedMessageId?: string | null | undefined;
@@ -934,7 +933,6 @@ export function AgentThreadView(props: AgentThreadViewProps) {
                         <ChatMessageRow
                           message={message()}
                           author={author(message())}
-                          showFull={props.showFullMessage?.(message())}
                           agents={props.agents}
                           skills={props.skills}
                           onSelectAgent={() => undefined}

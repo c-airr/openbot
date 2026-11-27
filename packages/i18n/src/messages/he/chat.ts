@@ -375,8 +375,6 @@ export const messages = {
   "chat.message.agentFallback": "סוכן",
   "chat.message.memberFallback": "חבר צוות",
   "chat.message.attachment": "קובץ מצורף",
-  "chat.message.showFull": "הצגת ההודעה המלאה",
-  "chat.message.showLess": "הצגת פחות",
   "chat.actions.userLabel": "פעולות בהודעת המשתמש",
   "chat.actions.label": "פעולות בהודעה של {name}",
   "chat.actions.addReaction": "הוספת תגובה",

@@ -1,4 +1,5 @@
 import { isKnownAgentProvider, providerDisplayName } from "@openbot/contracts/agent-providers";
+import { researchDraft, researchTopic } from "@openbot/contracts/chat-research";
 import {
   type FileQuoteTarget,
   fileQuoteId,
@@ -2014,8 +2015,6 @@ export function createConversationViewScope(props: ConversationProps) {
     else moveThreadToPanel(id);
   }
 
-  const [quotedMessageId, setQuotedMessageId] = createSignal<string | null>(null);
-
   function openQuote(messageId: string, text: string) {
     stopRevealingFileQuote();
     const file = fileQuoteTarget(messageId);
@@ -2024,10 +2023,7 @@ export function createConversationViewScope(props: ConversationProps) {
       if (shown || openQuotedFile(file)) revealFileQuote(document, file, text);
       return;
     }
-    setQuotedMessageId(messageId);
-    flush();
-    if (showQuotedText(messageId, text)) setQuotedMessageId(null);
-    else void revealQuote(messageId, text);
+    if (!showQuotedText(messageId, text)) void revealQuote(messageId, text);
   }
 
   function openQuotedFile(file: FileQuoteTarget): boolean {
@@ -2056,7 +2052,6 @@ export function createConversationViewScope(props: ConversationProps) {
     const agentId = props.agent?.id;
     const row = await replyJump.reveal(messageId, undefined, agentId);
     if (row && props.agent?.id === agentId) showQuotedText(messageId, text);
-    setQuotedMessageId((current) => (current === messageId ? null : current));
   }
 
   function showQuotedText(messageId: string, text: string): boolean {
@@ -2735,6 +2730,34 @@ export function createConversationViewScope(props: ConversationProps) {
     if (ownerId) controller.voiceSessions.stop(ownerId);
   }
   onCleanup(() => controller.voiceSessions.end("transcribed"));
+  const researchDisabled = () =>
+    !props.agent ||
+    !agentReady() ||
+    Boolean(providerUpdateRequired()) ||
+    submitting() ||
+    voicePhase() !== "idle" ||
+    (sideThreadOpen()
+      ? Boolean(threadQueue.editOf(props.threads?.open?.id))
+      : Boolean(currentEditingDeliveryId() || composerAnswersPrompt()));
+
+  function startResearch(): void {
+    if (researchDisabled()) return;
+    const threads = props.threads;
+    if (sideThreadOpen() && threads) {
+      const key = threadComposer.openDraftKey();
+      if (!key) return;
+      const text = researchDraft(threadComposer.draft(key).text);
+      threadComposer.setText(key, text);
+      if (researchTopic(text)) void threadComposer.send(threads, text, key);
+      else focusComposer();
+      return;
+    }
+    const text = researchDraft(currentDraft().text);
+    updateCurrentDraft({ text });
+    if (researchTopic(text)) submitComposer();
+    else focusComposer();
+  }
+
   const startVoiceConversation = (agentId: string) =>
     createVoiceConversation({
       agentId,
@@ -2749,6 +2772,8 @@ export function createConversationViewScope(props: ConversationProps) {
     });
 
   return {
+    researchDisabled,
+    startResearch,
     sideThreadOpen,
     threadSearch,
     threadSearchOpen,
@@ -2863,7 +2888,6 @@ export function createConversationViewScope(props: ConversationProps) {
     composerFocusRequest,
     composerHasContent,
     copiedMessageId,
-    quotedMessageId,
     copyMessage,
     messageText,
     pasteFiles,

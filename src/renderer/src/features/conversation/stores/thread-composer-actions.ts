@@ -3,6 +3,7 @@ import {
   removeAttachmentReferences,
   serializeAttachmentReference,
 } from "@openbot/contracts/attachment-references";
+import { RESEARCH_COMMAND } from "@openbot/contracts/chat-research";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
 import type { ComposerPasteResult, ComposerSelection } from "@openbot/ui/features/conversation/ComposerEditor";
@@ -240,7 +241,7 @@ export function createThreadComposerActions(deps: ThreadComposerActionsDeps) {
     const images = key ? rowImages(key) : [];
     const typedText = key ? draft(key).text.trim() : typed;
     const text = typedText || images.map((image) => serializeAttachmentReference(image.name, image.id)).join(" ");
-    if (!text) return false;
+    if (!text || text === RESEARCH_COMMAND) return false;
     const before = key ? draft(key).text : "";
     const attachments = key ? draft(key).attachments : [];
     const replyToMessageId = key && deps.props.threads?.acceptsReplies ? draft(key).replyToMessageId : null;

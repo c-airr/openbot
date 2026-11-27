@@ -10,7 +10,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, type LogValue, redactSecrets, redactText } from "@openbot/logging";
 import { type CauseCode, classifyFailure, httpStatusCause, structuredCause } from "@openbot/telemetry";
 import { Cause, Effect, Exit, Option, Schema, Scope, Semaphore } from "effect";
-import { CONTEXT_COMPACTION_THRESHOLD } from "./agent/context-compaction";
+import { contextCompactionLimit } from "./agent/context-compaction";
 import { withoutTurnContext } from "./agent/developer-instructions";
 import { secretElicitationField } from "./agent/prompts";
 import { isContextTooSmallFailure, isPiCompactionNoOp } from "./agent/provider-diagnostics";
@@ -295,18 +295,13 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
     const noOp = isPiCompactionNoOp(message);
     const tooSmall = isContextTooSmallFailure(message);
     if (!noOp && !tooSmall) return yield* failure;
-    const usedShare = yield* thread.rpc.request({ type: "get_session_stats" }, 2_000).pipe(
-      Effect.map((stats) =>
-        Option.map(
-          Schema.decodeUnknownOption(PiContextUsage)(getRecord(stats, "contextUsage")),
-          (usage) => usage.tokens / usage.contextWindow,
-        ),
-      ),
-      Effect.orElseSucceed(() => Option.none<number>()),
+    const usage = yield* thread.rpc.request({ type: "get_session_stats" }, 2_000).pipe(
+      Effect.map((stats) => Schema.decodeUnknownOption(PiContextUsage)(getRecord(stats, "contextUsage"))),
+      Effect.orElseSucceed(() => Option.none<Schema.Schema.Type<typeof PiContextUsage>>()),
     );
-    const full = Option.exists(usedShare, (share) => share >= CONTEXT_COMPACTION_THRESHOLD);
+    const full = Option.exists(usage, ({ tokens, contextWindow }) => tokens >= contextCompactionLimit(contextWindow));
     if (full && tooSmall) return yield* providerFailure(new Error(this.#contextTooSmall(message)));
-    if (!noOp || full || Option.isNone(usedShare)) return yield* failure;
+    if (!noOp || full || Option.isNone(usage)) return yield* failure;
     logger.info("Pi has nothing to compact, so the session is already compact.", { provider: this.provider });
   });
 
@@ -507,9 +502,8 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
       case "thread/compact/start": {
         const id = yield* providerSync(() => requiredString(params, "threadId"));
         const thread = yield* this.#thread(id, params);
-        yield* thread.gate
-          .withPermit(thread.rpc.request({ type: "compact" }, timeoutMs ?? 120_000))
-          .pipe(Effect.catch((failure) => this.#compactionFailure(thread, failure)));
+        const automatic = isRecord(params) && params.automaticCompaction === true;
+        yield* thread.gate.withPermit(this.#compact(thread, automatic, timeoutMs ?? 120_000));
         yield* thread.rpc.request({ type: "get_session_stats" }, 2_000).pipe(
           Effect.tap((stats) => Effect.sync(() => this.#notifyContextUsage(thread, stats))),
           Effect.ignore,
@@ -521,6 +515,30 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
         return yield* providerFailure(new Error(`Pi adapter does not implement ${method}.`));
     }
     return yield* providerSync(() => decoder(response));
+  });
+
+  readonly #compact = Effect.fn("PiAgentClient.compact")(function* (
+    this: PiAgentClient,
+    thread: PiThread,
+    automatic: boolean,
+    timeoutMs: number,
+  ) {
+    const compact = thread.rpc.request({ type: "compact" }, timeoutMs).pipe(
+      Effect.catch((failure) => this.#compactionFailure(thread, failure)),
+      Effect.asVoid,
+    );
+    if (!automatic) return yield* compact;
+    const state = yield* thread.rpc.request({ type: "get_state" }, 2_000).pipe(Effect.orElseSucceed(() => null));
+    const previous = getString(state, "thinkingLevel");
+    if (!previous || previous === "low" || !piThinkingLevels(getRecord(state, "model")).includes("low"))
+      return yield* compact;
+    yield* thread.rpc
+      .request({ type: "set_thinking_level", level: "low" }, 5_000)
+      .pipe(
+        Effect.ignore,
+        Effect.andThen(compact),
+        Effect.ensuring(thread.rpc.request({ type: "set_thinking_level", level: previous }, 5_000).pipe(Effect.ignore)),
+      );
   });
 
   readonly #models = Effect.fn("PiAgentClient.models")(function* (

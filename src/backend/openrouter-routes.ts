@@ -1,20 +1,27 @@
 // Fork: which upstream provider serves an OpenRouter model, and the prices of each one.
 //
 // `GET /api/v1/models/<model>/endpoints` lists the providers of a model with their prices per
-// token. The choice is kept in Pi's own `models.json`, because OpenBot's OpenRouter requests run
-// through the Pi CLI: it sends `compat.openRouterRouting` as the request's `provider` field, so
-// pinning a provider there is what stops OpenRouter from moving the model to another endpoint.
-// A model without a pin keeps OpenRouter's own routing.
+// token. The model page also publishes each endpoint's training policy. Pi's `models.json` holds
+// routing preferences, and the OpenRouter extension in Pi reads them before each request.
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type OpenRouterRouteOption, type OpenRouterRoutes, openRouterModelId } from "@openbot/contracts/ipc";
-import { Effect, Option, Schema } from "effect";
+import {
+  type OpenRouterRouteOption,
+  type OpenRouterRouteSettings,
+  type OpenRouterRoutes,
+  openRouterModelId,
+  openRouterProviderSlug,
+  type SetOpenRouterRouteInput,
+} from "@openbot/contracts/ipc";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
+import { Effect, Option, Schema, Semaphore } from "effect";
 import { piAgentDirectory } from "./process-confinement";
 
 const OPENROUTER_ENDPOINTS_BASE = "https://openrouter.ai/api/v1/models";
 const OPENROUTER_TIMEOUT_MS = 15_000;
 const MODELS_FILE = "models.json";
+const routeWrites = Semaphore.makeUnsafe(1);
 
 /** The parts of a JSON document this module reads and writes; every other key stays as it is. */
 type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
@@ -32,6 +39,7 @@ const LiveEndpoint = Schema.Struct({
   tag: Schema.optional(Schema.Unknown),
   context_length: Schema.optional(Schema.Unknown),
   pricing: Schema.optional(LivePricing),
+  data_policy: Schema.optional(Schema.Unknown),
 });
 
 const LiveEndpoints = Schema.Struct({
@@ -47,48 +55,89 @@ function modelsPath(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 function tokenPricePerMillion(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? roundPrice(value * 1_000_000) : null;
-  if (typeof value !== "string" || value.trim() === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? roundPrice(parsed * 1_000_000) : null;
-}
-
-function roundPrice(value: number): number {
-  return Math.round(value * 10_000) / 10_000;
+  const numeric = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  if (typeof numeric !== "number" || !Number.isFinite(numeric) || numeric < 0) return null;
+  return numeric * 1_000_000;
 }
 
 function contextLength(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value) : null;
 }
 
-/** The routes of one model, with their prices; an empty list when OpenRouter cannot be read. */
-async function readLiveRoutes(model: string): Promise<OpenRouterRouteOption[]> {
-  const response = await fetch(`${OPENROUTER_ENDPOINTS_BASE}/${model}/endpoints`, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+function trainingPolicy(policy: unknown): boolean | null {
+  return isDynamicRecord(policy) && typeof policy.training === "boolean" ? policy.training : null;
+}
+
+function readEndpointTraining(flight: string, free: boolean): Map<string, boolean> {
+  const training = new Map<string, boolean>();
+  for (const line of flight.split("\n")) {
+    const payload = /^[\da-f]+:([[{].*)$/u.exec(line)?.[1];
+    if (!payload) continue;
+    const records: unknown[] = [];
+    try {
+      records.push(JSON.parse(payload));
+    } catch {
+      continue;
+    }
+    while (records.length > 0) {
+      const record = records.pop();
+      if (Array.isArray(record)) {
+        for (const child of record) if (child && typeof child === "object") records.push(child);
+      } else if (isDynamicRecord(record)) {
+        const slug = openRouterProviderSlug(record.provider_slug);
+        const policy = trainingPolicy(record.data_policy);
+        if (slug && record.is_free === free && policy !== null)
+          training.set(slug, policy || training.get(slug) === true);
+        for (const child of Object.values(record)) if (child && typeof child === "object") records.push(child);
+      }
+    }
+  }
+  return training;
+}
+
+async function readPublishedTraining(model: string, signal: AbortSignal): Promise<Map<string, boolean>> {
+  const response = await fetch(`https://openrouter.ai/${model}`, {
+    headers: { RSC: "1" },
+    signal,
+    redirect: "error",
   }).catch(() => null);
-  if (!response?.ok) return [];
-  const body = await response.json().catch(() => null);
+  if (!response?.ok || !response.headers.get("content-type")?.includes("text/x-component")) return new Map();
+  const body = await response.text().catch(() => "");
+  return readEndpointTraining(body, model.endsWith(":free"));
+}
+
+async function readLiveRoutes(model: string): Promise<OpenRouterRouteOption[]> {
+  const catalogModel = model.replace(/:(?:batch|nitro|extended|thinking|online|floor)$/u, "");
+  const signal = AbortSignal.timeout(OPENROUTER_TIMEOUT_MS);
+  const [body, training] = await Promise.all([
+    fetch(`${OPENROUTER_ENDPOINTS_BASE}/${catalogModel}/endpoints`, {
+      headers: { Accept: "application/json" },
+      signal,
+      redirect: "error",
+    }).then((response) => {
+      if (!response.ok) throw new Error("Cannot read OpenRouter endpoints.");
+      return response.json();
+    }),
+    readPublishedTraining(catalogModel, signal),
+  ]);
   const decoded = Option.getOrNull(Schema.decodeUnknownOption(LiveEndpoints)(body));
-  const endpoints = decoded?.data?.endpoints ?? [];
-  const routes: OpenRouterRouteOption[] = [];
+  const endpoints = decoded?.data?.endpoints;
+  if (!endpoints) throw new Error("Invalid OpenRouter endpoints response.");
+  const routes = new Map<string, OpenRouterRouteOption>();
   for (const endpoint of endpoints) {
-    const provider = typeof endpoint.tag === "string" ? endpoint.tag.trim() : "";
-    if (!provider) continue;
+    const provider = openRouterProviderSlug(endpoint.tag);
+    if (!provider || routes.has(provider)) continue;
     const name = typeof endpoint.provider_name === "string" ? endpoint.provider_name.trim() : provider;
-    routes.push({
+    routes.set(provider, {
       provider,
       name: name || provider,
       promptPerMillion: tokenPricePerMillion(endpoint.pricing?.prompt),
       completionPerMillion: tokenPricePerMillion(endpoint.pricing?.completion),
       contextLength: contextLength(endpoint.context_length),
+      trainsOnData: trainingPolicy(endpoint.data_policy) ?? training.get(provider) ?? null,
     });
   }
-  return routes.sort((left, right) => {
-    const leftPrice = left.promptPerMillion ?? Number.POSITIVE_INFINITY;
-    const rightPrice = right.promptPerMillion ?? Number.POSITIVE_INFINITY;
-    return leftPrice === rightPrice ? left.name.localeCompare(right.name) : leftPrice - rightPrice;
-  });
+  return [...routes.values()];
 }
 
 function isObject(value: unknown): value is JsonObject {
@@ -112,7 +161,8 @@ async function readModelsFile(path: string): Promise<JsonObject> {
     // Never overwrite a file OpenBot cannot read: the user may keep their own models there.
     throw new Error("Pi's models.json is not valid JSON, so the OpenRouter provider cannot be saved.");
   }
-  return isObject(parsed) ? parsed : {};
+  if (!isObject(parsed)) throw new Error("Pi's models.json must contain a JSON object.");
+  return parsed;
 }
 
 /** The routing object pinned for a model, if any. */
@@ -133,28 +183,29 @@ function pinnedProvider(routing: JsonObject | undefined): string | null {
   return null;
 }
 
-function pruneEmpty(record: JsonObject): JsonObject {
-  for (const [key, value] of Object.entries(record)) {
-    const nested = objectAt(value);
-    if (!nested) continue;
-    const pruned = pruneEmpty(nested);
-    if (Object.keys(pruned).length === 0) delete record[key];
-    else record[key] = pruned;
-  }
-  return record;
-}
-
 /** Puts the routing of one model into the file's object, keeping every other entry as it is. */
-function withRouting(models: JsonObject, model: string, provider: string | null): JsonObject {
+function withRouting(models: JsonObject, { model, provider, noTraining }: SetOpenRouterRouteInput): JsonObject {
   const providers = objectAt(models.providers) ?? {};
   const openrouter = objectAt(providers.openrouter) ?? {};
   const overrides = objectAt(openrouter.modelOverrides) ?? {};
   const override = objectAt(overrides[model]) ?? {};
   const compat = objectAt(override.compat) ?? {};
-  if (provider === null) delete compat.openRouterRouting;
-  else compat.openRouterRouting = { only: [provider], allow_fallbacks: false };
-  const nextCompat = pruneEmpty(compat);
-  if (Object.keys(nextCompat).length > 0) override.compat = nextCompat;
+  const routing = objectAt(compat.openRouterRouting) ?? {};
+  if (provider !== pinnedProvider(routing)) {
+    delete routing.order;
+    if (provider === null) {
+      delete routing.only;
+      if (routing.allow_fallbacks === false) delete routing.allow_fallbacks;
+    } else {
+      routing.only = [provider];
+      routing.allow_fallbacks = false;
+    }
+  }
+  if (noTraining === true) routing.data_collection = "deny";
+  if (noTraining === false && routing.data_collection === "deny") delete routing.data_collection;
+  if (Object.keys(routing).length > 0) compat.openRouterRouting = routing;
+  else delete compat.openRouterRouting;
+  if (Object.keys(compat).length > 0) override.compat = compat;
   else delete override.compat;
   if (Object.keys(override).length > 0) overrides[model] = override;
   else delete overrides[model];
@@ -174,26 +225,35 @@ async function writeModelsFile(path: string, models: JsonObject): Promise<void> 
   await rename(temporary, path);
 }
 
+function routeSettings(models: JsonObject, model: string): OpenRouterRouteSettings {
+  const routing = routingIn(models, model);
+  return { model, current: pinnedProvider(routing), noTraining: routing?.data_collection === "deny" };
+}
+
 /** The model's providers with their prices, and the one the user pinned. */
 export const readOpenRouterRoutes = Effect.fn("OpenRouterRoutes.read")(function* (model: string) {
   const valid = openRouterModelId(model);
   if (!valid) throw new Error("That is not an OpenRouter model id.");
-  const models = yield* Effect.promise(() => readModelsFile(modelsPath()));
-  const options = yield* Effect.promise(() => readLiveRoutes(valid));
-  return { model: valid, current: pinnedProvider(routingIn(models, valid)), options } satisfies OpenRouterRoutes;
+  const [models, options] = yield* Effect.tryPromise({
+    try: () => Promise.all([readModelsFile(modelsPath()), readLiveRoutes(valid)]),
+    catch: (cause) => ({ cause }),
+  });
+  return { ...routeSettings(models, valid), options } satisfies OpenRouterRoutes;
 });
 
 /** Pins a provider for one model, or clears the pin when `provider` is null. */
-export const setOpenRouterRoute = Effect.fn("OpenRouterRoutes.set")(function* (input: {
-  model: string;
-  provider: string | null;
-}) {
+export const setOpenRouterRoute = Effect.fn("OpenRouterRoutes.set")(function* (input: SetOpenRouterRouteInput) {
   const model = openRouterModelId(input.model);
   if (!model) throw new Error("That is not an OpenRouter model id.");
-  yield* Effect.promise(async () => {
-    const path = modelsPath();
-    const models = await readModelsFile(path);
-    await writeModelsFile(path, withRouting(models, model, input.provider));
-  });
-  return yield* readOpenRouterRoutes(model);
+  return yield* routeWrites.withPermit(
+    Effect.tryPromise({
+      try: async () => {
+        const path = modelsPath();
+        const models = withRouting(await readModelsFile(path), { ...input, model });
+        await writeModelsFile(path, models);
+        return routeSettings(models, model);
+      },
+      catch: (cause) => ({ cause }),
+    }).pipe(Effect.uninterruptible),
+  );
 });

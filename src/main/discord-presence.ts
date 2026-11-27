@@ -144,6 +144,7 @@ class DiscordPresence {
   #idle = false;
   #running = 0;
   #readRunning: () => number = () => 0;
+  #generation = 0;
 
   setRunningSource(read: () => number): void {
     this.#readRunning = read;
@@ -172,14 +173,37 @@ class DiscordPresence {
   }
 
   async update(input: DiscordPresenceInput): Promise<void> {
+    const generation = ++this.#generation;
+    if (input.enabled === false) {
+      this.#pending = null;
+      if (this.#retryTimer) clearTimeout(this.#retryTimer);
+      this.#retryTimer = null;
+      this.#retryAt = 0;
+      const socket = this.#socket;
+      if (socket && !socket.destroyed) {
+        if (this.#ready)
+          socket.write(
+            encodeFrame(OP_FRAME, {
+              cmd: "SET_ACTIVITY",
+              args: { pid: process.pid, activity: null },
+              nonce: randomUUID(),
+            }),
+          );
+        this.#socket = null;
+        this.#ready = false;
+        socket.end();
+      }
+      return;
+    }
     this.#config ??= await readConfig();
+    if (generation !== this.#generation) return;
     this.#pending = input;
     if (!this.#ready) {
       if (Date.now() < this.#retryAt) return;
       // A handshake already in flight publishes the card when READY arrives.
       if (this.#socket && !this.#socket.destroyed) return;
-      await this.#open();
-      if (!this.#ready) return;
+      await this.#open(generation);
+      if (!this.#ready || generation !== this.#generation) return;
     }
     this.#publish(input);
   }
@@ -197,9 +221,13 @@ class DiscordPresence {
     );
   }
 
-  async #open(): Promise<void> {
+  async #open(generation: number): Promise<void> {
     for (const path of socketPaths()) {
       const socket = await connectSocket(path);
+      if (generation !== this.#generation) {
+        socket?.destroy();
+        return;
+      }
       if (!socket) continue;
       this.#socket = socket;
       this.#buffer = Buffer.alloc(0);

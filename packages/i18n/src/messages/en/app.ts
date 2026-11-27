@@ -47,6 +47,8 @@ export const messages = defineMessages("app", {
   "app.standingApproval.title": "Always allow {name}?",
   "app.standingApproval.titleUnnamed": "Always allow this agent?",
   "app.rail.label": "Pages",
+  "app.rail.discordPresenceOn": "Discord activity on. Click to turn it off.",
+  "app.rail.discordPresenceOff": "Discord activity off. Click to turn it on.",
   "app.rail.website": "OpenBot website",
   "app.rail.agents": "Agents",
   "app.rail.schedule": "Schedule",

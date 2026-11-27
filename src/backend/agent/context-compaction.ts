@@ -4,6 +4,7 @@ import type {
   AgentContextCategoryUsage,
   AgentContextCompactionReason,
   AgentContextState,
+  AgentReasoningEffort,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
@@ -34,14 +35,24 @@ interface ThreadContextBudget {
 
 const logger = createOpenBotLogger("context-compaction");
 
-export const CONTEXT_COMPACTION_THRESHOLD = 0.8;
-const INEFFECTIVE_COMPACTION_SHARE = CONTEXT_COMPACTION_THRESHOLD - 0.1;
+const CONTEXT_COMPACTION_THRESHOLD = 0.8;
+const MAX_AUTO_COMPACTION_TOKENS = 300_000;
+const INEFFECTIVE_COMPACTION_RATIO = 0.875;
+const COMPACTION_EFFORT_UPDATE_TIMEOUT_MS = 5_000;
 const INEFFECTIVE_COMPACTION_LIMIT = 2;
 const FAILED_COMPACTION_LIMIT = 2;
 const REPEATED_COMPACTION_LIMIT = 2;
 
+export function contextCompactionLimit(contextWindow: number): number {
+  return Math.min(contextWindow * CONTEXT_COMPACTION_THRESHOLD, MAX_AUTO_COMPACTION_TOKENS);
+}
+
 function minimumGrowth(contextWindow: number): number {
-  return Math.max(1_024, Math.floor(contextWindow * 0.05));
+  return Math.max(1_024, Math.floor(contextCompactionLimit(contextWindow) * 0.0625));
+}
+
+function compactionLeavesRoom(budget: ThreadContextBudget): boolean {
+  return budget.usedTokens < contextCompactionLimit(budget.contextWindow) * INEFFECTIVE_COMPACTION_RATIO;
 }
 
 function unknownBudget(): ThreadContextBudget {
@@ -76,7 +87,7 @@ export interface ContextCompactionOptions {
   timeoutMs?: number | undefined;
   cacheExpiryDelayMs?: number | undefined;
   cacheExpiryEnabled?: (() => boolean) | undefined;
-  store: AgentStore;
+  store: Pick<AgentStore, "list"> & { database: Pick<AgentStore["database"], "activeProviderSession"> };
   providers: ProviderPort;
   emitError(code: string, error: unknown, agentId?: string, context?: FailureContext): void;
   scheduleDrain(agentId: string): void;
@@ -113,6 +124,9 @@ interface CompactionHold {
   agentId: string;
   client: AgentClient | null;
   turnId: string | null;
+  automatic: boolean;
+  restoreEffort?: AgentReasoningEffort;
+  restoringEffort?: boolean;
 }
 
 interface RefusalHold {
@@ -122,7 +136,7 @@ interface RefusalHold {
 }
 
 export class ContextCompaction {
-  readonly #store: AgentStore;
+  readonly #store: ContextCompactionOptions["store"];
   readonly #providers: ProviderPort;
   readonly #emitError: (code: string, error: unknown, agentId?: string, context?: FailureContext) => void;
   readonly #scheduleDrain: (agentId: string) => void;
@@ -350,12 +364,12 @@ export class ContextCompaction {
       this.#checkCompaction(budget, agentId);
     }
 
-    const pressured = usedTokens / contextWindow >= CONTEXT_COMPACTION_THRESHOLD;
+    const pressured = usedTokens >= contextCompactionLimit(contextWindow);
     if (!pressured) {
       budget.pending = false;
       budget.lastCompactedTokens = null;
       budget.failedCompactions = 0;
-      if (usedTokens / contextWindow < INEFFECTIVE_COMPACTION_SHARE) budget.ineffectiveCompactions = 0;
+      if (compactionLeavesRoom(budget)) budget.ineffectiveCompactions = 0;
       return;
     }
     if (budget.phase !== "idle") return;
@@ -396,7 +410,7 @@ export class ContextCompaction {
     )
       return;
     const estimated = budget.usedTokens + Math.ceil(characters / CHARACTERS_PER_TOKEN);
-    if (estimated / budget.contextWindow < CONTEXT_COMPACTION_THRESHOLD) return;
+    if (estimated < contextCompactionLimit(budget.contextWindow)) return;
     budget.pending = true;
     logger.info("The next input fills the session, so it compacts first.", {
       usedPercent: Math.round((budget.usedTokens / budget.contextWindow) * 100),
@@ -425,13 +439,13 @@ export class ContextCompaction {
 
   #checkCompaction(budget: ThreadContextBudget, agentId: string | undefined): void {
     const share = budget.usedTokens / budget.contextWindow;
-    if (share < INEFFECTIVE_COMPACTION_SHARE) {
+    if (compactionLeavesRoom(budget)) {
       budget.ineffectiveCompactions = 0;
       return;
     }
     budget.ineffectiveCompactions += 1;
     const percent = Math.round(share * 100);
-    logger.warn("A compaction left the session almost full.", {
+    logger.warn("A compaction left the session near its compaction limit.", {
       usedPercent: percent,
       contextWindow: budget.contextWindow,
       ineffectiveCompactions: budget.ineffectiveCompactions,
@@ -475,7 +489,7 @@ export class ContextCompaction {
     }
     this.#budgets.set(threadId, budget);
     budget.phase = "requested";
-    this.#compacting.set(threadId, { agentId, client: null, turnId });
+    this.#compacting.set(threadId, { agentId, client: null, turnId, automatic: !manual || reason === "cacheExpiry" });
     if (reason) this.#reasons.set(threadId, reason);
     this.observeCompaction(threadId, "running");
     return true;
@@ -512,32 +526,44 @@ export class ContextCompaction {
       return;
     }
 
-    const hold: CompactionHold = { agentId, client, turnId: null };
+    const hold: CompactionHold = { agentId, client, turnId: null, automatic: reservation?.automatic === true };
     this.#compacting.set(threadId, hold);
     const runsInRequest = client.contextCompaction === "request";
 
     yield* this.#loadSession(agentId, client, threadId)
       .pipe(
-        Effect.flatMap((loaded) => {
-          if (this.#compacting.get(threadId) !== hold || this.#budgets.get(threadId) !== budget)
-            return Effect.succeed(false);
-          if (!loaded) {
-            budget.lastCompactedTokens = budget.usedTokens;
-            this.observeCompaction(threadId, "failed");
-            this.#release(agentId, threadId);
-            this.#scheduleDrain(agentId);
-            return Effect.succeed(false);
-          }
-          this.#armDeadline(agentId, threadId, client, runsInRequest ? this.#runTimeoutMs : this.#timeoutMs);
-          return client
-            .request(
+        Effect.flatMap((loaded) =>
+          Effect.gen({ self: this }, function* () {
+            if (this.#compacting.get(threadId) !== hold || this.#budgets.get(threadId) !== budget) return false;
+            if (!loaded) {
+              budget.lastCompactedTokens = budget.usedTokens;
+              this.observeCompaction(threadId, "failed");
+              this.#release(agentId, threadId);
+              this.#scheduleDrain(agentId);
+              return false;
+            }
+            if (hold.automatic && client.provider === "codex" && agent.reasoningEffort !== "low") {
+              const model = this.#providers
+                .listModels()
+                .find((option) => option.provider === client.provider && option.id === agent.model);
+              if (!model || model.supportedReasoningEfforts.includes("low")) {
+                hold.restoreEffort = agent.reasoningEffort;
+                yield* this.#codexEffort(client, threadId, "low");
+              }
+            }
+            if (this.#compacting.get(threadId) !== hold || this.#budgets.get(threadId) !== budget) return false;
+            this.#armDeadline(agentId, threadId, client, runsInRequest ? this.#runTimeoutMs : this.#timeoutMs);
+            yield* client.request(
               "thread/compact/start",
-              runsInRequest ? { threadId, cwd: agent.workspacePath } : { threadId },
+              runsInRequest
+                ? { threadId, cwd: agent.workspacePath, automaticCompaction: hold.automatic }
+                : { threadId },
               decodeRecordResponse,
               runsInRequest ? this.#runTimeoutMs : undefined,
-            )
-            .pipe(Effect.as(true));
-        }),
+            );
+            return true;
+          }),
+        ),
       )
       .pipe(toContextCompactionFailed)
       .pipe(
@@ -819,7 +845,40 @@ export class ContextCompaction {
       budget.phase = "idle";
       budget.compactionTurnId = null;
     }
-    if (this.#compacting.get(threadId)?.agentId === agentId) this.#compacting.delete(threadId);
+    const hold = this.#compacting.get(threadId);
+    if (hold?.agentId !== agentId || hold.restoringEffort) return;
+    if (!hold.client?.running || !hold.restoreEffort || this.#isStopping()) {
+      this.#compacting.delete(threadId);
+      return;
+    }
+    hold.restoringEffort = true;
+    Effect.runFork(
+      this.#codexEffort(hold.client, threadId, hold.restoreEffort).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (this.#compacting.get(threadId) !== hold) return;
+            this.#compacting.delete(threadId);
+            this.#scheduleDrain(agentId);
+          }),
+        ),
+      ),
+    );
+  }
+
+  #codexEffort(client: AgentClient, threadId: string, effort: AgentReasoningEffort): Effect.Effect<void> {
+    return client
+      .request(
+        "thread/settings/update",
+        { threadId, effort },
+        decodeRecordResponse,
+        COMPACTION_EFFORT_UPDATE_TIMEOUT_MS,
+      )
+      .pipe(
+        Effect.asVoid,
+        Effect.catch(() =>
+          Effect.sync(() => logger.warn("Codex did not accept the compaction effort update.", { effort })),
+        ),
+      );
   }
 
   #clearTimer(threadId: string): void {

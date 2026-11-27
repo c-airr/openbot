@@ -10,8 +10,10 @@ import type {
   ListArchivedAgentTasksInput,
   McpSignInApp,
   McpSignInAppState,
+  OpenRouterRouteSettings,
   OpenRouterRoutes,
   ServerNotificationLevel,
+  SetOpenRouterRouteInput,
 } from "@openbot/contracts/ipc";
 import {
   type AccountUsage,
@@ -472,12 +474,9 @@ const MOCK_MCP_TOOL_COUNTS: Record<string, number> = { "Local SQLite": 12, Linea
 const MOCK_MCP_SIGN_IN_URL = "https://mcp.granola.ai/mcp";
 
 /** Fork: the OpenRouter endpoints of a model, as two sample providers and their prices. */
-function mockOpenRouterRoutes(model: string, provider?: string | null): OpenRouterRoutes {
-  if (provider !== undefined) mockRouteChoice.set(model, provider);
-  const pinned = mockRouteChoice.get(model) ?? null;
+function mockOpenRouterRoutes(model: string): OpenRouterRoutes {
   return {
-    model,
-    current: pinned,
+    ...(mockRouteChoice.get(model) ?? { model, current: null, noTraining: false }),
     options: [
       {
         provider: "anthropic",
@@ -485,6 +484,7 @@ function mockOpenRouterRoutes(model: string, provider?: string | null): OpenRout
         promptPerMillion: 3,
         completionPerMillion: 15,
         contextLength: 1_000_000,
+        trainsOnData: false,
       },
       {
         provider: "amazon-bedrock",
@@ -492,12 +492,31 @@ function mockOpenRouterRoutes(model: string, provider?: string | null): OpenRout
         promptPerMillion: 3,
         completionPerMillion: 15,
         contextLength: 1_000_000,
+        trainsOnData: false,
+      },
+      {
+        provider: "sample-provider/fp8",
+        name: "Example provider",
+        promptPerMillion: 0.12,
+        completionPerMillion: 0.7,
+        contextLength: 128_000,
+        trainsOnData: true,
       },
     ],
   };
 }
 
-const mockRouteChoice = new Map<string, string | null>();
+const mockRouteChoice = new Map<string, OpenRouterRouteSettings>();
+
+function saveMockOpenRouterRoute(input: SetOpenRouterRouteInput): OpenRouterRouteSettings {
+  const settings = {
+    model: input.model,
+    current: input.provider,
+    noTraining: input.noTraining ?? mockRouteChoice.get(input.model)?.noTraining ?? false,
+  };
+  mockRouteChoice.set(input.model, settings);
+  return settings;
+}
 
 export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBotControls {
   const appInfo = clone(options.appInfo ?? STORY_APP_INFO);
@@ -1746,7 +1765,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       status: providerApiKeys.has(provider) ? "saved" : "missing",
     }),
     openRouterRoutes: async (model) => mockOpenRouterRoutes(model),
-    setOpenRouterRoute: async ({ model, provider }) => mockOpenRouterRoutes(model, provider),
+    setOpenRouterRoute: async (input) => saveMockOpenRouterRoute(input),
     providerRuntimes: mockProviderRuntimes.providerRuntimes,
     openUrl: async () => undefined,
     voice: mockVoice.voice,

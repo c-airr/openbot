@@ -8,6 +8,7 @@
 import { isDynamicRecord } from "./runtime-values";
 
 export interface DiscordPresenceInput {
+  enabled?: boolean;
   /** The provider of the open chat's agent, such as `claude` or `codex`. Null when no chat is open. */
   provider: string | null;
   /** The model of that agent, such as `claude-opus-5-5-medium`. Null when no chat is open. */
@@ -25,7 +26,9 @@ function nullableText(value: unknown, limit: number): string | null {
 
 export function parseDiscordPresenceInput(value: unknown): DiscordPresenceInput {
   if (!isDynamicRecord(value)) throw new Error("Invalid Discord presence.");
+  if (value.enabled !== undefined && typeof value.enabled !== "boolean") throw new Error("Invalid Discord presence.");
   return {
+    ...(value.enabled === undefined ? {} : { enabled: value.enabled }),
     provider: nullableText(value.provider, 40),
     model: nullableText(value.model, 80),
     effort: nullableText(value.effort, 40),

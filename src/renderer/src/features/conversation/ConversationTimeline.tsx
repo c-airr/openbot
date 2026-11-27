@@ -73,7 +73,6 @@ import { ChatVisualReply, shownVisualReply } from "./ChatVisualReply";
 import { ConversationBrowserLocation } from "./ConversationBrowserLocation";
 import { ConversationBrowserTakeover } from "./ConversationBrowserTakeover";
 import { ConversationQuestionPrompt } from "./ConversationQuestionPrompt";
-import { chatSearchCanOpen, chatSearchOpensMessage } from "./chat-search";
 import {
   ApprovalCard,
   NearPaymentCard,
@@ -156,7 +155,6 @@ export function ConversationTimeline() {
     clearNewMessages,
     closeChatSearch,
     composerHasContent,
-    quotedMessageId,
     branchThread,
     dismissPendingSend,
     downloadMessageImageFile,
@@ -1572,10 +1570,6 @@ export function ConversationTimeline() {
                           <ChatMessageRow
                             message={message() ?? initialMessage}
                             author={author()}
-                            showFull={
-                              chatSearchOpen() && chatSearchOpensMessage(message()?.body ?? "", chatSearchQuery())
-                            }
-                            open={quotedMessageId() === message()?.id && chatSearchCanOpen(message()?.body ?? "")}
                             showAuthor={
                               author().kind === "member" || (channel && author().kind === "agent")
                                 ? !continuesRun()

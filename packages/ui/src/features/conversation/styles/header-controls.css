@@ -751,27 +751,152 @@
   gap: var(--openbot-space-1);
 }
 
-/* Fork: the OpenRouter endpoint choice of the selected model, with its prices. */
-.openrouter-route-select {
+.openrouter-route-trigger {
   width: 148px;
+  justify-content: space-between;
+  background: var(--ui-menu-item-hover);
+}
+
+.openrouter-route-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .openrouter-route-content {
-  width: 320px;
+  position: relative;
+  z-index: var(--openbot-layer-popover);
+  display: flex;
+  width: min(440px, calc(100vw - 24px));
+  max-height: var(--kb-popper-content-available-height, 520px);
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-2);
+  color: var(--openbot-text-primary);
+}
+
+.openrouter-route-heading,
+.openrouter-route-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  padding-inline: var(--ui-menu-inset);
+}
+
+.openrouter-route-heading {
+  padding-block: var(--openbot-space-1);
+}
+
+.openrouter-route-heading span,
+.openrouter-route-sort > span,
+.openrouter-route-columns,
+.openrouter-route-content small,
+.openrouter-route-message {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.openrouter-route-filter,
+.openrouter-route-sort {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.openrouter-route-filter {
+  cursor: pointer;
+  font-size: var(--openbot-text-sm);
+}
+
+.openrouter-route-sort {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.openrouter-route-sort > span {
+  white-space: nowrap;
+}
+
+.openrouter-route-sort > button {
+  padding-inline: var(--openbot-space-2);
+}
+
+.openrouter-route-content button[aria-pressed="true"] {
+  background: var(--ui-menu-item-hover);
+}
+
+.openrouter-route-auto {
+  height: auto;
+  justify-content: space-between;
+  margin-block-start: var(--openbot-space-1);
+  padding: var(--openbot-space-2) var(--ui-menu-inset);
+  text-align: start;
+}
+
+.openrouter-route-auto span,
+.openrouter-route-name {
+  display: grid;
+  gap: var(--openbot-space-0-5);
+  white-space: normal;
+}
+
+.openrouter-route-content small {
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.openrouter-route-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, 5.5rem);
+  align-items: center;
+  gap: var(--openbot-space-2);
+  padding-inline: var(--ui-menu-inset);
+}
+
+.openrouter-route-grid > :nth-child(n + 2) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.openrouter-route-columns {
+  position: sticky;
+  z-index: 1;
+  inset-block-start: 0;
+  border: 1px solid transparent;
+  border-top-color: var(--openbot-border);
+  padding-block: var(--openbot-space-2) var(--openbot-space-1);
+  background: var(--openbot-bg-control);
+}
+
+.openrouter-route-list {
+  min-height: 0;
+  max-height: 45dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .openrouter-route-item {
-  display: flex;
   width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--openbot-space-3);
+  height: auto;
+  padding-block: var(--openbot-space-2);
+  text-align: start;
 }
 
 .openrouter-route-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.openrouter-route-name strong {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.openrouter-route-message {
+  padding: var(--openbot-space-2) var(--ui-menu-inset);
 }
 
 .provider-model-effort-lock {

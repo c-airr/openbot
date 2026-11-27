@@ -84,6 +84,7 @@ const THREAD_WORK_METHODS: ReadonlySet<string> = new Set([
   "thread/resume",
   "thread/fork",
   "thread/compact/start",
+  "thread/settings/update",
   "turn/start",
   "turn/steer",
 ]);

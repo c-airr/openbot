@@ -6,6 +6,20 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.80.3] - 2026-11-27
+
+### Added
+
+- A research button starts a source-based web research task from the conversation header.
+- OpenRouter routes can filter providers that collect data for training and sort endpoints by price.
+- Discord Rich Presence can be turned on or off from the upper-left rail.
+- Automatic context compaction starts at 300,000 tokens or 80% of a smaller context window, using the current model and low effort where supported.
+
+### Changed
+
+- Long messages and commentary are shown in full without a “Show full message” control.
+
+
 ## [0.80.2] - 2026-11-27
 
 ### Added

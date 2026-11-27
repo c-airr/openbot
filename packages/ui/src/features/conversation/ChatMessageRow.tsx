@@ -10,7 +10,7 @@ import {
   MessageHeader,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { children, createMemo, createSignal, For, onSettled, Show } from "solid-js";
+import { children, createMemo, For, Show } from "solid-js";
 import { avatarHeadColor } from "../../bloub-avatar";
 import type { AgentMessage, AgentProfile } from "../../data";
 import { useText } from "../../text";
@@ -36,8 +36,6 @@ export interface ChatMessageRowProps {
   author: ChatMessageAuthor;
   showAuthor?: boolean | undefined;
   showTime?: boolean | undefined;
-  showFull?: boolean | undefined;
-  open?: boolean | undefined;
   animate?: boolean;
   textAtOnce?: boolean | undefined;
   agents: AgentProfile[];
@@ -73,44 +71,6 @@ export interface ChatMessageRowProps {
   loadImageFile?: ((file: MessageImageFile) => Promise<string | null>) | undefined;
   onDownloadImageFile?: ((file: MessageImageFile) => void) | undefined;
   macWindowControls?: boolean | undefined;
-}
-
-function CompactCommentary(props: { children: JSX.Element }): JSX.Element {
-  const { t } = useText();
-  const [expanded, setExpanded] = createSignal(false);
-  const [overflows, setOverflows] = createSignal(false);
-  let content: HTMLDivElement | undefined;
-  onSettled(() => {
-    if (!content || typeof ResizeObserver === "undefined") return;
-    const body = content;
-    const measure = () => {
-      const lineHeight = Number.parseFloat(getComputedStyle(body).lineHeight);
-      setOverflows(body.getBoundingClientRect().height > 2 * lineHeight + 1);
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(body);
-    measure();
-    return () => observer.disconnect();
-  });
-  return (
-    <>
-      <div class={expanded() ? undefined : "message-commentary-collapsed"}>
-        <div ref={content} class="message-commentary-content" inert={!expanded() && overflows()}>
-          {props.children}
-        </div>
-      </div>
-      <Show when={overflows()}>
-        <Button
-          variant="ghost"
-          class="message-commentary-toggle"
-          aria-expanded={expanded() ? "true" : "false"}
-          onClick={() => setExpanded(!expanded())}
-        >
-          {expanded() ? t("chat.message.showLess") : t("chat.message.showFull")}
-        </Button>
-      </Show>
-    </>
-  );
 }
 
 export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
@@ -214,8 +174,6 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
   const messageBody = (frame?: (content: JSX.Element, imagesOnly: () => boolean) => JSX.Element) => (
     <MessageBody
       frame={frame}
-      showFull={props.showFull}
-      open={props.open}
       animate={props.animate === true && props.textAtOnce !== true}
       message={props.message}
       referencedMessage={props.referencedMessage}
@@ -357,14 +315,7 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
           </MessageHeader>
         </Show>
         <div class="message-shell">
-          <Show
-            when={person()}
-            fallback={bubble(
-              <Show when={commentary()} fallback={messageBody()}>
-                <CompactCommentary>{messageBody()}</CompactCommentary>
-              </Show>,
-            )}
-          >
+          <Show when={person()} fallback={bubble(messageBody())}>
             <div class="message-stack">
               {messageBody((content, imagesOnly) => (
                 <Show when={!imagesOnly() || (props.reactions?.length ?? 0) > 0 || extra.toArray().length > 0}>

@@ -53,6 +53,8 @@ export function ConversationHeader() {
     replyJump,
     moveThreadToPanel,
     startNewThread,
+    startResearch,
+    researchDisabled,
   } = useConversationViewScope();
   // Fork: the OpenRouter endpoint of a model, kept in Pi's own config, so only a local server has it.
   const openRouterRoutes = (model: string) => window.openbot.openRouterRoutes(model);
@@ -181,6 +183,7 @@ export function ConversationHeader() {
           ? { active: memoryBlocked(), onToggle: () => void changeMemoryBlock(!memoryBlocked()) }
           : undefined
       }
+      research={!channel ? { disabled: researchDisabled(), onStart: startResearch } : undefined}
       remoteControl={
         props.remoteDesktopEnabled !== false && props.server?.kind === "remote"
           ? {

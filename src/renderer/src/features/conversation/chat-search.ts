@@ -120,20 +120,6 @@ function lowercase(source: string): LowercaseText {
   return { text, starts, ends };
 }
 
-const SEARCH_OPENS_CHARACTERS = 300_000;
-
-export function chatSearchCanOpen(text: string): boolean {
-  return text.length <= SEARCH_OPENS_CHARACTERS;
-}
-
-export function chatSearchOpensMessage(text: string, query: string): boolean {
-  if (!chatSearchCanOpen(text)) return false;
-  const terms = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-  if (terms.length === 0) return false;
-  const lower = text.toLocaleLowerCase();
-  return terms.every((term) => lower.includes(term));
-}
-
 export function findChatSearchMatches(root: HTMLElement, query: string): ChatSearchMatch[] {
   const pattern = searchPattern(query);
   if (!pattern) return [];

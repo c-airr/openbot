@@ -43,6 +43,7 @@ import {
   isSidebarPinsSnapshot,
   MAX_PROVIDER_ACCOUNTS,
   type OpenRouterRouteOption,
+  type OpenRouterRouteSettings,
   type OpenRouterRoutes,
   openRouterModelId,
   openRouterProviderSlug,
@@ -254,15 +255,19 @@ export function decodeAgentNotificationLevelsFromMain(value: unknown): AgentNoti
   return value;
 }
 
-/** Fork: the OpenRouter providers of a model, with their prices. */
-export function decodeOpenRouterRoutes(value: unknown): OpenRouterRoutes {
-  if (!isDynamicRecord(value) || !isString(value.model) || !Array.isArray(value.options))
-    throw new Error("Invalid OpenRouter routes response.");
+export function decodeOpenRouterRouteSettings(value: unknown): OpenRouterRouteSettings {
+  if (!isDynamicRecord(value)) throw new Error("Invalid OpenRouter routes response.");
   const model = openRouterModelId(value.model);
   if (!model) throw new Error("Invalid OpenRouter routes response.");
   const current = value.current === null || value.current === undefined ? null : openRouterProviderSlug(value.current);
   if (value.current !== null && value.current !== undefined && current === null)
     throw new Error("Invalid OpenRouter routes response.");
+  return { model, current, noTraining: value.noTraining === true };
+}
+
+/** Fork: the OpenRouter providers of a model, with their prices. */
+export function decodeOpenRouterRoutes(value: unknown): OpenRouterRoutes {
+  if (!isDynamicRecord(value) || !Array.isArray(value.options)) throw new Error("Invalid OpenRouter routes response.");
   const options: OpenRouterRouteOption[] = [];
   for (const entry of value.options) {
     if (!isDynamicRecord(entry) || !isString(entry.provider) || !isString(entry.name))
@@ -276,7 +281,8 @@ export function decodeOpenRouterRoutes(value: unknown): OpenRouterRoutes {
       promptPerMillion: price(entry.promptPerMillion),
       completionPerMillion: price(entry.completionPerMillion),
       contextLength: price(entry.contextLength),
+      trainsOnData: typeof entry.trainsOnData === "boolean" ? entry.trainsOnData : null,
     });
   }
-  return { model, current, options };
+  return { ...decodeOpenRouterRouteSettings(value), options };
 }
