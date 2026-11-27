@@ -31,14 +31,14 @@ import { useText } from "@openbot/ui/text";
 export function ConversationHeader() {
   const { t } = useText();
   const {
-    actingBrowserControl,
     agentActivity,
-    browserControlAgent,
     changeLeanMode,
+    changeMemoryBlock,
     channel,
     fastMode,
     fastModeChange,
     leanMode,
+    memoryBlocked,
     ultrafast,
     props,
     runningTurnRuntime,
@@ -48,11 +48,9 @@ export function ConversationHeader() {
     settingsModel,
     settingsProvider,
     settingsReasoning,
-    sidePanelOpen,
     sideThreadOpen,
     messagePins,
     replyJump,
-    toggleSidePanel,
     moveThreadToPanel,
     startNewThread,
   } = useConversationViewScope();
@@ -171,6 +169,11 @@ export function ConversationHeader() {
           ? { active: leanMode(), onToggle: () => void changeLeanMode(!leanMode()) }
           : undefined
       }
+      memoryBlock={
+        props.server?.kind === "local" && !channel
+          ? { active: memoryBlocked(), onToggle: () => void changeMemoryBlock(!memoryBlocked()) }
+          : undefined
+      }
       remoteControl={
         props.remoteDesktopEnabled !== false && props.server?.kind === "remote"
           ? {
@@ -189,17 +192,6 @@ export function ConversationHeader() {
         </Show>
       }
       pinnedMessages={pinnedMessages()}
-      sidePanel={
-        channel?.readOnly()
-          ? undefined
-          : {
-              open: sidePanelOpen(),
-              actingAgentName: actingBrowserControl()
-                ? (browserControlAgent()?.name ?? t("conversation.header.agentFallback"))
-                : undefined,
-              onToggle: toggleSidePanel,
-            }
-      }
     />
   );
 }

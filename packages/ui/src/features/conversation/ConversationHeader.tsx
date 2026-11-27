@@ -1,11 +1,10 @@
-import { Badge, Button, Clock3, Leaf, Lock } from "@openbot/ui";
+import { Badge, Brain, Button, Clock3, Leaf, Lock } from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { agentAccessLockLabel } from "@openbot/ui/features/agents/agent-access";
 import { RemoteDesktopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { PinnedMessages, type PinnedMessagesProps } from "@openbot/ui/features/conversation/PinnedMessages";
-import { SidePanelToggle, type SidePanelToggleProps } from "@openbot/ui/features/conversation/SidePanel";
 import { TabShape } from "@openbot/ui/features/conversation/TabShape";
 import { useText } from "@openbot/ui/text";
 import type { ComponentProps, JSX } from "@solidjs/web";
@@ -23,10 +22,11 @@ export interface ConversationHeaderProps {
   remoteControl?: ConversationHeaderRemoteControl | undefined;
   /** Fork: the lean mode switch. Missing where it cannot change, such as a remote server. */
   leanMode?: { active: boolean; onToggle: () => void } | undefined;
+  /** Fork: the memory switch of the chat. `active` means memory is blocked. */
+  memoryBlock?: { active: boolean; onToggle: () => void } | undefined;
   /** Missing when the chat has no side panel, such as a deleted channel. */
   /** The pinned messages of the chat in view. Without it, the header has no pin button. */
   pinnedMessages?: PinnedMessagesProps | undefined;
-  sidePanel?: SidePanelToggleProps | undefined;
   threads?: JSX.Element | undefined;
   titleSelected?: boolean | undefined;
 }
@@ -192,6 +192,23 @@ export function ConversationHeader(props: ConversationHeaderProps) {
             </Button>
           )}
         </Show>
+        <Show when={props.agent && props.memoryBlock}>
+          {(memory) => (
+            <Button
+              variant="ghost"
+              type="button"
+              class="header-panel-toggle lean-mode-toggle"
+              aria-pressed={memory().active ? "true" : "false"}
+              aria-label={t(
+                memory().active ? "conversation.header.memoryBlockOn" : "conversation.header.memoryBlockOff",
+              )}
+              title={t(memory().active ? "conversation.header.memoryBlockOn" : "conversation.header.memoryBlockOff")}
+              onClick={() => memory().onToggle()}
+            >
+              <Brain aria-hidden="true" />
+            </Button>
+          )}
+        </Show>
         <Show when={props.remoteControl}>
           {(control) => (
             <Button
@@ -212,7 +229,6 @@ export function ConversationHeader(props: ConversationHeaderProps) {
           )}
         </Show>
         <Show when={props.pinnedMessages}>{(pins) => <PinnedMessages {...pins()} />}</Show>
-        <Show when={props.sidePanel}>{(sidePanel) => <SidePanelToggle {...sidePanel()} />}</Show>
       </div>
       <Show when={props.agent && titleTab() !== undefined}>
         <TabShape
