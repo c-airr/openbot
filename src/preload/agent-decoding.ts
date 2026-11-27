@@ -42,6 +42,10 @@ import {
   isSidebarLayoutSnapshot,
   isSidebarPinsSnapshot,
   MAX_PROVIDER_ACCOUNTS,
+  type OpenRouterRouteOption,
+  type OpenRouterRoutes,
+  openRouterModelId,
+  openRouterProviderSlug,
   type ProviderApiKeyState,
   type ProviderCodeLoginStart,
   type ProviderUsageResetOutcome,
@@ -248,4 +252,31 @@ export function decodeSidebarPinsFromMain(value: unknown): SidebarPinsSnapshot {
 export function decodeAgentNotificationLevelsFromMain(value: unknown): AgentNotificationLevelsSnapshot {
   if (!isAgentNotificationLevelsSnapshot(value)) throw new Error("Invalid agent notification levels response.");
   return value;
+}
+
+/** Fork: the OpenRouter providers of a model, with their prices. */
+export function decodeOpenRouterRoutes(value: unknown): OpenRouterRoutes {
+  if (!isDynamicRecord(value) || !isString(value.model) || !Array.isArray(value.options))
+    throw new Error("Invalid OpenRouter routes response.");
+  const model = openRouterModelId(value.model);
+  if (!model) throw new Error("Invalid OpenRouter routes response.");
+  const current = value.current === null || value.current === undefined ? null : openRouterProviderSlug(value.current);
+  if (value.current !== null && value.current !== undefined && current === null)
+    throw new Error("Invalid OpenRouter routes response.");
+  const options: OpenRouterRouteOption[] = [];
+  for (const entry of value.options) {
+    if (!isDynamicRecord(entry) || !isString(entry.provider) || !isString(entry.name))
+      throw new Error("Invalid OpenRouter routes response.");
+    const provider = openRouterProviderSlug(entry.provider);
+    if (!provider) throw new Error("Invalid OpenRouter routes response.");
+    const price = (price: unknown): number | null => (isNumber(price) && Number.isFinite(price) ? price : null);
+    options.push({
+      provider,
+      name: entry.name,
+      promptPerMillion: price(entry.promptPerMillion),
+      completionPerMillion: price(entry.completionPerMillion),
+      contextLength: price(entry.contextLength),
+    });
+  }
+  return { model, current, options };
 }

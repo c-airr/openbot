@@ -13,11 +13,14 @@ import {
   isProviderAccountId,
   isProviderAccountPoolStrategy,
   MAX_PROVIDER_ACCOUNTS,
+  openRouterModelId,
+  openRouterProviderSlug,
   PROVIDER_ACCOUNT_LABEL_MAX_LENGTH,
   type RemoveProviderAccountInput,
   type RenameProviderAccountInput,
   type ResetProviderUsageInput,
   type SetLiveVoiceAccountInput,
+  type SetOpenRouterRouteInput,
   type SetProviderAccountPoolInput,
   type SetProviderApiKeyInput,
 } from "@openbot/contracts/ipc";
@@ -29,6 +32,7 @@ import { Effect } from "effect";
 import { AgentLifecycleFailed, type AgentService } from "../../backend/agent-service";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { SignInRegion } from "../../backend/kimi-region";
+import { readOpenRouterRoutes, setOpenRouterRoute } from "../../backend/openrouter-routes";
 import type { LocalSignInPages } from "../local-sign-in-pages";
 import type { ProviderCredentialStore } from "../provider-credential-store";
 import type { ProviderRuntimeManager } from "../provider-runtime-manager";
@@ -165,6 +169,12 @@ export function providerIpcHandlers({
       setLiveVoiceAccount: payloadHandler(parseSetLiveVoiceAccountInput, ({ accountId }) =>
         runCauseEffect(service.setLiveVoiceAccount(accountId)),
       ),
+      openRouterRoutes: payloadHandler(parseOpenRouterModelInput, (model) =>
+        runCauseEffect(readOpenRouterRoutes(model)),
+      ),
+      setOpenRouterRoute: payloadHandler(parseSetOpenRouterRouteInput, (input) =>
+        runCauseEffect(setOpenRouterRoute(input)),
+      ),
       signOutProvider: payloadHandler(parseProviderId, (provider) => runCauseEffect(service.signOutProvider(provider))),
       providerUsageResets: payloadHandler(parseProviderId, (provider) =>
         runCauseEffect(service.providerUsageResets(provider)),
@@ -278,6 +288,22 @@ export function parseSetLiveVoiceAccountInput(value: unknown): SetLiveVoiceAccou
 export function parseResetProviderUsageInput(value: unknown): ResetProviderUsageInput {
   if (!isDynamicRecord(value) || !isProviderAccountId(value.accountId)) throw new Error("Invalid provider account.");
   return { provider: parseProviderId(value.provider), accountId: value.accountId };
+}
+
+/** Fork: an OpenRouter model id, such as "anthropic/claude-sonnet-4.5". */
+export function parseOpenRouterModelInput(value: unknown): string {
+  const model = openRouterModelId(value);
+  if (!model) throw new Error("Invalid OpenRouter model.");
+  return model;
+}
+
+export function parseSetOpenRouterRouteInput(value: unknown): SetOpenRouterRouteInput {
+  if (!isDynamicRecord(value)) throw new Error("Invalid OpenRouter provider choice.");
+  const model = parseOpenRouterModelInput(value.model);
+  if (value.provider === null) return { model, provider: null };
+  const provider = openRouterProviderSlug(value.provider);
+  if (!provider) throw new Error("Invalid OpenRouter provider.");
+  return { model, provider };
 }
 
 export function parseRenameProviderAccountInput(value: unknown): RenameProviderAccountInput {

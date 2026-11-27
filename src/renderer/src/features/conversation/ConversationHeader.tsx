@@ -54,6 +54,11 @@ export function ConversationHeader() {
     moveThreadToPanel,
     startNewThread,
   } = useConversationViewScope();
+  // Fork: the OpenRouter endpoint of a model, kept in Pi's own config, so only a local server has it.
+  const openRouterRoutes = (model: string) => window.openbot.openRouterRoutes(model);
+  const saveOpenRouterRoute = (input: { model: string; provider: string | null }) =>
+    window.openbot.setOpenRouterRoute(input);
+
   const runningThreads = () => props.threads?.running ?? 0;
   const openMainChat = () => {
     const header = props.threads?.header;
@@ -157,6 +162,8 @@ export function ConversationHeader() {
         providerAccountId: props.agent ? agentNextProviderAccountId(props.agent) : undefined,
         workspaceOnly: props.agent ? workspaceAccessEnforced(props.agent) : false,
         accountUsage: props.accountUsage,
+        openRouterRoutes: props.server?.kind === "local" ? openRouterRoutes : undefined,
+        setOpenRouterRoute: props.server?.kind === "local" ? saveOpenRouterRoute : undefined,
         onChange: (model, provider, accountId, effort) =>
           void selectAndConfirmModel(model, provider, accountId, effort),
         onReasoningEffortChange: (effort) => void selectAndConfirmReasoning(effort),

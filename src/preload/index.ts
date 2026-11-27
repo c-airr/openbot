@@ -140,6 +140,7 @@ import {
   decodeMemories,
   decodeMemory,
   decodeMemorySelection,
+  decodeOpenRouterRoutes,
   decodeOptionalMemorySelection,
   decodePendingPrompts,
   decodeProviderApiKeyState,
@@ -875,6 +876,8 @@ const openbotApi: OpenBotDesktopApi = {
     signOutProvider: decodeAgentStatusFromMain,
     providerUsageResets: decodeProviderUsageResetsFromMain,
     resetProviderUsage: decodeProviderUsageResetOutcomeFromMain,
+    openRouterRoutes: decodeOpenRouterRoutes,
+    setOpenRouterRoute: decodeOpenRouterRoutes,
   }),
   browserDock: bridgeGroup(IPC_ENDPOINTS.browserDock, {
     publishPresentation: decodeVoid,

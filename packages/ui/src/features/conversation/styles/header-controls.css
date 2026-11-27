@@ -751,6 +751,29 @@
   gap: var(--openbot-space-1);
 }
 
+/* Fork: the OpenRouter endpoint choice of the selected model, with its prices. */
+.openrouter-route-select {
+  width: 148px;
+}
+
+.openrouter-route-content {
+  width: 320px;
+}
+
+.openrouter-route-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+}
+
+.openrouter-route-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .provider-model-effort-lock {
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);

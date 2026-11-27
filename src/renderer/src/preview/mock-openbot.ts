@@ -10,6 +10,7 @@ import type {
   ListArchivedAgentTasksInput,
   McpSignInApp,
   McpSignInAppState,
+  OpenRouterRoutes,
   ServerNotificationLevel,
 } from "@openbot/contracts/ipc";
 import {
@@ -469,6 +470,34 @@ const PREVIEW_BROWSERS: ExternalLinkBrowsers = {
 
 const MOCK_MCP_TOOL_COUNTS: Record<string, number> = { "Local SQLite": 12, Linear: 1, Figma: 6 };
 const MOCK_MCP_SIGN_IN_URL = "https://mcp.granola.ai/mcp";
+
+/** Fork: the OpenRouter endpoints of a model, as two sample providers and their prices. */
+function mockOpenRouterRoutes(model: string, provider?: string | null): OpenRouterRoutes {
+  if (provider !== undefined) mockRouteChoice.set(model, provider);
+  const pinned = mockRouteChoice.get(model) ?? null;
+  return {
+    model,
+    current: pinned,
+    options: [
+      {
+        provider: "anthropic",
+        name: "Anthropic",
+        promptPerMillion: 3,
+        completionPerMillion: 15,
+        contextLength: 1_000_000,
+      },
+      {
+        provider: "amazon-bedrock",
+        name: "Amazon Bedrock",
+        promptPerMillion: 3,
+        completionPerMillion: 15,
+        contextLength: 1_000_000,
+      },
+    ],
+  };
+}
+
+const mockRouteChoice = new Map<string, string | null>();
 
 export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBotControls {
   const appInfo = clone(options.appInfo ?? STORY_APP_INFO);
@@ -1716,6 +1745,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       provider,
       status: providerApiKeys.has(provider) ? "saved" : "missing",
     }),
+    openRouterRoutes: async (model) => mockOpenRouterRoutes(model),
+    setOpenRouterRoute: async ({ model, provider }) => mockOpenRouterRoutes(model, provider),
     providerRuntimes: mockProviderRuntimes.providerRuntimes,
     openUrl: async () => undefined,
     voice: mockVoice.voice,

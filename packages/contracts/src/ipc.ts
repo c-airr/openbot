@@ -128,6 +128,7 @@ export * from "./marketplace-suggestion-events";
 export * from "./mcp-sign-in-events";
 export * from "./message-link-source";
 export * from "./mobile-connect";
+export * from "./openrouter-routes";
 export * from "./setting-links";
 export * from "./skill-conversation-events";
 export * from "./skill-suggestion-events";

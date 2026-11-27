@@ -12,8 +12,11 @@ import type {
   CustomProviderHarness,
   CustomProviderSummary,
   ForeignProviderId,
+  OpenRouterRouteOption,
+  OpenRouterRoutes,
   ProviderAccountStatus,
   ProviderRuntimeStatus,
+  SetOpenRouterRouteInput,
 } from "@openbot/contracts/ipc";
 import {
   agentProviderCliName,
@@ -105,6 +108,9 @@ interface ProviderModelPickerProps {
   accountUsage?: AccountUsage | null | undefined;
   workspaceOnly?: boolean | undefined;
   foreignProvider?: ForeignProviderId | undefined;
+  /** Fork: the OpenRouter endpoints of a model, with their prices, and the pinned one. */
+  openRouterRoutes?: ((model: string) => Promise<OpenRouterRoutes>) | undefined;
+  setOpenRouterRoute?: ((input: SetOpenRouterRouteInput) => Promise<OpenRouterRoutes>) | undefined;
   onChange: (
     model: AgentModelId,
     provider: AgentProviderId,
@@ -161,6 +167,144 @@ const TRIGGER_SWAP: SwapMotion = {
   enter: { duration: 320, easing: "cubic-bezier(0.33, 1, 0.68, 1)" },
   leave: { duration: 180, easing: "ease" },
 };
+
+const OPENROUTER_AUTO = "auto" as const;
+
+/** The model id OpenRouter's endpoints route reads: no latest alias, no request variant suffix. */
+function openRouterEndpointModel(model: string): string {
+  return model.replace(/^~/u, "").replace(/:(?:free|batch|nitro|extended|thinking|online)$/u, "");
+}
+
+interface OpenRouterRouteChoice {
+  id: string;
+  name: string;
+  detail: string;
+}
+
+function routePriceText(route: OpenRouterRouteOption, t: AppTranslate): string {
+  const price = (value: number | null) => {
+    if (value === null) return "?";
+    if (value >= 1) return `$${value.toFixed(2)}`;
+    return `$${value.toFixed(value >= 0.01 ? 3 : 4)}`;
+  };
+  return t("provider.picker.openrouterRoutePrice", {
+    prompt: price(route.promptPerMillion),
+    completion: price(route.completionPerMillion),
+  });
+}
+
+/** Fork: the OpenRouter endpoint of one model. `auto` leaves OpenRouter's own routing in charge. */
+function OpenRouterRouteRow(props: {
+  model: string;
+  disabled: boolean;
+  routes: (model: string) => Promise<OpenRouterRoutes>;
+  save: (input: SetOpenRouterRouteInput) => Promise<OpenRouterRoutes>;
+}) {
+  const { t } = useText();
+  const [routes, setRoutes] = createSignal<OpenRouterRoutes | null>(null);
+  const [failed, setFailed] = createSignal(false);
+  const [saving, setSaving] = createSignal(false);
+  let loadedModel: string | undefined;
+
+  createEffect(
+    () => openRouterEndpointModel(props.model),
+    (model) => {
+      if (!model || model === loadedModel) return;
+      loadedModel = model;
+      setRoutes(null);
+      setFailed(false);
+      void (async () => {
+        try {
+          const next = await props.routes(model);
+          if (loadedModel === model) setRoutes(next);
+        } catch {
+          if (loadedModel === model) setFailed(true);
+        }
+      })();
+    },
+  );
+
+  const choices = createMemo<OpenRouterRouteChoice[]>(() => {
+    const list: OpenRouterRouteChoice[] = [
+      {
+        id: OPENROUTER_AUTO,
+        name: t("provider.picker.openrouterRouteAuto"),
+        detail: t("provider.picker.openrouterRouteAutoDetail"),
+      },
+    ];
+    const current = routes();
+    for (const route of current?.options ?? [])
+      list.push({ id: route.provider, name: route.name, detail: routePriceText(route, t) });
+    const pinned = current?.current;
+    if (pinned && !list.some((choice) => choice.id === pinned)) list.push({ id: pinned, name: pinned, detail: "" });
+    return list;
+  });
+
+  const selected = createMemo<OpenRouterRouteChoice | undefined>(() => {
+    const pinned = routes()?.current ?? null;
+    if (!pinned) return choices()[0];
+    return choices().find((choice) => choice.id === pinned);
+  });
+
+  const choose = async (choice: OpenRouterRouteChoice | null) => {
+    if (!choice || saving() || props.disabled) return;
+    if (choice.id === selected()?.id) return;
+    const model = openRouterEndpointModel(props.model);
+    setSaving(true);
+    try {
+      const next = await props.save({ model, provider: choice.id === OPENROUTER_AUTO ? null : choice.id });
+      if (loadedModel === model) setRoutes(next);
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div class="provider-model-effort openrouter-route">
+      <span>{t("provider.picker.openrouterRoute")}</span>
+      <Show
+        when={!failed()}
+        fallback={
+          <Text variant="caption" tone="muted">
+            {t("provider.picker.openrouterRouteFailed")}
+          </Text>
+        }
+      >
+        <Select<OpenRouterRouteChoice>
+          class="provider-model-effort-select openrouter-route-select"
+          options={choices()}
+          optionValue="id"
+          optionTextValue="name"
+          value={selected()}
+          sameWidth={false}
+          placement="bottom-end"
+          onChange={choose}
+          itemComponent={(item) => (
+            <SelectItem item={item.item} class="openrouter-route-item">
+              <span class="openrouter-route-name">{item.item.rawValue.name}</span>
+              <Text variant="caption" tone="muted">
+                {item.item.rawValue.detail}
+              </Text>
+            </SelectItem>
+          )}
+        >
+          <SelectTrigger
+            size="sm"
+            aria-label={t("provider.picker.openrouterRoute")}
+            disabled={props.disabled || saving() || routes() === null}
+          >
+            <SelectValue<OpenRouterRouteChoice>>
+              {(state) => state.selectedOption()?.name ?? t("provider.picker.openrouterRouteAuto")}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent class="provider-model-effort-content openrouter-route-content" />
+        </Select>
+      </Show>
+    </div>
+  );
+}
 
 export function ProviderModelPicker(props: ProviderModelPickerProps) {
   const text = useText();
@@ -1345,6 +1489,26 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
                           <SelectContent class="provider-model-effort-content provider-model-speed-content" />
                         </Select>
                       </div>
+                    </Show>
+                    <Show
+                      when={
+                        provider === "openrouter" && props.provider === "openrouter"
+                          ? props.openRouterRoutes
+                          : undefined
+                      }
+                    >
+                      {(routes) => (
+                        <Show when={props.setOpenRouterRoute}>
+                          {(save) => (
+                            <OpenRouterRouteRow
+                              model={props.value}
+                              disabled={props.disabled === true}
+                              routes={routes()}
+                              save={save()}
+                            />
+                          )}
+                        </Show>
+                      )}
                     </Show>
                   </Tabs.Content>
                 );
