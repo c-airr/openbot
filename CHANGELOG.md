@@ -6,6 +6,22 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.80.1] - 2026-11-27
+
+### Added
+
+- A memory switch in the chat header, next to lean mode. One click turns memory off for that chat:
+  the agent gets no saved memories and no memory tool runs, including the shared ones.
+- The model picker lists the OpenRouter providers of the selected model with their prompt and
+  completion prices per million tokens. "Auto" leaves OpenRouter's own choice; any other provider
+  stays pinned for every later request.
+
+### Changed
+
+- Merged upstream main into the fork, keeping lean mode, the single usage rail, the Cursor session
+  config handling, the /compact failover and the OpenRouter credit reading.
+
+
 ## [0.80.0] - 2026-11-26
 
 ### Added
