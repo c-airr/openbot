@@ -6,8 +6,8 @@ import {
 } from "./sidebar-list-filter";
 
 export const SIDEBAR_ALL_TAB_ID = "all";
-export const SIDEBAR_UNREAD_TAB_ID = "unread";
-export const SIDEBAR_DEFAULT_TAB_IDS: readonly string[] = [SIDEBAR_UNREAD_TAB_ID];
+// Fork: no Unread tab. The sidebar keeps the All tab and the folder tabs only.
+export const SIDEBAR_DEFAULT_TAB_IDS: readonly string[] = [];
 
 const FOLDER_TAB_PREFIX = "folder:";
 
@@ -24,9 +24,6 @@ export function sidebarFolderTabId(folderId: string): string {
 export function sidebarTabsFor(chosenIds: readonly string[], folders: readonly SidebarFolderNode[]): SidebarTab[] {
   const chosen = new Set(chosenIds);
   const tabs: SidebarTab[] = [{ id: SIDEBAR_ALL_TAB_ID, folder: null, filter: SIDEBAR_NO_LIST_FILTER }];
-  if (chosen.has(SIDEBAR_UNREAD_TAB_ID)) {
-    tabs.push({ id: SIDEBAR_UNREAD_TAB_ID, folder: null, filter: { ...SIDEBAR_NO_LIST_FILTER, unread: true } });
-  }
   for (const folder of folders) {
     const id = sidebarFolderTabId(folder.id);
     if (chosen.has(id)) {

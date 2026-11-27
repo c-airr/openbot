@@ -3661,6 +3661,20 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // Fork: a project folder is the user's own, so no skill files are written into it.
         if (input.workspaceFolder === undefined) yield* this.#prepareAgentWorkspace(agent);
         agent = yield* this.#assignNewAgentModel(agent, input, true);
+        // Fork: the toggles chosen on the new chat screen belong to the chat this creates.
+        if (input.leanMode !== undefined || input.memory !== undefined) {
+          agent = yield* this.#store
+            .updateAgent({
+              agentId: agent.id,
+              ...(input.leanMode === undefined ? {} : { leanMode: input.leanMode }),
+              ...(input.memory === undefined ? {} : { memory: input.memory }),
+            })
+            .pipe(
+              Effect.mapError(
+                (failure) => new AgentLifecycleFailed({ operation: "create agent", cause: failure.cause }),
+              ),
+            );
+        }
         if (configure) agent = yield* configure(agent);
         if (COMPACT_HELPER.test(agent.description)) {
           const order = this.#compactBackupModels(agent);

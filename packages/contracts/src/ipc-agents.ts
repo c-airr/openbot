@@ -346,6 +346,10 @@ export interface CreateAgentInput {
   providerAccountId?: string;
   /** Fork, desktop only: the agent starts with no message, so a chat opens empty. */
   blank?: boolean;
+  /** Fork: the lean mode switch of the new chat screen, kept on the agent this creates. */
+  leanMode?: boolean;
+  /** Fork: the memory switch of the new chat screen; false starts the agent with memory off. */
+  memory?: boolean;
   /** Fork, desktop only: an existing folder the agent works in, instead of a new workspace. */
   workspaceFolder?: string;
   operationId?: string;

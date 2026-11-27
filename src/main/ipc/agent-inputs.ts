@@ -259,6 +259,14 @@ export function parseCreateAgent(value: unknown): CreateAgentInput {
         : requireString(value.initialMessage, "initialMessage", INPUT_LIMITS.messageText),
   };
   if (value.blank === true) result.blank = true;
+  if (value.leanMode !== undefined) {
+    if (!isBoolean(value.leanMode)) throw new Error("leanMode must be a boolean.");
+    result.leanMode = value.leanMode;
+  }
+  if (value.memory !== undefined) {
+    if (!isBoolean(value.memory)) throw new Error("memory must be a boolean.");
+    result.memory = value.memory;
+  }
   if (value.showInitialMessage !== undefined) {
     if (!isBoolean(value.showInitialMessage)) throw new Error("showInitialMessage must be a boolean.");
     result.showInitialMessage = value.showInitialMessage;

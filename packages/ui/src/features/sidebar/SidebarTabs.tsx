@@ -1,10 +1,10 @@
-import { Badge, DropdownMenu, Folder, Inbox, SlidersHorizontal, SlidingTabs } from "@openbot/ui";
+import { Badge, DropdownMenu, Folder, SlidersHorizontal, SlidingTabs } from "@openbot/ui";
 import { createEffect, createSignal, For, type ParentProps, Show } from "solid-js";
 import { useText } from "../../text";
 import { MenuMark } from "./SidebarFilterMenu";
 import { SIDEBAR_NO_LIST_FILTER, sidebarFolderTreeIds } from "./sidebar-list-filter";
 import { useSidebarScope } from "./sidebar-scope";
-import { SIDEBAR_ALL_TAB_ID, SIDEBAR_UNREAD_TAB_ID, type SidebarTab, sidebarFolderTabId } from "./sidebar-tabs";
+import { SIDEBAR_ALL_TAB_ID, type SidebarTab, sidebarFolderTabId } from "./sidebar-tabs";
 
 const TAB_SCROLL_MARGIN = 16;
 
@@ -41,15 +41,6 @@ function SidebarEditTabsMenu() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="sidebar-filter-menu-content" aria-label={t("sidebar.tabs.edit")}>
-          <DropdownMenu.CheckboxItem
-            checked={chosen(SIDEBAR_UNREAD_TAB_ID)}
-            closeOnSelect={false}
-            onChange={() => sidebarTabs.toggleTab(SIDEBAR_UNREAD_TAB_ID)}
-          >
-            <MenuMark on={chosen(SIDEBAR_UNREAD_TAB_ID)} />
-            <Inbox class="agent-context-icon size-4" aria-hidden="true" />
-            <span>{t("sidebar.filter.unread")}</span>
-          </DropdownMenu.CheckboxItem>
           <Show when={filterFolders().length > 0}>
             <DropdownMenu.Separator />
             <For each={filterFolders()}>
@@ -81,7 +72,6 @@ function SidebarTabTrigger(props: { tab: SidebarTab }) {
   const unread = () => sidebarTabs.tabUnreadCount(props.tab);
   const name = () => {
     if (props.tab.id === SIDEBAR_ALL_TAB_ID) return t("sidebar.tabs.all");
-    if (props.tab.id === SIDEBAR_UNREAD_TAB_ID) return t("sidebar.filter.unread");
     return props.tab.folder?.name ?? t("sidebar.section.unassigned");
   };
   return (

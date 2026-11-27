@@ -15,7 +15,7 @@ import type {
   ProviderRuntimeStatus,
 } from "@openbot/contracts/ipc";
 import type { AppTextKey, AppTranslate } from "@openbot/i18n";
-import { ArrowUp, Button, Field, Folder, IconButton, Input, Textarea, X } from "@openbot/ui";
+import { ArrowUp, Button, Field, Folder, IconButton, Input, Switch, Textarea, X } from "@openbot/ui";
 import { createSignal, For, onSettled, Show } from "solid-js";
 import {
   AVATAR_COLOR_CHOICES,
@@ -42,6 +42,10 @@ export interface FirstAgentDraft {
   model: AgentModelId;
   reasoningEffort?: AgentReasoningEffort | undefined;
   providerAccountId?: string | undefined;
+  /** Fork: lean mode for the chat this creates. */
+  leanMode?: boolean | undefined;
+  /** Fork: memory for the chat this creates; false starts it with memory off. */
+  memory?: boolean | undefined;
 }
 
 export interface FirstAgentSuggestion {
@@ -585,6 +589,28 @@ export function FirstAgentSetup(props: FirstAgentSetupProps) {
                   )}
                 </Show>
               )}
+            </Show>
+            <Show when={chat()}>
+              <div class="first-agent-chat-toggles">
+                <span class="first-agent-chat-toggle">
+                  <span>{t("agent.setup.leanMode")}</span>
+                  <Switch
+                    aria-label={t("agent.setup.leanMode")}
+                    checked={props.value.leanMode === true}
+                    disabled={props.submitting}
+                    onChange={(checked) => updateDraft({ leanMode: checked })}
+                  />
+                </span>
+                <span class="first-agent-chat-toggle">
+                  <span>{t("agent.setup.memory")}</span>
+                  <Switch
+                    aria-label={t("agent.setup.memory")}
+                    checked={props.value.memory !== false}
+                    disabled={props.submitting}
+                    onChange={(checked) => updateDraft({ memory: checked })}
+                  />
+                </span>
+              </div>
             </Show>
             <Show when={chat() && props.folder}>
               {(folder) => (

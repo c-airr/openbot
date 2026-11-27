@@ -6,6 +6,24 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.80.2] - 2026-11-27
+
+### Added
+
+- The new chat screen has the lean mode and memory switches, so a chat starts the way you want it:
+  they are saved on the chat the screen creates.
+
+### Changed
+
+- The OpenRouter balance no longer has its own ring on the rail. It stays in the usage card, where it
+  shows in USD with the PLN conversion.
+
+### Removed
+
+- The Unread tab of the sidebar, and its entry in the Edit tabs menu. The sidebar keeps the All tab
+  and the folder tabs.
+
+
 ## [0.80.1] - 2026-11-27
 
 ### Added

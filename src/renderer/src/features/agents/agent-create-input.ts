@@ -3,7 +3,8 @@ import { createAgentInitialMessage } from "@openbot/ui/features/agents/agent-ini
 import type { FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 
 export type NewAgentDraft = Pick<FirstAgentDraft, "name" | "purpose" | "avatarSeed" | "avatarHue" | "avatarColor"> &
-  Partial<Pick<FirstAgentDraft, "provider" | "model" | "reasoningEffort" | "providerAccountId">>;
+  Partial<Pick<FirstAgentDraft, "provider" | "model" | "reasoningEffort" | "providerAccountId">> &
+  Partial<Pick<FirstAgentDraft, "leanMode" | "memory">>;
 
 export function newAgentInput(
   draft: NewAgentDraft,
@@ -24,6 +25,8 @@ export function newAgentInput(
           ...(draft.providerAccountId ? { providerAccountId: draft.providerAccountId } : {}),
         }
       : {}),
+    ...(draft.leanMode === undefined ? {} : { leanMode: draft.leanMode }),
+    ...(draft.memory === undefined ? {} : { memory: draft.memory }),
     initialMessage: createAgentInitialMessage(draft, welcomeSupported),
   };
 }

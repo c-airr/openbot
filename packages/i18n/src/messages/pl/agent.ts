@@ -26,6 +26,8 @@ export const messages = {
   "agent.description.tooLong": "Skróć opis do {limit} znaków. Dłuższy opis nie jest zapisywany.",
   "agent.instructions.length": "{length} / {limit}",
   "agent.instructions.tooLong": "Skróć instrukcje do {limit} znaków. Dłuższe instrukcje nie są zapisywane.",
+  "agent.setup.leanMode": "Tryb oszczędny",
+  "agent.setup.memory": "Pamięć",
   "agent.setup.model": "Model agenta",
   "agent.setup.creating": "Tworzenie agenta…",
   "agent.setup.create": "Utwórz agenta",

@@ -437,6 +437,24 @@
   justify-self: start;
 }
 
+/* Fork: lean mode and memory of the chat this screen creates. */
+.first-agent-chat-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-1) var(--openbot-space-4);
+  justify-self: start;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.first-agent-chat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-height: var(--openbot-control-md);
+}
+
 /* Fork: the project folder of a new chat, next to the model. */
 .first-agent-chat-folder {
   display: flex;

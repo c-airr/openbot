@@ -1,6 +1,6 @@
 import { AppLogo, type AppLogoVariant, ProviderLogo } from "@openbot/brand";
 import type { CreditMediaModel } from "@openbot/contracts/credit-media";
-import type { FreeLlmBudget, OpenRouterBalance } from "@openbot/contracts/ipc";
+import type { FreeLlmBudget } from "@openbot/contracts/ipc";
 import { usageTone } from "@openbot/team-client/plan-limits";
 import {
   Bot,
@@ -371,70 +371,6 @@ function FreeLlmButton(props: { budget: FreeLlmBudget; onOpen: () => void }) {
   );
 }
 
-/** Fork: the money of the OpenRouter balance, in USD and, with the NBP rate, in PLN. */
-type UsageFormat = ReturnType<typeof useText>["format"];
-
-function openRouterMoney(balance: OpenRouterBalance, format: UsageFormat): string {
-  const usd = format.currencyUsd(balance.remainingUsd);
-  const pln = plnOf(balance, format);
-  return pln === null ? usd : `${usd} (${pln})`;
-}
-
-function plnOf(balance: OpenRouterBalance, format: UsageFormat): string | null {
-  return balance.plnPerUsd === null
-    ? null
-    : format.number(balance.remainingUsd * balance.plnPerUsd, { style: "currency", currency: "PLN" });
-}
-
-/** Under 0.50 USD left is critical, under 2.00 a warning, above that green. */
-function openRouterBalanceTone(balance: OpenRouterBalance): "critical" | "warning" | undefined {
-  return balance.remainingUsd < 0.5 ? "critical" : balance.remainingUsd < 2 ? "warning" : undefined;
-}
-
-function OpenRouterBalanceButton(props: { balance: OpenRouterBalance; onOpen: (button: HTMLElement) => void }) {
-  const { t, format } = useText();
-  const amount = () => openRouterMoney(props.balance, format);
-  const remaining = () =>
-    props.balance.totalUsd > 0
-      ? Math.max(0, Math.min(100, (props.balance.remainingUsd / props.balance.totalUsd) * 100))
-      : 0;
-  const radius = (RING.size - RING.stroke) / 2;
-  return (
-    <RailButton
-      label={t("app.rail.openrouterBalance", { amount: amount() })}
-      tooltip={amount()}
-      class="window-rail-usage"
-      onClick={props.onOpen}
-    >
-      <svg class="window-rail-usage-ring" viewBox={`0 0 ${RING.size} ${RING.size}`} fill="none" aria-hidden="true">
-        <circle
-          class="window-rail-usage-track"
-          cx={RING.size / 2}
-          cy={RING.size / 2}
-          r={radius}
-          stroke-width={RING.stroke}
-        />
-        <Show when={remaining() > 0}>
-          <circle
-            class="window-rail-usage-arc"
-            data-usage-tone={openRouterBalanceTone(props.balance)}
-            cx={RING.size / 2}
-            cy={RING.size / 2}
-            r={radius}
-            stroke-width={RING.stroke}
-            stroke-linecap="round"
-            pathLength={100}
-            stroke-dasharray={`${remaining()} 100`}
-          />
-        </Show>
-      </svg>
-      <span class="window-rail-usage-logo window-rail-usage-dollar" aria-hidden="true">
-        $
-      </span>
-    </RailButton>
-  );
-}
-
 /** The credits of a media service that a canvas step spends, such as Sunra. */
 export interface MediaCreditsRailRow {
   key: string;
@@ -777,7 +713,6 @@ function RailLogo(props: { variant: AppLogoVariant; href: string | undefined }) 
 
 export function PageRail(props: PageRailProps) {
   const { t } = useText();
-  const openRouterBalance = () => props.usageRows.find((row) => row.provider === "openrouter")?.balance;
   const rings = createMemo((): UsageRing[] => {
     const rows = props.usageRows.filter((row) => row.reportsUsage && (row.windows.length > 0 || row.readFailed));
     const owner = (row: AccountUsageProviderRow) =>
@@ -934,9 +869,6 @@ export function PageRail(props: PageRailProps) {
             </For>
             <Show when={ringLayout().more.length > 0}>
               <MoreUsageRings rings={ringLayout().more} onOpen={props.onUsage} />
-            </Show>
-            <Show when={openRouterBalance()}>
-              {(balance) => <OpenRouterBalanceButton balance={balance()} onOpen={props.onUsage} />}
             </Show>
             <For each={props.customAgentUsage ?? []} keyed={(row) => row.id}>
               {(row) => <CustomAgentUsageButton row={row()} onOpen={props.onUsage} />}
