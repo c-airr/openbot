@@ -1,9 +1,9 @@
 import { agentNotificationLevelMap } from "@openbot/contracts/ipc";
-import { Link, router } from "expo-router";
+import { type Href, Link, router } from "expo-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { useUniwind } from "uniwind";
-import { useAgentPinTransition } from "@/features/agents/components/agent-pin-transition";
+import { useChatPinToggle } from "@/features/agents/components/use-chat-pin-toggle";
 import { useChatSectionMenu } from "@/features/agents/components/use-chat-section-menu";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import {
@@ -24,7 +24,7 @@ import { currentText, useText } from "@/shared/lib/text";
 
 function useAgentMenuActions(agent: MobileAgent) {
   const workspace = useMobileWorkspaceReader();
-  const { toggleAgentPinAnimated } = useAgentPinTransition();
+  const { toggleAgentPin } = useChatPinToggle();
   const sectionMenu = useChatSectionMenu(agent.serverId, agent.id);
   const isPinned = useMobileWorkspaceSelector(({ pinnedAgentIds }) => pinnedAgentIds.includes(agent.id));
   const canPin = useMobileWorkspaceSelector(({ pinnedAgentIds, pinnedChannelIds }) =>
@@ -60,7 +60,7 @@ function useAgentMenuActions(agent: MobileAgent) {
     }
   }
 
-  const handlePin = () => toggleAgentPinAnimated(agent.id);
+  const handlePin = () => toggleAgentPin(agent.id);
 
   const handleCopyId = () => copyWithHaptic(agent.id);
 
@@ -178,18 +178,24 @@ function useAgentContextMenu(agent: MobileAgent) {
   );
 }
 
+export function agentChatHref(agent: MobileAgent): Href {
+  return { pathname: "/chat/[agentId]", params: { agentId: agent.id, serverId: agent.serverId } };
+}
+
 export function AgentContextMenuLink({
   agent,
+  href = agentChatHref(agent),
   preview,
   children,
 }: {
   agent: MobileAgent;
+  href?: Href;
   preview: ReactNode;
   children: ReactNode;
 }) {
   const agentContextMenu = useAgentContextMenu(agent);
   return (
-    <Link href={{ pathname: "/chat/[agentId]", params: { agentId: agent.id } }} asChild>
+    <Link href={href} asChild>
       <Link.Trigger>{children}</Link.Trigger>
       {preview}
       {agentContextMenu}

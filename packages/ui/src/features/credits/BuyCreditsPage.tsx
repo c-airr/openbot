@@ -1,16 +1,17 @@
 import type { BillingCurrency } from "@openbot/contracts/billing";
+import { type CreditMediaModel, creditEstimatesLive } from "@openbot/contracts/credit-media";
 import {
+  CREDIT_CLIP_SECONDS,
   CREDIT_PACK_INDEXES,
   CREDIT_POPULAR_INDEX,
   CREDIT_STOP_COUNT,
   CREDIT_TIER_START_INDEX,
   type CreditCheckoutRequest,
-  type CreditModelCost,
+  type CreditEstimate,
   type CreditStop,
   type CreditsState,
   type CreditTier,
-  creditEstimateModels,
-  creditModelCharge,
+  creditEstimates,
   creditRegularPrice,
   creditStopAt,
   creditStopPrice,
@@ -25,9 +26,11 @@ import {
   AlertContent,
   AlertDescription,
   AlertIcon,
+  ArrowLeftRight,
   Button,
   Check,
   Confetti,
+  Gift,
   SliderField,
   Text,
   TriangleAlert,
@@ -46,11 +49,13 @@ import {
   HostedCurrencySelect,
 } from "../servers/HostedServerPricing";
 import { PageHeader, type PageHeaderFrame } from "../window/PageHeader";
-import { CreditIcon } from "./CreditIcon";
+import { CreditEmblem, CreditIcon } from "./CreditIcon";
 import { type CreditTarget, CreditTargetSelect, creditTargets } from "./CreditTargetSelect";
+import { creditColorStep } from "./credit-color";
 import { type CreditsStore, creditsServer } from "./credits-store";
 import { MoveCreditsDialog } from "./MoveCreditsDialog";
 import { type CreditConsent, PayCreditsDialog } from "./PayCreditsDialog";
+import { RedeemCreditsDialog } from "./RedeemCreditsDialog";
 
 const TIER_LABEL = {
   basic: "billing.credits.tier.basic",
@@ -63,6 +68,7 @@ export interface BuyCreditsPageProps {
   initialServerId?: string | null | undefined;
   headerFrame?: PageHeaderFrame | undefined;
   billingDetails?: BillingDetailsCalls | undefined;
+  models?: readonly CreditMediaModel[] | undefined;
   onClose: () => void;
 }
 
@@ -96,6 +102,7 @@ interface Purchase {
   credits: CreditsState;
   target: CreditTarget;
   pending: boolean;
+  estimates: readonly CreditEstimate[];
   onPay: (stop: CreditStop, button: HTMLElement | undefined) => void;
 }
 
@@ -187,24 +194,22 @@ function SaveChip(props: { stop: CreditStop }) {
   );
 }
 
-const ESTIMATE_MODELS = creditEstimateModels();
-
-function Facts(props: { credits: number }) {
-  const { t } = useText();
+function Facts(props: { credits: number; estimates: readonly CreditEstimate[] }) {
+  const { t, format } = useText();
   const credit = useCreditFormat();
-  const estimate = (model: CreditModelCost) => {
-    const count = Math.floor(creditTenths(props.credits) / creditTenths(creditModelCharge(model)));
-    const params = { count, amount: credit.count(count), model: model.name };
+  const estimate = ({ model, resolution, charge }: CreditEstimate) => {
+    const count = Math.floor(creditTenths(props.credits) / creditTenths(charge));
+    const params = { count, amount: credit.count(count), model: model.name, resolution };
     if (model.kind === "image") return t("billing.credits.images", params);
-    return t("billing.credits.videos", params);
+    return t("billing.credits.videos", { ...params, seconds: format.number(CREDIT_CLIP_SECONDS) });
   };
   return (
     <ul class="credit-facts">
-      <For each={ESTIMATE_MODELS}>
-        {(model) => (
+      <For each={props.estimates}>
+        {(entry) => (
           <li>
             <Check aria-hidden="true" />
-            <span>{estimate(model)}</span>
+            <span>{estimate(entry)}</span>
           </li>
         )}
       </For>
@@ -285,7 +290,22 @@ function PopularBadge(props: { index: number }) {
   );
 }
 
-function PackRow(props: { purchase: Purchase; index: number; order: number }) {
+const STICKER_LAYERS = ["credit-pack-sticker-outline", "credit-pack-sticker-fill", "credit-pack-sticker-ink"];
+
+function StickerLayer(props: { class: string; count: string; unit: string }) {
+  return (
+    <g class={props.class} transform="skewX(-9)">
+      <text class="credit-pack-sticker-number" x="0" y="20">
+        {props.count}
+      </text>
+      <text class="credit-pack-sticker-unit" x="1" y="38">
+        {props.unit}
+      </text>
+    </g>
+  );
+}
+
+function PackCard(props: { purchase: Purchase; index: number; order: number }) {
   const { t } = useText();
   const credit = useCreditFormat();
   const currency = () => props.purchase.credits.currency;
@@ -296,28 +316,37 @@ function PackRow(props: { purchase: Purchase; index: number; order: number }) {
       class="credit-pack"
       data-tier={tier()}
       data-popular={props.index === CREDIT_POPULAR_INDEX ? "" : undefined}
-      style={{ "--credit-order": props.order + 1 }}
+      style={{ "--credit-order": props.order + 1, "--credit-step": creditColorStep(props.index) }}
       aria-label={t("billing.credits.packLabel", {
         tier: t(TIER_LABEL[tier()]),
         credits: credit.credits(stop().credits),
       })}
     >
-      <PopularBadge index={props.index} />
-      <div class="credit-pack-main">
-        <div class="credit-head">
-          <span class="credit-tier-tag">{t(TIER_LABEL[tier()])}</span>
-          <p class="credit-pack-amount">
-            <CreditIcon />
-            {credit.credits(stop().credits)}
-          </p>
-          <RateChip stop={stop()} currency={currency()} />
+      <div class="credit-pack-card">
+        <RateChip stop={stop()} currency={currency()} />
+        <svg class="credit-pack-sticker" width="1" height="1" aria-hidden="true">
+          <For each={STICKER_LAYERS}>
+            {(layer) => (
+              <StickerLayer class={layer} count={credit.count(stop().credits)} unit={t("billing.credits.unit")} />
+            )}
+          </For>
+        </svg>
+        <CreditEmblem class="credit-pack-emblem" />
+        <div class="credit-pack-panel">
+          <PriceTag stop={stop()} currency={currency()} class="credit-pack-price" />
           <SaveChip stop={stop()} />
         </div>
-        <Facts credits={stop().credits} />
+        <PopularBadge index={props.index} />
       </div>
-      <div class="credit-pack-side">
-        <PriceTag stop={stop()} currency={currency()} class="credit-pack-price" />
-        <PayButton purchase={props.purchase} stop={stop()} class="credit-pack-pay" />
+      <div class="credit-pack-body">
+        <Facts credits={stop().credits} estimates={props.purchase.estimates} />
+        <PayButton
+          purchase={props.purchase}
+          stop={stop()}
+          class={
+            props.index === CREDIT_POPULAR_INDEX ? "credit-pack-pay" : "credit-pack-pay hosted-pricing-pill-secondary"
+          }
+        />
       </div>
     </article>
   );
@@ -349,9 +378,11 @@ function AmountAndPacks(props: { purchase: Purchase; index: number; onIndex: (in
           <BalanceAfter target={props.purchase.target} stop={stop()} />
         </div>
       </section>
-      <For each={CREDIT_PACK_INDEXES}>
-        {(index, order) => <PackRow purchase={props.purchase} index={index} order={order()} />}
-      </For>
+      <div class="credit-pack-grid">
+        <For each={CREDIT_PACK_INDEXES}>
+          {(index, order) => <PackCard purchase={props.purchase} index={index} order={order()} />}
+        </For>
+      </div>
     </div>
   );
 }
@@ -383,7 +414,11 @@ export function BuyCreditsPage(props: BuyCreditsPageProps): JSX.Element {
   const [bursts, setBursts] = createSignal<readonly number[]>([]);
   const [confirming, setConfirming] = createSignal<{ stop: CreditStop; button: HTMLElement | undefined } | null>(null);
   const [moving, setMoving] = createSignal(false);
+  const [redeeming, setRedeeming] = createSignal(false);
   const credits = () => props.store.state.credits;
+  const estimates = createMemo(() =>
+    props.models && props.models.length > 0 ? creditEstimatesLive(props.models) : creditEstimates(),
+  );
   const targets = createMemo(() => creditTargets(credits(), t("billing.credits.you")));
   const target = createMemo(
     (): CreditTarget | undefined => targets().find((item) => item.serverId === serverId()) ?? targets()[0],
@@ -441,6 +476,7 @@ export function BuyCreditsPage(props: BuyCreditsPageProps): JSX.Element {
     <section
       class="hosted-pricing-page credit-page"
       data-tier={creditTier({ index: index() })}
+      style={{ "--credit-step": creditColorStep(index()) }}
       aria-labelledby="credit-page-title"
       aria-busy={props.store.state.loading ? "true" : undefined}
       onKeyDown={(event) => {
@@ -458,13 +494,25 @@ export function BuyCreditsPage(props: BuyCreditsPageProps): JSX.Element {
         onBack={() => props.onClose()}
       >
         <div class="credit-header-actions">
+          <Show when={ready()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={props.store.state.pending !== null}
+              onClick={() => setRedeeming(true)}
+            >
+              <Gift class="credit-header-icon" aria-hidden="true" />
+              {t("billing.credits.redeem")}
+            </Button>
+          </Show>
           <Show when={ready() ? ownedServer() : null}>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               disabled={(credits()?.balance ?? 0) <= 0 || props.store.state.pending !== null}
               onClick={() => setMoving(true)}
             >
+              <ArrowLeftRight class="credit-header-icon" aria-hidden="true" />
               {t("billing.credits.moveIn")}
             </Button>
           </Show>
@@ -486,6 +534,7 @@ export function BuyCreditsPage(props: BuyCreditsPageProps): JSX.Element {
                 value={selected()}
                 onChange={(next) => {
                   setMoving(false);
+                  setRedeeming(false);
                   setServerId(next.serverId);
                 }}
               />
@@ -505,6 +554,7 @@ export function BuyCreditsPage(props: BuyCreditsPageProps): JSX.Element {
                         credits: state(),
                         target: selected(),
                         pending: props.store.state.pending !== null,
+                        estimates: estimates(),
                         onPay: pay,
                       }}
                       index={index()}
@@ -553,6 +603,9 @@ export function BuyCreditsPage(props: BuyCreditsPageProps): JSX.Element {
             onClose={() => setMoving(false)}
           />
         )}
+      </Show>
+      <Show when={redeeming() && ready() ? target() : undefined}>
+        {(where) => <RedeemCreditsDialog store={props.store} target={where()} onClose={() => setRedeeming(false)} />}
       </Show>
       <For each={bursts()}>{() => <Confetti origin={payButton()} />}</For>
     </section>

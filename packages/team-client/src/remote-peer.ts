@@ -35,7 +35,9 @@ import {
   teamWebRtcClientProtocol,
 } from "@openbot/contracts/team-protocol";
 import type { LiveVoiceEvent } from "@openbot/contracts/team-protocol/live-voice-v1";
+import { addNearPayments } from "@openbot/contracts/team-protocol/near-payment-v1";
 import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contracts/team-protocol/optional-events";
+import { addPromptQuestionDetails } from "@openbot/contracts/team-protocol/prompt-detail-v1";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import { addSkillSuggestionNames } from "@openbot/contracts/team-protocol/skill-learning-v1";
 import { addUiBlockAutoAnswers } from "@openbot/contracts/team-protocol/ui-block-auto-answer-v1";
@@ -51,6 +53,11 @@ import {
   toWireTeamProtocolV1ClientEvent,
 } from "@openbot/contracts/team-protocol/v1-adapter";
 import { TEAM_PROTOCOL_V9 } from "@openbot/contracts/team-protocol/v9";
+import {
+  WORKFLOW_SPOT_CONTROL,
+  type WorkflowSpotControl,
+  type WorkflowSpotInput,
+} from "@openbot/contracts/team-protocol/workflow-presence-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { errorReference, referenceFrom } from "@openbot/user-errors/reference";
 import { Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Result, Schema, Scope, Semaphore } from "effect";
@@ -101,6 +108,7 @@ import {
   type ProbeSample,
   unmeasuredProbeMs,
 } from "./remote-path-check";
+import { createPathWatch, PATH_WATCH_INTERVAL_MS, type PathReading, type PathWatch } from "./remote-path-watch";
 import { startRemoteRequestDeadline } from "./remote-recovery";
 import { createTeamRequestId } from "./request-id";
 import { encodeTeamWebRtcPayload, TeamWebRtcPayloadDecoder } from "./webrtc-framing";
@@ -285,6 +293,7 @@ export interface RemoteTeamDiagnostic {
     | "ice-state"
     | "ice-gathering"
     | "ice-candidate-error"
+    | "ice-gathering-stalled"
     | "route"
     | "ice-recovery"
     | "channels-open"
@@ -373,6 +382,7 @@ interface PeerState {
   iceServers: RTCIceServer[];
   restartIceOnReady: boolean;
   lastEventSequence: number;
+  eventAckTimer: ReturnType<typeof setTimeout> | null;
   needsResync: boolean;
   connected: Deferred.Deferred<void, RemotePeerError> | null;
   readonly abort: AbortController;
@@ -389,6 +399,9 @@ interface PeerState {
   ticketRequest: boolean;
   signalReady: boolean;
   answeredRequest: boolean;
+  probingPath: boolean;
+  pathWatch: PathWatch;
+  pathWatchTimer: ReturnType<typeof setTimeout> | null;
   fullSnapshotRequested: boolean;
   lastAnswerAt: number;
   lastSignalClose: number | null;
@@ -411,8 +424,10 @@ interface PeerState {
 
 const CHANNELS: ChannelKind[] = ["rpc", "events", "files", "desktop"];
 const DISCONNECT_GRACE_MS = 15_000;
+const CHANNEL_DRAIN_IDLE_MS = 60_000;
 const ICE_RESTART_DELAY_MS = 2_000;
 const ICE_RESTART_PROBE_MS = 6_000;
+const TYPING_REFRESH_MILLISECONDS = 2_000;
 const SIGNAL_RENEW_DELAY_MS = 8_000;
 const HOST_WAIT_RENEW_MS = 60_000;
 const FAILED_OPENS_BEFORE_NEW_TICKET = 2;
@@ -432,6 +447,7 @@ function peerLostAfterMs(state: PeerState): number {
   return SIGNAL_IDLE_CLOSE_MS + state.reconnectGraceMs + SUSPEND_MARGIN_MS;
 }
 const HOST_ICE_RESTART_LIMIT = 10;
+const RESTARTS_KEPT_FOR_RECOVERY = 3;
 const ICE_SERVERS_REUSE_MS = (SIGNAL_TURN_CREDENTIAL_TTL_SECONDS * 1_000) / 2;
 const PREPARED_CONNECTION_LIFETIME_MS = 5 * 60_000;
 
@@ -547,6 +563,12 @@ export function createRemoteTeamPeer(
   const hostProtocols: RemoteHostProtocols = options.hostProtocols ?? new Map<string, number>();
   const clientProtocol = options.clientProtocol ?? TEAM_WEBRTC_CLIENT_PROTOCOL;
   let lastSignal: { hostId: string; signalUrl: string; iceServers: RTCIceServer[]; at: number } | null = null;
+  let lastTyping: { agentId: string | null; typing: boolean; sentAt: number } | null = null;
+  let typingInFlight: {
+    state: { agentId: string | null; typing: boolean };
+  } | null = null;
+  const typingSentRecently = (sent: { agentId: string | null; typing: boolean; sentAt: number } | null) =>
+    sent !== null && (!sent.typing || Date.now() - sent.sentAt < TYPING_REFRESH_MILLISECONDS);
 
   return {
     async sendHostStreamData(data: string | ArrayBuffer) {
@@ -558,7 +580,32 @@ export function createRemoteTeamPeer(
     setTyping(agentId: string | null, typing: boolean) {
       const state = peer;
       if (!state || !isPeerOnline(state)) return;
-      void runPeerEffect(sendEventControl(state, { type: "team-typing", agentId, typing })).catch(() => undefined);
+      const nextTyping = { agentId, typing };
+      const pending = typingInFlight?.state ?? null;
+      const duplicate = pending
+        ? pending.agentId === agentId && pending.typing === typing
+        : lastTyping?.agentId === agentId && lastTyping.typing === typing && typingSentRecently(lastTyping);
+      if (duplicate) return;
+      const send = runPeerEffect(sendEventControl(state, { type: "team-typing", agentId, typing }));
+      const inFlight = { state: nextTyping };
+      typingInFlight = inFlight;
+      void send.then(
+        () => {
+          if (typingInFlight !== inFlight) return;
+          lastTyping = { ...nextTyping, sentAt: Date.now() };
+          typingInFlight = null;
+        },
+        () => {
+          if (typingInFlight !== inFlight) return;
+          typingInFlight = null;
+          lastTyping = null;
+        },
+      );
+    },
+    setWorkflowSpot(input: WorkflowSpotInput) {
+      const state = peer;
+      if (!state || !isPeerOnline(state)) return;
+      void runPeerEffect(sendEventControl(state, { type: WORKFLOW_SPOT_CONTROL, ...input })).catch(() => undefined);
     },
     execute: (command: RemoteTeamCommand) => runPeerEffect(executeCommand(command, actions)),
     setWaitForHost(value: boolean) {
@@ -587,6 +634,7 @@ export function createRemoteTeamPeer(
         if (state.iceRecoveryTimer !== null) clearTimeout(state.iceRecoveryTimer);
         if (state.hostWaitTimer !== null) clearTimeout(state.hostWaitTimer);
         if (state.hostWaitTicketTimer !== null) clearTimeout(state.hostWaitTicketTimer);
+        stopPathWatch(state);
         state.hostWaitTimer = null;
         state.hostWaitTicketTimer = null;
         state.disconnectedTimer = null;
@@ -621,6 +669,7 @@ export function createRemoteTeamPeer(
           );
           if (away >= ICE_CONSENT_TIMEOUT_MS) renewSignal(state, actions);
           else if (!state.socket) openSignal(state, actions);
+          watchPath(state);
         }
       }
     },
@@ -639,6 +688,16 @@ export function createRemoteTeamPeer(
       const state = peer;
       if (active && state && !state.closed)
         failPeer(state, referenced(sourceText("error.remote.connectionDropped"), "network/moved"), actions);
+      void runPeerEffect(peerCall(() => actions.current.onNetworkRestored?.())).catch(() => undefined);
+    },
+    networkChanged() {
+      const state = peer;
+      if (active && state && !state.closed) {
+        if (state.authenticated) {
+          renewSignal(state, actions);
+          probePath(state, "network changed");
+        } else failPeer(state, referenced(sourceText("error.remote.connectionDropped"), "network/changed"), actions);
+      }
       void runPeerEffect(peerCall(() => actions.current.onNetworkRestored?.())).catch(() => undefined);
     },
   };
@@ -996,6 +1055,7 @@ export function createRemoteTeamPeer(
         iceServers: [],
         restartIceOnReady: false,
         lastEventSequence: 0,
+        eventAckTimer: null,
         needsResync: false,
         connected: null,
         abort: new AbortController(),
@@ -1012,6 +1072,9 @@ export function createRemoteTeamPeer(
         ticketRequest: false,
         signalReady: false,
         answeredRequest: false,
+        probingPath: false,
+        pathWatch: createPathWatch(),
+        pathWatchTimer: null,
         fullSnapshotRequested: false,
         lastAnswerAt: 0,
         lastSignalClose: null,
@@ -1522,13 +1585,25 @@ export function createRemoteTeamPeer(
       if (state.channels[kind] !== channel) return;
       failPeer(
         state,
-        referenced(sourceText("error.remote.dataChannelFailed", { kind }), referenceFrom("webrtc", "channel", kind)),
+        state.binding && !state.authenticated
+          ? referenced(sourceText("error.remote.signInConnectionClosed"), "webrtc/channel/sign_in_closed")
+          : referenced(
+              sourceText("error.remote.dataChannelFailed", { kind }),
+              referenceFrom("webrtc", "channel", kind),
+            ),
         actions,
       );
     };
     channel.onclose = () => {
-      if (state.authenticated && state.channels[kind] === channel)
+      if (state.channels[kind] !== channel) return;
+      if (state.authenticated)
         failPeer(state, referenced(sourceText("error.remote.desktopOffline"), "webrtc/channel/closed"), actions);
+      else if (state.binding)
+        failPeer(
+          state,
+          referenced(sourceText("error.remote.signInConnectionClosed"), "webrtc/channel/sign_in_closed"),
+          actions,
+        );
     };
   }
 
@@ -1671,13 +1746,13 @@ export function createRemoteTeamPeer(
             resync: true,
           }),
         );
-        yield* sendEventAckEffect(state);
+        scheduleEventAck(state);
         return;
       }
       if (frame.type !== "event")
         return yield* new RemotePeerError({ message: "The host returned an invalid event frame." });
       if (frame.sequence <= state.lastEventSequence) {
-        yield* sendEventAckEffect(state);
+        scheduleEventAck(state);
         return;
       }
       if (frame.sequence !== state.lastEventSequence + 1) {
@@ -1697,11 +1772,13 @@ export function createRemoteTeamPeer(
           addUiBlockAutoAnswers(decoded.event, frame.payload);
           addUiBlockVaultRequests(decoded.event, frame.payload);
           addUiBlockLocationRequests(decoded.event, frame.payload);
+          addNearPayments(decoded.event, frame.payload);
           addSkillSuggestionNames(decoded.event, frame.payload);
+          addPromptQuestionDetails(decoded.event, frame.payload);
         }
         yield* RemotePeerIO.use((io) => io.teamEvent(state.hostId, decoded.event));
       }
-      yield* sendEventAckEffect(state);
+      scheduleEventAck(state);
     })();
   }
 
@@ -1865,6 +1942,7 @@ export function createRemoteTeamPeer(
               const error = new Error(sourceText("error.remote.desktopRequestTimeout"));
               reject(error);
               if (checksConnection) failPeer(state, error, actions);
+              else probePath(state, "request timeout");
             };
             const samples: ProbeSample[] = [];
             const checkPath = () => {
@@ -1954,6 +2032,79 @@ export function createRemoteTeamPeer(
     })();
   }
 
+  function probePath(state: PeerState, reason: string): void {
+    if (state.probingPath || state.closed || peer !== state || !isPeerOnline(state)) return;
+    state.probingPath = true;
+    diagnose(state, "path-check", reason);
+    void runPeerEffect(requestEffect("GET", TEAM_API_ROUTES.compatibility, null))
+      .catch(() => undefined)
+      .finally(() => {
+        state.probingPath = false;
+      });
+  }
+
+  function pathReading(connection: RTCPeerConnection) {
+    return peerCall(() => connection.getStats()).pipe(
+      Effect.map((stats): PathReading | null => {
+        const pair = selectedPair(stats);
+        if (!pair) return null;
+        const local = stats.get(pair.localCandidateId);
+        const remote = stats.get(pair.remoteCandidateId);
+        return {
+          pairId: String(pair.id),
+          received: (Number(pair.bytesReceived) || 0) + (Number(pair.responsesReceived) || 0),
+          relayed: local?.candidateType === "relay" || remote?.candidateType === "relay",
+        };
+      }),
+      Effect.catch(() => Effect.succeed(null)),
+    );
+  }
+
+  function canUpgradeRelay(state: PeerState): boolean {
+    return (
+      canSignal(state) &&
+      !state.probingPath &&
+      (state.iceRestartSentAt === null || Date.now() - state.iceRestartSentAt >= SIGNAL_RENEW_DELAY_MS) &&
+      state.iceRestarts < HOST_ICE_RESTART_LIMIT - RESTARTS_KEPT_FOR_RECOVERY
+    );
+  }
+
+  function watchPath(state: PeerState): void {
+    if (!active || state.closed || peer !== state || state.pathWatchTimer !== null || !isPeerOnline(state)) return;
+    state.pathWatchTimer = setTimeout(() => {
+      state.pathWatchTimer = null;
+      const connection = state.connection;
+      if (!active || state.closed || peer !== state || !connection || !isPeerOnline(state)) {
+        state.pathWatch.reset();
+        return;
+      }
+      void runPeerEffect(pathReading(connection))
+        .then(
+          (reading) => {
+            if (!active || state.closed || peer !== state || state.connection !== connection) return;
+            const now = Date.now();
+            const step = state.pathWatch.observe(reading, now);
+            if (step.routeChanged) void runPeerEffect(reportRoute(state, connection)).catch(() => undefined);
+            if (step.silent) probePath(state, "silent path");
+            else if (step.upgradeDue && canUpgradeRelay(state)) {
+              state.pathWatch.upgradeStarted(now);
+              diagnose(state, "ice-recovery", "upgrade from relay");
+              void runPeerEffect(restartIce(state)).catch(() => undefined);
+            }
+            watchPath(state);
+          },
+          () => watchPath(state),
+        )
+        .catch(() => watchPath(state));
+    }, PATH_WATCH_INTERVAL_MS);
+  }
+
+  function stopPathWatch(state: PeerState): void {
+    if (state.pathWatchTimer !== null) clearTimeout(state.pathWatchTimer);
+    state.pathWatchTimer = null;
+    state.pathWatch.reset();
+  }
+
   function trackUploadDelivery(state: PeerState, onProgress: (sent: number, total: number) => void) {
     let queued = 0;
     let total = 0;
@@ -1994,7 +2145,16 @@ export function createRemoteTeamPeer(
     })();
   }
 
-  function sendEventControl(state: PeerState, control: TeamProtocolV1CurrentEventControl) {
+  function scheduleEventAck(state: PeerState): void {
+    if (state.closed || state.eventAckTimer !== null) return;
+    state.eventAckTimer = setTimeout(() => {
+      state.eventAckTimer = null;
+      if (state.closed || peer !== state) return;
+      void runPeerEffect(sendEventAckEffect(state)).catch(() => undefined);
+    }, 16);
+  }
+
+  function sendEventControl(state: PeerState, control: TeamProtocolV1CurrentEventControl | WorkflowSpotControl) {
     return Effect.fn("RemotePeer.sendEventControl")(function* () {
       yield* sendPayload(
         state,
@@ -2003,7 +2163,7 @@ export function createRemoteTeamPeer(
           encodeTeamProtocolV2Frame({
             version: 2,
             type: "event-control",
-            control: toWireTeamProtocolV1ClientEvent(control),
+            control: control.type === WORKFLOW_SPOT_CONTROL ? control : toWireTeamProtocolV1ClientEvent(control),
           }),
         ),
       );
@@ -2037,28 +2197,33 @@ export function createRemoteTeamPeer(
       if (state.closed) return yield* new RemotePeerError({ message: sourceText("error.remote.serverDisconnected") });
       if (channel.bufferedAmount <= 4 * 1024 * 1024) return;
       return yield* Effect.callback<void, RemotePeerError>((resume) => {
-        const onLow = () => resume(Effect.void);
-        const onAbort = () =>
-          resume(Effect.fail(new RemotePeerError({ message: sourceText("error.remote.serverDisconnected") })));
-        state.abort.signal.addEventListener("abort", onAbort, { once: true });
-        const timer = setTimeout(
-          () =>
-            resume(
-              Effect.fail(
-                new RemotePeerError({
-                  message: sourceText("error.remote.channelBackpressure"),
-                }),
-              ),
-            ),
-          60_000,
-        );
-        channel.addEventListener("bufferedamountlow", onLow);
-        if (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) onLow();
-        return Effect.sync(() => {
+        let lowestBuffered = channel.bufferedAmount;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const release = () => {
           clearTimeout(timer);
           channel.removeEventListener("bufferedamountlow", onLow);
           state.abort.signal.removeEventListener("abort", onAbort);
-        });
+        };
+        const finish = (result: Effect.Effect<void, RemotePeerError>) => {
+          release();
+          resume(result);
+        };
+        const onLow = () => finish(Effect.void);
+        const onAbort = () =>
+          finish(Effect.fail(new RemotePeerError({ message: sourceText("error.remote.serverDisconnected") })));
+        const checkDrain = () => {
+          if (channel.bufferedAmount >= lowestBuffered) {
+            finish(Effect.fail(new RemotePeerError({ message: sourceText("error.remote.channelBackpressure") })));
+            return;
+          }
+          lowestBuffered = channel.bufferedAmount;
+          timer = setTimeout(checkDrain, CHANNEL_DRAIN_IDLE_MS);
+        };
+        state.abort.signal.addEventListener("abort", onAbort, { once: true });
+        timer = setTimeout(checkDrain, CHANNEL_DRAIN_IDLE_MS);
+        channel.addEventListener("bufferedamountlow", onLow);
+        if (channel.bufferedAmount <= channel.bufferedAmountLowThreshold) onLow();
+        return Effect.sync(release);
       });
     })();
   }
@@ -2212,7 +2377,13 @@ export function createRemoteTeamPeer(
         : !CHANNELS.every((kind) => state.channels[kind]?.readyState === "open")
           ? "channels"
           : "auth";
-    return referenced(sourceText("error.remote.desktopDidNotConnect"), referenceFrom("timeout", "connect", stage));
+    const signalNeverOpened = stage === "signal" && state.socket?.readyState === WebSocket.CONNECTING;
+    return referenced(
+      sourceText(
+        signalNeverOpened ? "error.remote.deviceConnectionServiceUnreachable" : "error.remote.desktopDidNotConnect",
+      ),
+      referenceFrom("timeout", "connect", stage),
+    );
   }
 
   function connectionOffline(
@@ -2260,6 +2431,8 @@ export function createRemoteTeamPeer(
       generation += 1;
       if (!state) return;
       state.closed = true;
+      lastTyping = null;
+      typingInFlight = null;
       state.abort.abort();
       if (state.reconnectTimer !== null) clearTimeout(state.reconnectTimer);
       if (state.turnRefreshTimer !== null) clearTimeout(state.turnRefreshTimer);
@@ -2268,6 +2441,8 @@ export function createRemoteTeamPeer(
       if (state.iceRecoveryTimer !== null) clearTimeout(state.iceRecoveryTimer);
       if (state.hostWaitTimer !== null) clearTimeout(state.hostWaitTimer);
       if (state.hostWaitTicketTimer !== null) clearTimeout(state.hostWaitTicketTimer);
+      if (state.eventAckTimer !== null) clearTimeout(state.eventAckTimer);
+      stopPathWatch(state);
       state.socket?.close();
       state.preparedSocket?.close();
       state.preparedSocket = null;
@@ -2303,8 +2478,19 @@ export function createRemoteTeamPeer(
     if (!state.connected || state.connectedTimer !== null) return;
     state.connectedTimer = setTimeout(() => {
       diagnose(state, "stalled", `connect deadline: ${connectionSnapshot(state)}`);
+      if (gatheringFoundNothing(state)) diagnose(state, "ice-gathering-stalled");
       failPeer(state, connectTimeout(state), actions);
     }, 30_000);
+  }
+
+  function gatheringFoundNothing(state: PeerState): boolean {
+    const connection = state.connection;
+    return (
+      connection !== null &&
+      state.offerSentAt !== null &&
+      connection.iceGatheringState === "gathering" &&
+      state.localCandidates.size === 0
+    );
   }
 
   function connectionSnapshot(state: PeerState): string {
@@ -2330,6 +2516,7 @@ export function createRemoteTeamPeer(
     state.connectedTimer = null;
     if (state.connected) Deferred.doneUnsafe(state.connected, Effect.void);
     state.connected = null;
+    watchPath(state);
   }
 
   function rejectConnection(state: PeerState, error: Error): void {
@@ -2406,7 +2593,9 @@ function withWireBlockExtensions<T>(state: PeerState, decoded: T, wire: unknown)
     addUiBlockAutoAnswers(decoded, wire);
     addUiBlockVaultRequests(decoded, wire);
     addUiBlockLocationRequests(decoded, wire);
+    addNearPayments(decoded, wire);
     addSkillSuggestionNames(decoded, wire);
+    addPromptQuestionDetails(decoded, wire);
   }
   return decoded;
 }

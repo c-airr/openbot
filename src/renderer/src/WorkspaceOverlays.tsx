@@ -79,6 +79,7 @@ import { useUpdates } from "./features/updates/updates-context";
 import { useWhatsNew } from "./features/updates/whats-new-context";
 import { usePlanLimitRows } from "./features/usage/plan-limit-rows";
 import { createLinkAccountStore } from "./features/vault/stores/link-account-store";
+import { createNearWalletStore } from "./features/vault/stores/near-wallet-store";
 import { createVaultStore } from "./features/vault/stores/vault-store";
 import { desktopVaultCalls, hostVaultCalls } from "./features/vault/vault-port";
 import { useWindowPage } from "./features/window/window-page-context";
@@ -234,11 +235,11 @@ export function SkillsMarketplace() {
 
 function PlanReminder() {
   const platform = usePlatform();
-  const { orderedServers, callbacks } = useServerActions();
+  const { allServers, callbacks } = useServerActions();
   return (
     <Show when={platform.chatWindow === null}>
       <ServerPlanReminder
-        servers={orderedServers()}
+        servers={allServers()}
         planDeletesAt={callbacks.planDeletesAt}
         onRenew={callbacks.onRenewPlan}
       />
@@ -618,6 +619,7 @@ function ServerSettings() {
   });
   const vaultApiKeys = createMemo(() => serverCanAdminister(serverSettingsTarget(), VAULT_V2_CAPABILITY));
   const vaultTwoStep = createMemo(() => serverCanAdminister(serverSettingsTarget(), VAULT_V3_CAPABILITY));
+  const nearAgents = () => (activeServer()?.kind === "local" ? agentList() : undefined);
   const vaultImport = createMemo(() => serverCanAdminister(serverSettingsTarget(), VAULT_IMPORT_CAPABILITY));
   const vault = createMemo(() => {
     const serverId = vaultServerId();
@@ -628,6 +630,8 @@ function ServerSettings() {
       apiKeys: vaultApiKeys(),
       twoStep: vaultTwoStep(),
       link: local ? createLinkAccountStore() : undefined,
+      near: local ? createNearWalletStore() : undefined,
+      nearAgents,
       listAgents: () => appPort().agent.listAgents(serverId),
     };
   });
@@ -922,6 +926,7 @@ function ServerSettings() {
           hostVoiceModel={{}}
           hostSignalHome={{}}
           hostTurnLimits={{}}
+          mediaApprovalCredits={{}}
           hostPersonality={{}}
           hostMemoryLimit={{}}
           memoryReview={{}}

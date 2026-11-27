@@ -83,7 +83,7 @@ export const messages = {
     "이 계정의 활성 원격 연결도 함께 종료돼요. 이 기기는 다시 로그인할 수 있어요.",
   "mobile.settings.sessions.disconnect": "연결 해제",
   "mobile.settings.dictation.footer":
-    "음성 대화와 받아쓰기에서 휴대폰 음성 인식에 말하는 언어예요. 자동은 휴대전화 설정에서 지원되는 첫 번째 언어를 사용해요.",
+    "음성 대화와 받아쓰기에서 휴대폰 음성 인식에 말하는 언어예요. 자동은 입력할 때 쓰는 키보드의 언어를 사용하고, 없으면 휴대전화 설정에서 지원되는 첫 번째 언어를 사용해요.",
   "mobile.settings.dictation.automatic": "자동",
   "mobile.settings.appearance.title": "화면 모드",
   "mobile.settings.appearance.footer": "시스템은 기기의 화면 모드를 따라요.",
@@ -296,6 +296,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "사진을 원본 화질로 보내기",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "끄면 앱이 각 사진의 작은 사본(긴 쪽 최대 2048픽셀)을 보냅니다. 느린 연결에서도 더 빨리 도착합니다. 원본 사진을 보내려면 켜세요.",
+  "mobile.settings.conversations.fullScreenCamera": "전체 화면 카메라 사용",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "켜면 카메라가 확대/축소와 모든 렌즈를 쓸 수 있는 시스템 카메라로 열립니다. 끄면 채팅 안에 작은 카메라가 열립니다.",
   "mobile.settings.profile.nameUnsafe": "이름에서 줄바꿈과 제어 문자를 제거해 주세요.",
   "mobile.settings.profile.nameLength": "표시 이름은 3~20자로 입력해 주세요.",
   "mobile.settings.profile.saveFailed": "변경 사항을 저장할 수 없었어요. 다시 시도해 주세요.",

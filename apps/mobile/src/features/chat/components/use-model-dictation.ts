@@ -41,6 +41,7 @@ const STOP_TIMEOUT_MS = {
   elevenlabs: 12_000,
   "voice-server": 125_000,
 } as const;
+const MODEL_LOAD_TIMEOUT_MS = 30_000;
 
 const SCRIBE_NOTICES: Record<ScribeFailure | ElevenLabsError["code"], DictationNotice> = {
   network: { title: "mobile.chat.dictation.stopped", message: "mobile.chat.liveVoice.networkNeeded" },
@@ -76,11 +77,14 @@ interface CaptureSession {
   recording: string[] | null;
   spokeAt: number | null;
   abort: AbortController;
+  ready: Promise<{ error: unknown } | null>;
+  loading: boolean;
   native: boolean;
   heard: boolean;
   listeningAt: number | null;
   stoppingAt: number | null;
   ending: "cancelled" | "permission_denied" | "operation_failed" | null;
+  cutShort: boolean;
 }
 
 function showVoiceServerNotice(error: VoiceServerError): void {
@@ -170,11 +174,11 @@ export function useModelDictation({
   const phaseRef = useRef<DictationPhase>("idle");
   const level = useSharedValue(0);
   const session = useRef<CaptureSession | null>(null);
-  const finished = useRef<(() => void)[]>([]);
+  const finished = useRef<((complete: boolean) => void)[]>([]);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onDraftRef = useRef(onDraft);
   const endsOnPauseRef = useRef(endsOnPause);
-  const finishRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const finishRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true));
   useEffect(() => {
     onDraftRef.current = onDraft;
     endsOnPauseRef.current = endsOnPause;
@@ -185,31 +189,35 @@ export function useModelDictation({
     setPhase(next);
   }, []);
 
-  const settle = useCallback(() => {
-    if (session.current)
-      trackTurn(
-        session.current,
-        session.current.engine === "elevenlabs" || session.current.engine === "voice-server" ? "cloud" : "local",
-      );
-    if (owner === id) owner = null;
-    session.current = null;
-    if (stopTimer.current) clearTimeout(stopTimer.current);
-    stopTimer.current = null;
-    level.set(0);
-    update("idle");
-    for (const resolve of finished.current.splice(0)) resolve();
-  }, [id, level, update]);
+  const settle = useCallback(
+    (delivered = true) => {
+      const complete = delivered && !session.current?.ending && !session.current?.cutShort;
+      if (session.current)
+        trackTurn(
+          session.current,
+          session.current.engine === "elevenlabs" || session.current.engine === "voice-server" ? "cloud" : "local",
+        );
+      if (owner === id) owner = null;
+      session.current = null;
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+      stopTimer.current = null;
+      level.set(0);
+      update("idle");
+      for (const resolve of finished.current.splice(0)) resolve(complete);
+    },
+    [id, level, update],
+  );
 
   const fail = useCallback(
     (current: CaptureSession, notice: DictationNotice, error?: unknown) => {
-      if (session.current !== current) return;
+      if (owner !== id || session.current !== current) return;
       current.ending = "operation_failed";
       speechNative?.cancelCapture?.();
       current.scribe?.cancel();
       settle();
       showNotice(notice, error);
     },
-    [settle],
+    [id, settle],
   );
 
   const showText = useCallback((current: CaptureSession, spoken: string) => {
@@ -249,7 +257,7 @@ export function useModelDictation({
         current.native = false;
         if (error === "interrupted") {
           current.scribe?.cancel();
-          settle();
+          settle(false);
           return;
         }
         if (error && phaseRef.current !== "stopping") {
@@ -258,6 +266,7 @@ export function useModelDictation({
           });
           return;
         }
+        if (error) current.cutShort = true;
         if (current.scribe) void current.scribe.finish().then(() => session.current === current && settle());
         else if (current.recording) {
           const pcm = joinRecording(current.recording);
@@ -280,7 +289,11 @@ export function useModelDictation({
               else showNotice(dictationFailedNotice, failure);
             },
           );
-        } else settle();
+        } else
+          void current.ready.then((failure) => {
+            if (failure) fail(current, modelLoadNotice, failure.error);
+            else if (session.current === current) settle();
+          });
       }),
     ];
     return () => {
@@ -302,11 +315,14 @@ export function useModelDictation({
         recording: engine === "voice-server" ? [] : null,
         spokeAt: null,
         abort: new AbortController(),
+        ready: Promise.resolve(null),
+        loading: false,
         native: false,
         heard: false,
         listeningAt: null,
         stoppingAt: null,
         ending: null,
+        cutShort: false,
       };
       session.current = current;
       update("starting");
@@ -325,15 +341,15 @@ export function useModelDictation({
             if (!useVoiceServer.getState().server?.routes.dictation)
               throw new VoiceServerError("address", sourceText("error.voice.server.routeOff"));
           } else if (engine !== "elevenlabs") {
-            try {
-              await loadLocalRecognizer(engine, LOCAL_MODEL_THREADS);
-            } catch (error) {
-              if (!stillCurrent()) return;
-              current.ending = "operation_failed";
-              settle();
-              showNotice(modelLoadNotice, error);
-              return;
-            }
+            current.loading = true;
+            current.ready = loadLocalRecognizer(engine, LOCAL_MODEL_THREADS)
+              .then(
+                () => null,
+                (error: unknown) => ({ error }),
+              )
+              .finally(() => {
+                current.loading = false;
+              });
           } else {
             const key = await readElevenLabsKey();
             if (!key) throw new ElevenLabsError("invalid-key");
@@ -358,6 +374,7 @@ export function useModelDictation({
           current.listeningAt = performance.now();
           update("listening");
           void haptics.impact("light");
+          void current.ready.then((failure) => failure && fail(current, modelLoadNotice, failure.error));
         } catch (error) {
           if (session.current !== current) return;
           current.native = false;
@@ -384,13 +401,13 @@ export function useModelDictation({
     current.scribe?.cancel();
   }, []);
 
-  const finish = useCallback((): Promise<void> => {
+  const finish = useCallback((): Promise<boolean> => {
     const current = session.current;
-    if (owner !== id || !current) return Promise.resolve();
+    if (owner !== id || !current) return Promise.resolve(true);
     if (phaseRef.current === "starting") {
       cancelNative(current);
       settle();
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     return new Promise((resolve) => {
       finished.current.push(resolve);
@@ -399,11 +416,14 @@ export function useModelDictation({
       update("stopping");
       void haptics.selection();
       speechNative?.finishCapture?.();
-      stopTimer.current = setTimeout(() => {
-        if (owner !== id || session.current !== current) return;
-        cancelNative(current);
-        settle();
-      }, STOP_TIMEOUT_MS[current.engine]);
+      stopTimer.current = setTimeout(
+        () => {
+          if (owner !== id || session.current !== current) return;
+          cancelNative(current);
+          settle(false);
+        },
+        STOP_TIMEOUT_MS[current.engine] + (current.loading ? MODEL_LOAD_TIMEOUT_MS : 0),
+      );
     });
   }, [cancelNative, id, settle, update]);
 
@@ -427,6 +447,7 @@ export function useModelDictation({
 
   useEffect(
     () => () => {
+      for (const resolve of finished.current.splice(0)) resolve(false);
       if (owner !== id) return;
       if (session.current) cancelNative(session.current);
       owner = null;

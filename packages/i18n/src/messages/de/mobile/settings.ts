@@ -87,7 +87,7 @@ export const messages = {
     "Dies beendet auch die aktiven Remote-Verbindungen des Kontos. Das Gerät kann sich erneut anmelden.",
   "mobile.settings.sessions.disconnect": "Trennen",
   "mobile.settings.dictation.footer":
-    "Die Sprache, die du mit der Erkennung des Telefons sprichst, in einem Sprachgespräch und beim Diktieren. Automatisch verwendet die erste Sprache in den Telefoneinstellungen, die sie unterstützt.",
+    "Die Sprache, die du mit der Erkennung des Telefons sprichst, in einem Sprachgespräch und beim Diktieren. Automatisch verwendet die Sprache der Tastatur, mit der du schreibst, und sonst die erste Sprache in den Telefoneinstellungen, die sie unterstützt.",
   "mobile.settings.dictation.automatic": "Automatisch",
   "mobile.settings.appearance.title": "Darstellung",
   "mobile.settings.appearance.footer": "System folgt der Darstellung deines Geräts.",
@@ -305,6 +305,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "Fotos in voller Qualität senden",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "Wenn dies aus ist, sendet die App eine kleinere Kopie jedes Fotos, bis zu 2048 Pixel an der langen Seite. Sie kommt bei einer langsamen Verbindung schneller an. Schalte dies ein, um das Originalfoto zu senden.",
+  "mobile.settings.conversations.fullScreenCamera": "Vollbildkamera verwenden",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "Wenn dies an ist, öffnet „Kamera“ die Systemkamera mit Zoom und allen Objektiven. Wenn dies aus ist, öffnet sich eine kleine Kamera im Chat.",
   "mobile.settings.profile.nameUnsafe": "Entferne Zeilenumbrüche und Steuerzeichen aus deinem Namen.",
   "mobile.settings.profile.nameLength": "Verwende 3–20 Zeichen für deinen Anzeigenamen.",
   "mobile.settings.profile.saveFailed": "Die Änderungen konnten nicht gespeichert werden. Versuche es erneut.",

@@ -84,7 +84,7 @@ export const messages = {
     "Cela met aussi fin aux connexions distantes actives du compte. L’appareil pourra se reconnecter.",
   "mobile.settings.sessions.disconnect": "Déconnecter",
   "mobile.settings.dictation.footer":
-    "La langue que vous parlez à la reconnaissance du téléphone, dans une conversation vocale et en dictée. « Automatique » utilise la première langue des réglages de votre téléphone qu’elle prend en charge.",
+    "La langue que vous parlez à la reconnaissance du téléphone, dans une conversation vocale et en dictée. « Automatique » utilise la langue du clavier avec lequel vous écrivez, sinon la première langue des réglages de votre téléphone qu’elle prend en charge.",
   "mobile.settings.dictation.automatic": "Automatique",
   "mobile.settings.appearance.title": "Apparence",
   "mobile.settings.appearance.footer": "« Système » suit l’apparence de votre appareil.",
@@ -301,6 +301,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "Envoyer les photos en qualité maximale",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "Si cette option est désactivée, l’app envoie une copie plus petite de chaque photo, jusqu’à 2048 pixels sur le grand côté. Elle arrive plus vite sur une connexion lente. Activez-la pour envoyer la photo d’origine.",
+  "mobile.settings.conversations.fullScreenCamera": "Utiliser l’appareil photo en plein écran",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "Si cette option est activée, Appareil photo ouvre l’appareil photo du système, avec le zoom et tous les objectifs. Sinon, un petit appareil photo s’ouvre dans la conversation.",
   "mobile.settings.profile.nameUnsafe": "Retirez les sauts de ligne et les caractères de contrôle de votre nom.",
   "mobile.settings.profile.nameLength": "Utilisez 3 à 20 caractères pour votre nom affiché.",
   "mobile.settings.profile.saveFailed": "Impossible d’enregistrer les modifications. Réessayez.",

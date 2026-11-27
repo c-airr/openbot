@@ -18,10 +18,10 @@ import {
   type SaveWorkflowGraphInput,
   type SetWorkflowPausedInput,
   type StartWorkflowRunInput,
+  WORKFLOW_ASSET_TYPES,
   WORKFLOW_CHECK_FIELD,
   WORKFLOW_CREDIT_MODEL_PREFIX,
   WORKFLOW_GITHUB_EVENTS,
-  WORKFLOW_PICTURE_TYPES,
   type WorkflowCatalogSource,
   type WorkflowDetail,
   type WorkflowGitHubHistory,
@@ -589,6 +589,9 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
             const answer = delivery.turnId ? dependencies.turnAnswer(step.agentId, delivery.turnId) : null;
             const output = answer === null || isNoUpdateAnswer(answer) ? "" : answer;
             if (fields.length === 0) return settle(step, { status: "done", output });
+            const quietAnswer = output === "" ? readGivenAnswer(fields, {}) : null;
+            if (quietAnswer && "output" in quietAnswer)
+              return settle(step, { status: "done", output: quietAnswer.output });
             const read = readAnswer(fields, output);
             if ("output" in read) return settle(step, { status: "done", output: read.output });
             const fix = yield* askAnswerFix(step, step.agentId, step.deliveryId, answerFixAsk(fields, read.problems));
@@ -2129,11 +2132,11 @@ class Workflows extends Context.Service<Workflows, WorkflowsShape>()("openbot/ba
         const keepPicture = Effect.fn("Workflows.keepPicture")(function* (draftId: string) {
           const keep = dependencies.keepPicture;
           if (!keep) return yield* refuse("refused", sourceText("error.workflow.nodeUnsupported"));
-          const kept = yield* keep(draftId, WORKFLOW_PICTURE_TYPES).pipe(
+          const kept = yield* keep(draftId, WORKFLOW_ASSET_TYPES).pipe(
             Effect.mapError(({ cause }) => new WorkflowFailed({ cause })),
           );
           if (kept === "missing") return yield* refuse("missing", sourceText("error.workflow.pictureMissing"));
-          if (kept === "type") return yield* refuse("refused", sourceText("error.workflow.pictureType"));
+          if (kept === "type") return yield* refuse("refused", sourceText("error.workflow.assetType"));
           return kept;
         });
 

@@ -128,45 +128,54 @@ export function AccountUsageWindowList(props: { windows: readonly AccountUsageWi
   return (
     <span class="account-usage-windows">
       <For each={props.windows}>
-        {(usageWindow, index) => (
-          <>
-            <Show
-              when={
-                usageWindow.group && props.windows[index() - 1]?.group?.name !== usageWindow.group.name
-                  ? usageWindow.group.name
-                  : undefined
-              }
-            >
-              {(groupName) => <span class="account-usage-window-group">{groupName()}</span>}
-            </Show>
-            <span class="account-usage-window" data-usage-tone={usageWindow.tone}>
-              <span class="account-usage-window-label" title={usageWindow.label}>
-                {usageWindow.group?.window ?? usageWindow.label}
-              </span>
-              <span class="account-usage-window-bar" aria-hidden="true">
-                <span class="account-usage-window-fill" style={{ "inline-size": `${usageWindow.usedPercent}%` }} />
-                <Show when={usagePaceRemainingPercent(usageWindow.durationMins, usageWindow.resetsAt, props.now)}>
-                  {(pace) => (
-                    <span class="account-usage-window-pace" style={{ "inset-inline-start": `${100 - pace()}%` }} />
-                  )}
-                </Show>
-              </span>
-              <strong class="account-usage-window-remaining">
-                {text.format.percent(usageWindow.usedPercent / 100)}
-              </strong>
-              <span
-                class="account-usage-window-reset"
-                title={
-                  usageWindow.resetsAtLabel
-                    ? t("account.usage.resetsAt", { time: usageWindow.resetsAtLabel })
+        {(usageWindow, index) => {
+          const percent = usageWindow.showRemaining ? usageWindow.remainingPercent : usageWindow.usedPercent;
+          return (
+            <>
+              <Show
+                when={
+                  usageWindow.group && props.windows[index() - 1]?.group?.name !== usageWindow.group.name
+                    ? usageWindow.group.name
                     : undefined
                 }
               >
-                {formatUsageResetIn(usageWindow.resetsAt, props.now, text)}
+                {(groupName) => <span class="account-usage-window-group">{groupName()}</span>}
+              </Show>
+              <span class="account-usage-window" data-usage-tone={usageWindow.tone}>
+                <span class="account-usage-window-label" title={usageWindow.label}>
+                  {usageWindow.group?.window ?? usageWindow.label}
+                </span>
+                <span class="account-usage-window-bar" aria-hidden="true">
+                  <span class="account-usage-window-fill" style={{ "inline-size": `${percent}%` }} />
+                  <Show when={usagePaceRemainingPercent(usageWindow.durationMins, usageWindow.resetsAt, props.now)}>
+                    {(pace) => (
+                      <span
+                        class="account-usage-window-pace"
+                        style={{ "inset-inline-start": `${usageWindow.showRemaining ? pace() : 100 - pace()}%` }}
+                      />
+                    )}
+                  </Show>
+                </span>
+                <strong class="account-usage-window-remaining">
+                  {text.format.percent(
+                    percent / 100,
+                    usageWindow.showRemaining ? { maximumFractionDigits: 1 } : undefined,
+                  )}
+                </strong>
+                <span
+                  class="account-usage-window-reset"
+                  title={
+                    usageWindow.resetsAtLabel
+                      ? t("account.usage.resetsAt", { time: usageWindow.resetsAtLabel })
+                      : undefined
+                  }
+                >
+                  {formatUsageResetIn(usageWindow.resetsAt, props.now, text)}
+                </span>
               </span>
-            </span>
-          </>
-        )}
+            </>
+          );
+        }}
       </For>
     </span>
   );

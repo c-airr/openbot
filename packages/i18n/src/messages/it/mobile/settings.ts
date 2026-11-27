@@ -83,7 +83,7 @@ export const messages = {
     "Verranno chiuse anche le connessioni remote attive dell'account. Il dispositivo potrà accedere di nuovo.",
   "mobile.settings.sessions.disconnect": "Disconnetti",
   "mobile.settings.dictation.footer":
-    "La lingua che parli al riconoscimento del telefono, in una conversazione vocale e durante la dettatura. «Automatica» usa la prima lingua nelle impostazioni del telefono che supporta.",
+    "La lingua che parli al riconoscimento del telefono, in una conversazione vocale e durante la dettatura. «Automatica» usa la lingua della tastiera con cui scrivi, altrimenti la prima lingua nelle impostazioni del telefono che supporta.",
   "mobile.settings.dictation.automatic": "Automatica",
   "mobile.settings.appearance.title": "Aspetto",
   "mobile.settings.appearance.footer": "«Sistema» segue l'aspetto del dispositivo.",
@@ -300,6 +300,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "Invia le foto alla massima qualità",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "Se è disattivato, l’app invia una copia più piccola di ogni foto, fino a 2048 pixel sul lato lungo. Arriva prima con una connessione lenta. Attivalo per inviare la foto originale.",
+  "mobile.settings.conversations.fullScreenCamera": "Usa la fotocamera a schermo intero",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "Se è attivo, Fotocamera apre la fotocamera di sistema, con zoom e tutti gli obiettivi. Se è disattivo, si apre una piccola fotocamera nella chat.",
   "mobile.settings.profile.nameUnsafe": "Rimuovi dal nome gli a capo e i caratteri di controllo.",
   "mobile.settings.profile.nameLength": "Usa da 3 a 20 caratteri per il nome visualizzato.",
   "mobile.settings.profile.saveFailed": "Impossibile salvare le modifiche. Riprova.",

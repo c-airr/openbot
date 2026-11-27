@@ -82,7 +82,7 @@ export const messages = {
     "הפעולה מסיימת גם את החיבורים המרוחקים הפעילים של החשבון. המכשיר יכול להתחבר שוב.",
   "mobile.settings.sessions.disconnect": "ניתוק",
   "mobile.settings.dictation.footer":
-    "השפה שבה מדברים אל מזהה הדיבור של הטלפון, בשיחה קולית ובהכתבה. אוטומטי משתמש בשפה הראשונה בהגדרות הטלפון שנתמכת.",
+    "השפה שבה מדברים אל מזהה הדיבור של הטלפון, בשיחה קולית ובהכתבה. אוטומטי משתמש בשפת המקלדת שבה מקלידים, ואחריה בשפה הראשונה בהגדרות הטלפון שנתמכת.",
   "mobile.settings.dictation.automatic": "אוטומטי",
   "mobile.settings.appearance.title": "מראה",
   "mobile.settings.appearance.footer": "מערכת עוקבת אחרי מראה המכשיר שלך.",
@@ -292,6 +292,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "שליחת תמונות באיכות מלאה",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "כשהאפשרות כבויה, האפליקציה שולחת עותק קטן יותר של כל תמונה, עד 2048 פיקסלים בצלע הארוכה. הוא מגיע מהר יותר בחיבור איטי. הפעילו אותה כדי לשלוח את התמונה המקורית.",
+  "mobile.settings.conversations.fullScreenCamera": "שימוש במצלמה במסך מלא",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "כשהאפשרות פועלת, ״מצלמה״ פותחת את מצלמת המערכת, עם זום וכל העדשות. כשהיא כבויה, נפתחת מצלמה קטנה בתוך הצ׳אט.",
   "mobile.settings.profile.nameUnsafe": "יש להסיר מהשם מעברי שורה ותווי בקרה.",
   "mobile.settings.profile.nameLength": "שם התצוגה חייב להכיל 3–20 תווים.",
   "mobile.settings.profile.saveFailed": "לא ניתן לשמור את השינויים. אפשר לנסות שוב.",

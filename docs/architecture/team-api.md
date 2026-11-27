@@ -29,7 +29,7 @@ the read state and the sections load. These three reads run together. Cached con
 again after Online, the open conversation first; a chat that did not load then loads when it opens.
 Transport failures and reconnect attempts show Offline, and protocol failures show Connection error.
 The existing RTC connection updates and recovery controller are the source of truth; the indicator
-adds no polling or health requests. Foreground resume reuses a healthy connection without showing a
+adds no polling or health requests of its own. Foreground resume reuses a healthy connection without showing a
 reconnect. When the connection from before the background stays (`kept` on the `connect` result) and
 no read stopped at background entry, the first attempt only checks the path with the compatibility
 read and reads the open chats again; the event stream delivered every event, or an `event-reset`
@@ -47,10 +47,23 @@ first attempt connects. A move to another kind of network, such as Wi-Fi to mobi
 (`expo-network`, `apps/mobile/src/shared/lib/network-path.ts`), ends the connection, and the recovery
 makes a new one on the same session at once (`networkMoved`); the WebView's `online` event does not
 fire for such a move. In support logs, an ICE restart after a network move did not bring the path
-back within 6 s, and a new connection was up in 1.5–3 s. In other cases, a probe of the path waits up
+back within 6 s, and a new connection was up in 1.5–3 s. A new Wi-Fi address (`getIpAddressAsync`)
+is also a move. A change that involves a VPN, such as a VPN or Tailscale that turns on or off (iOS
+reports the type as unknown, Android as VPN), keeps the connection: the peer renews its Signal socket
+and restarts ICE, which gathers the candidates of the new interface and keeps the old path until a
+new one answers, and it checks the path with the compatibility read (`networkChanged`,
+`apps/mobile/src/shared/lib/network-change.ts`). A dead path then makes a new connection. Such a
+change waits 1 s, so that a short series of changes sends one restart; a move goes at once. In other cases, a probe of the path waits up
 to 6 s after the start of an ICE restart (`ICE_RESTART_PROBE_MS`) before it judges the path dead. The desktop host closes a connection
 at its 11th ICE restart, so the peer counts its restart offers and, after 10, makes a new connection
-on the same session instead of an 11th. A new connection to a known host opens its Signal socket while the ticket request runs,
+on the same session instead of an 11th. While the app is open and the connection is online, the peer
+reads the selected candidate pair every 5 s (`packages/team-client/src/remote-path-watch.ts`). After
+12 s with no received bytes and no ICE consent answers, it checks the path with the compatibility
+read, which replaces a dead connection. A connection on a TURN relay restarts ICE 60 s, 3 minutes
+and 9 minutes after it found the relay, to find a direct path; these restarts stop while 3 or fewer
+of the 10 restarts are left. A failed attempt is retried after 0.5, 1.2, 2.7 and 4.8 s, each with
+up to 20 % more, then the recovery waits 15 s before the next 5 attempts (`REMOTE_RETRY_DELAYS_MS`,
+`REMOTE_RETRY_COOLDOWN_MS`). A new connection to a known host opens its Signal socket while the ticket request runs,
 and, with ICE servers less than 30 minutes old, gathers candidates before `ready`; its first offer
 holds the candidates gathered so far. A server that was
 Online when the app left keeps its Online look during the first attempt after the return, for up to
@@ -278,11 +291,27 @@ never tokens or token hashes, and all operations are scoped to the authenticated
 Cloudflare issues short ES256 connection tickets and stores the logical session. Signal issues a
 10-minute resume token, so a short Signal update does not end an active WebRTC connection. Signal
 validates a trusted, non-expired resume token locally. After a Signal restart, the first use of a token
-checks the durable control plane once. An expired token also needs one durable check before Signal issues
+checks the durable control plane once. A connection ticket is checked the same way during the first
+3 minutes after a Signal start, and also later when it was issued before that start (with 60 s for
+clock skew), because Signal forgot the revocations from before its restart. Tickets issued after the
+start get no extra check. An expired token also needs one durable check before Signal issues
 a replacement. Later reconnects use the in-memory trust cache. This is not a heartbeat.
 Session endings and access changes use a durable D1 outbox. Cloudflare sends each revocation to Signal
 immediately and retries failed deliveries from a scheduled task. This keeps reconnect validation local
 without losing revocations when Signal is temporarily unavailable.
+A host does not need its Signal socket to keep a WebRTC connection, so Signal must tell it about a
+session that ended while the host socket was away. Signal keeps the ended session IDs of each host for
+24 hours and sends them in a `sessions-ended` frame each time a host socket authenticates, and at once
+to a host socket that is connected. The host closes the child peer of each listed session. Signal
+forgets these IDs when it restarts, so the host also fails closed: after each new host Signal socket,
+every child peer must be confirmed again by a `peer-ready` for its session, or the host closes it.
+Each child peer has 11 minutes for this (`CLIENT_RECONFIRM_MS` in `team-webrtc.ts`): the 10-minute
+client reconnect grace of Signal and 1 minute more. The time counts only while the host has a ready
+Signal socket, so a Signal outage does not close healthy peers. Signal confirms a client at once when
+the client socket is connected and Signal maps it to the resumed host socket. A client that is away
+from Signal is confirmed when it comes back. Host frames use their own Signal rate key
+(`host:<hostId>`, 10 times the per-user limit), so the traffic of an owner's client cannot close the
+host socket. Older hosts ignore `sessions-ended`.
 
 Protocol v1 remains frozen for compatibility fixtures, but its public HTTP, WebSocket, and Cloudflare
 Tunnel transport is retired. The old public endpoints return `host_update_required`.
@@ -584,6 +613,55 @@ admins can use them (else 403); the wire codec refuses a size outside the range 
 applies to the Claude processes that start after it, and the host sends the provider status event, so
 open settings pages read it again. `src/main/team-api/route-claude-compact-window.ts` owns them.
 Without the capability a client hides the row for that host.
+
+The optional `media-approval-credits-v1` capability (protocol 10 only) adds
+`POST /v1/admin/host/media-approval-credits` (empty request) and
+`POST /v1/admin/host/media-approval-credits/update` (`agents` and `askWhenBlocked`: booleans;
+`credits`: a whole number from 0 to 100,000; `imageModel` and `videoModel`: a model ID or `null`; each
+field is optional and a missing field stays). Both give
+`{ agents, askWhenBlocked, credits, imageModel, videoModel }`; the default is agents on, asks on,
+50 credits and no default model. When `agents` is false, or the balance is less than the price,
+`generate_image` and `generate_video` hold the call with a credits hold (see `media-approval-choice-v1`)
+and spend no credits; `list_media_models` still works. When `askWhenBlocked` is false, the call does
+not hold: the tool tells the agent that it skipped the step. When
+one `generate_image` or `generate_video` call costs more credits than this limit, the user must approve
+it. When the agent names no model, the call uses the default model of its kind if that model takes the
+input pictures. With no default model set, it uses the first preferred model in the catalog that
+takes the input pictures (`CREDIT_MEDIA_PREFERRED_MODELS`: `gpt-image-2.6` for images; `magi-2`, then
+`seedance-2.5` for videos), and `list_media_models` gives the first available one as `defaultModels`. Only owners and admins can use them (else 403); the host refuses a value outside the
+range, not whole, or a model ID that is not valid with 400. A change applies to the next call.
+`src/main/team-api/route-media-approval-credits.ts` owns them. Without the capability a client hides
+the row for that host.
+
+The optional `media-approval-choice-v1` capability (protocol 10 only) lets a member change the request
+in a pending media approval. The approval itself stays a `permissions` approval with no command, folder
+or permissions, so an older client shows the plain Allow card. `POST /v1/agent-approvals/media/read`
+(`agentId`, `requestId`) gives `{ media }`: `null` when the request is not a pending media approval,
+else the kind, the prompt, the agent's model and settings (`choice`), the default model, at most 200
+models that take the input pictures, and `canSetDefault` (true for owners and admins).
+`POST /v1/agent-approvals/media/respond` (`agentId`, `requestId`, `choice`: `model`, `aspect`,
+`resolution`, `duration`, `audio`) allows the approval with that choice and gives 204. The host plans
+the job again with the choice; when the new price is higher, it checks the balance again. A member
+needs the chat level on the agent. An unknown or hidden agent gets 404, a request that is not valid
+400, a request that is no longer pending 409. To decline, the client uses the normal approval route.
+"Set as default" uses `media-approval-credits-v1`. `src/main/team-api/route-media-approval-choice.ts`
+owns the routes. Without the capability a client shows the plain Allow card.
+
+The same capability carries the credits hold. The read also gives `hold`: `null`, or the hold of the
+turn with `reason` (`balance` or `agentsOff`), the number of held `images` and `videos`, their total
+`cost`, the `balance` (`null` for `agentsOff`) and `canEnable` (true for owners and admins). All held
+calls of one turn share one approval, so one answer answers all of them.
+`POST /v1/agent-approvals/media/hold` (`agentId`, `requestId`, `action`: `continue`, `enable`, `skip`
+or `mute`) gives `{ hold }`. `continue` checks the balance again: when it is enough, the calls continue
+and `hold` is `null`; else `hold` has the new balance. `enable` turns agent use of credits on (owners
+and admins only, else 403), then continues. `skip` and `mute` end the hold with no charge. `mute` from
+an owner or an admin sets `askWhenBlocked` to false; from a member, it stops the asks for the turns
+that member starts. `POST /v1/agent-approvals/media/muted` (`muted`: a boolean) gives 204 and sets the
+same mute (the client's Undo and the switch in the Credits rail hover card).
+`POST /v1/agent-approvals/media/muted/read` (empty body) gives `{ muted }`: for an owner or an admin,
+`askWhenBlocked` is false; for a member, that member muted the asks. The host keeps the muted members in
+`openbot-credit-asks-muted-v1.json`. An older client shows the hold as a plain approval card: Allow
+continues and Decline skips.
 
 The optional `provider-environment-v1` capability (protocol 9 only) adds
 `POST /v1/admin/host/provider-environment` (`provider`: `claude`, `codex` or `antigravity`) and

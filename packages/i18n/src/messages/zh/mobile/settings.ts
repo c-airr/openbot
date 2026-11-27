@@ -79,7 +79,7 @@ export const messages = {
   "mobile.settings.sessions.disconnectBody": "这也会结束该账号的活跃远程连接。该设备可以重新登录。",
   "mobile.settings.sessions.disconnect": "断开连接",
   "mobile.settings.dictation.footer":
-    "在语音对话和听写中，你对手机语音识别说的语言。“自动”会使用手机设置中第一个受支持的语言。",
+    "在语音对话和听写中，你对手机语音识别说的语言。“自动”会使用你打字所用键盘的语言，其次是手机设置中第一个受支持的语言。",
   "mobile.settings.dictation.automatic": "自动",
   "mobile.settings.appearance.title": "外观",
   "mobile.settings.appearance.footer": "“系统”会跟随设备外观。",
@@ -281,6 +281,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "以原始画质发送照片",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "关闭时，应用会发送每张照片的较小副本，长边最多 2048 像素，在慢速连接上更快送达。打开后发送原始照片。",
+  "mobile.settings.conversations.fullScreenCamera": "使用全屏相机",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "开启后，“相机”会打开系统相机，可使用变焦和所有镜头。关闭后，会在聊天中打开一个小相机。",
   "mobile.settings.profile.nameUnsafe": "请去掉名称中的换行和控制字符。",
   "mobile.settings.profile.nameLength": "显示名称请使用 3–20 个字符。",
   "mobile.settings.profile.saveFailed": "无法保存更改，请重试。",

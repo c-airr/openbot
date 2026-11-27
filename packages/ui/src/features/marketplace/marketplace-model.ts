@@ -37,6 +37,8 @@ export interface MarketplaceSkillChange {
 
 export type AgentListingState = "add" | "added" | "update";
 
+export const X_APP_ID = "x";
+
 export type SkillRead = "idle" | "loading" | "loaded" | "failed";
 
 export type GithubSkillRead = { status: "found"; source: GithubSkillSource } | { status: "failed"; message: string };
@@ -66,6 +68,7 @@ export interface MarketplaceAppConnection {
   accounts: readonly MarketplaceAppAccount[];
   multipleAccounts: boolean;
   keySaved?: boolean;
+  paused?: boolean;
 }
 
 export type MarketplaceApp =
@@ -76,6 +79,7 @@ export type MarketplaceApp =
       connections: Readonly<Record<string, MarketplaceAppConnection>>;
     })
   | (AppBase & { kind: "connector"; connector: ConnectorId; category: SkillCategory })
+  | (AppBase & { kind: "x"; category: SkillCategory; agent: MarketplaceAgent | null; extensionUrl: string })
   | (AppBase & { kind: "custom"; server: McpServerConfig });
 
 export type AppSetup = "channel" | "vault" | "account" | "key" | "desktop" | "open" | "custom";
@@ -125,6 +129,8 @@ export function appSetup(app: MarketplaceApp): AppSetup {
     }
     case "custom":
       return "custom";
+    case "x":
+      return "channel";
   }
 }
 

@@ -63,6 +63,7 @@ export const messages = defineMessages("provider", {
   "provider.aria.install": "Install {name}",
   "provider.aria.signIn": "Sign in to {name}",
   "provider.aria.codeFallback": "Log in to {name} with a code",
+  "provider.aria.addressFallback": "Paste the sign-in address for {name}",
   "provider.aria.moreActions": "More actions for {name}",
 
   "provider.aria.use": "Use {name} in OpenBot",
@@ -91,10 +92,14 @@ export const messages = defineMessages("provider", {
   "provider.codeLogin.pasteExpiresIn": "Waiting for you. This login stops in {time}.",
   "provider.codeLogin.linkTitle": "Log in to {name} on another device",
   "provider.codeLogin.pageTitle": "Sign in to {name}",
+  "provider.codeLogin.addressDescription":
+    "Finish the sign-in in your browser. This window closes when the sign-in is complete.",
   "provider.codeLogin.pageDescription": "This page is open in the browser on {host}. Sign in here.",
   "provider.codeLogin.relayStarting": "Starting the {name} sign-in on {host}…",
   "provider.codeLogin.pageOpening": "Opening the {name} sign-in page on {host}…",
   "provider.codeLogin.linkStep": "Log in to {name}. OpenBot continues by itself.",
+  "provider.codeLogin.thisComputerDescription": "Open this link in a browser on this computer. OpenBot waits here.",
+  "provider.codeLogin.copyLink": "Copy link",
   "provider.codeLogin.chatgptDeviceSetting":
     "In ChatGPT on a computer, open the security settings and turn on device code sign-in for Codex. For a work account, your workspace admin turns it on.",
 
@@ -236,6 +241,7 @@ export const messages = defineMessages("provider", {
   "provider.account.apiKey": "API key",
   "provider.account.listLabel": "{name} accounts",
   "provider.account.usedBy": "Used by {agents}",
+  "provider.account.sameEmail": "Same email as {name}",
   "provider.account.failed": "Sign-in failed",
   "provider.account.moreActions": "More actions for {name}",
   "provider.account.renameLabel": "Name of {name}",
@@ -261,6 +267,11 @@ export const messages = defineMessages("provider", {
   "provider.account.pool": "Pool accounts",
   "provider.account.poolDescription":
     "Agents use one account until it nears a usage limit, then the account whose limit resets first.",
+  "provider.account.poolStrategy": "Use accounts",
+  "provider.account.poolFillFirst": "Fill first",
+  "provider.account.poolSpread": "Spread",
+  "provider.account.poolSpreadDescription":
+    "Agents spread over the accounts with the most usage left. An agent changes accounts only when another account has much more room.",
   "provider.account.inUse": "In use",
   "provider.account.notInPool": "Not in pool",
   "provider.account.leaveOutOfPool": "Leave out of pool",

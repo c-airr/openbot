@@ -1089,6 +1089,7 @@ function markerLabel(
     marker.kind === "vault-change" ||
     marker.kind === "session-import" ||
     marker.kind === "plan-continuation" ||
+    marker.kind === "no-answer" ||
     marker.kind === "instructions-change" ||
     marker.kind === "sign-in-failure"
   )
@@ -1182,6 +1183,7 @@ function markerAccessibleLabel(
     marker.kind === "vault-change" ||
     marker.kind === "session-import" ||
     marker.kind === "plan-continuation" ||
+    marker.kind === "no-answer" ||
     marker.kind === "instructions-change" ||
     marker.kind === "sign-in-failure"
   )

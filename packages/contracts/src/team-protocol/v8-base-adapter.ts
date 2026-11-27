@@ -4,6 +4,7 @@ import { type AgentEvent, isAgentEvent } from "../ipc-agent-events";
 import { isTeamRealtimeEvent, type TeamRealtimeEvent } from "../ipc-team-host";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "../runtime-values";
 import { withRuntimeSnapshotBackgroundWork } from "./agent-background-work-v1";
+import { withAgentErrorLink } from "./agent-error-link-v1";
 import { withEventAgentPendingRuntimes } from "./agent-pending-runtime-v1";
 import { restoreBrowserSecretMetadata } from "./browser-secret-v1";
 import { restoreBrowserTakeoverReason } from "./browser-sign-in-v1";
@@ -60,7 +61,10 @@ export function decodeTeamProtocolV8BaseCurrentEvent(value: unknown): TeamProtoc
                   withEventAgentPendingRuntimes(
                     withUsageEventGroups(
                       withUsageEventTertiary(
-                        withRuntimeSnapshotBackgroundWork(withRuntimeSnapshotContextUsage(decodedValue, value), value),
+                        withRuntimeSnapshotBackgroundWork(
+                          withRuntimeSnapshotContextUsage(withAgentErrorLink(decodedValue, value), value),
+                          value,
+                        ),
                         value,
                       ),
                       value,
@@ -111,6 +115,7 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
     memoryChanges?: boolean;
     queueHold?: boolean;
     queueHoldSignIn?: boolean;
+    errorLink?: boolean;
   } = {},
 ): string | null {
   if (event.type === "turn-progress") return JSON.stringify(toWireAgentKeys(JSON.parse(JSON.stringify(event))));
@@ -131,6 +136,7 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
   const usageGroups = options.usageGroups === true && event.type === "usage-changed";
   const pendingRuntime = options.agentPendingRuntime === true && event.type === "agents-changed";
   const queueHold = options.queueHold === true && event.type === "queue-changed";
+  const errorLink = options.errorLink === true && event.type === "error";
   if (
     !encoded ||
     (!options.preserveBrowserSecrets &&
@@ -143,7 +149,8 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
       !usageTertiary &&
       !usageGroups &&
       !pendingRuntime &&
-      !queueHold)
+      !queueHold &&
+      !errorLink)
   )
     return encoded;
   const withPlans = withEventConversationPlans(
@@ -167,7 +174,8 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
     : withPending;
   const withSecrets = options.preserveBrowserSecrets ? restoreBrowserSecretMetadata(output, wireValue) : output;
   const withReason = options.browserSignIn ? restoreBrowserTakeoverReason(withSecrets, wireValue) : withSecrets;
-  return JSON.stringify(options.browserVaultSkip ? restoreBrowserVaultSkip(withReason, wireValue) : withReason);
+  const withVaultSkip = options.browserVaultSkip ? restoreBrowserVaultSkip(withReason, wireValue) : withReason;
+  return JSON.stringify(errorLink ? withAgentErrorLink(withVaultSkip, currentValue, true) : withVaultSkip);
 }
 
 function withEventConversationPlans(

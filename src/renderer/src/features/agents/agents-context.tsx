@@ -13,6 +13,7 @@ import {
 import { AGENT_HIDDEN_WORK_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import type { AgentProfile } from "@openbot/ui/data";
+import type { CreationPreference, DevelopmentCreation } from "@openbot/ui/features/agents/agent-creation-model";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
@@ -28,7 +29,6 @@ import { useDirectMessages } from "../conversation/direct-messages-context";
 import { remoteAdminServer } from "../servers/server-capabilities";
 import { useServers } from "../servers/servers-context";
 import { useWindowPage } from "../window/window-page-context";
-import type { CreationPreference, DevelopmentCreation } from "./agent-creation-model";
 import { AGENT_SELECTION_STORAGE_KEY, readAgentSelection, writeAgentSelection } from "./agent-selection";
 import { agentsPort } from "./agents-port";
 import {
@@ -60,6 +60,7 @@ const Agents = createSimpleContext({
     /** Fork: a chat is an agent made from a model pick and a first message, without the agent form. */
     const [agentSetupKind, setAgentSetupKind] = createSignal<"agent" | "chat">("agent");
     const [agentSetupDraft, setAgentSetupDraft] = createSignal<FirstAgentDraft>(createFirstAgentDraft());
+    const [agentSetupModelTouched, setAgentSetupModelTouched] = createSignal(false);
     const [agentSetupError, setAgentSetupError] = createSignal<string | null>(null);
     const [creatingAgent, setCreatingAgent] = createSignal(false);
     const [serverSetupChoice, setServerSetupChoice] = createSignal<CreationPreference | null>(null);
@@ -226,7 +227,7 @@ const Agents = createSimpleContext({
         return (profiles.find((agent) => !hidden.has(agent.id)) ?? profiles[0])?.id ?? "";
       });
       if (profiles.length === 0 && !agentSetupOpen()) {
-        setAgentSetupDraft(createFirstAgentDraft());
+        resetAgentSetupDraft();
         setAgentSetupError(null);
         setAgentSetupKind("agent");
         setAgentSetupOpen(true);
@@ -264,6 +265,11 @@ const Agents = createSimpleContext({
       hiddenAgentIds.delete(agentId);
     }
 
+    function resetAgentSetupDraft(): void {
+      setAgentSetupDraft(createFirstAgentDraft());
+      setAgentSetupModelTouched(false);
+    }
+
     function openAgentSetup(kind: "agent" | "chat" = "agent"): void {
       // The form renders in the workspace content that a rail page covers, and the
       // sidebar button that asks for it is outside that markup. Above the guard
@@ -275,7 +281,7 @@ const Agents = createSimpleContext({
       if (agentSetupOpen() && agentSetupKind() === kind) return;
       setAgentSetupKind(kind);
       setDirectTyping(false);
-      setAgentSetupDraft(createFirstAgentDraft());
+      resetAgentSetupDraft();
       setAgentSetupError(null);
       openedAgentChatId = null;
       setAgentSetupOpen(true);
@@ -286,7 +292,7 @@ const Agents = createSimpleContext({
       setAgentSetupOpen(false);
       setAgentSetupKind("agent");
       setAgentSetupError(null);
-      setAgentSetupDraft(createFirstAgentDraft());
+      resetAgentSetupDraft();
     }
 
     async function updateAgent(agentId: string, updates: Omit<UpdateAgentInput, "agentId">): Promise<void> {
@@ -381,6 +387,8 @@ const Agents = createSimpleContext({
       setAgentSetupOpen,
       agentSetupDraft,
       setAgentSetupDraft,
+      agentSetupModelTouched,
+      setAgentSetupModelTouched,
       agentSetupError,
       setAgentSetupError,
       creatingAgent,

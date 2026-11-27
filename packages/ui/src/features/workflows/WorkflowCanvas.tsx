@@ -4,7 +4,6 @@ import {
   type StoredFileRow,
   WORKFLOW_FILE_MAX_BYTES,
   WORKFLOW_GROUP_FIELDS,
-  WORKFLOW_PICTURE_TYPES,
   WORKFLOW_STEP_NAME_FIELD,
   type WorkflowDetail,
   type WorkflowFile,
@@ -17,6 +16,8 @@ import {
   type WorkflowTriggerState,
   type WorkflowVersion,
   type WorkflowVersionKind,
+  workflowAssetClipMedia,
+  workflowAssetType,
   workflowFieldsWithoutIds,
   workflowStepFields,
 } from "@openbot/contracts/ipc";
@@ -59,7 +60,6 @@ import {
   toast,
   Undo2,
   Ungroup,
-  Zap,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import {
@@ -69,8 +69,11 @@ import {
   createStore,
   createUniqueId,
   For,
+  flush,
+  getOwner,
   onCleanup,
   onSettled,
+  runWithOwner,
   Show,
   untrack,
 } from "solid-js";
@@ -87,7 +90,7 @@ import {
 } from "./WorkflowAddMenu";
 import { AgentNode } from "./WorkflowAgentNode";
 import { ApprovalNode } from "./WorkflowApprovalNode";
-import { AssetNode, assetPicture } from "./WorkflowAssetNode";
+import { AssetNode, assetFields, assetPicture } from "./WorkflowAssetNode";
 import {
   ColorButtons,
   HudButton,
@@ -193,7 +196,7 @@ import {
 import { workflowLoops } from "./workflow-loops";
 import { mediaTakes } from "./workflow-media-step";
 import { mergeWorkflowGraphs } from "./workflow-merge";
-import type { WorkflowCatalogs, WorkflowFeatures } from "./workflow-model";
+import { type WorkflowCatalogs, type WorkflowFeatures, workflowClipsAllowed } from "./workflow-model";
 import {
   BLOCK_RESIZE,
   type CanvasColor,
@@ -206,6 +209,7 @@ import {
   ToolAction,
   translated,
 } from "./workflow-node-parts";
+import { CardPictureLoading } from "./workflow-picture";
 import {
   BuilderCursor,
   FollowFrame,
@@ -213,10 +217,26 @@ import {
   PresenceBar,
   peersOf,
   type WorkflowBuilderSpot,
+  type WorkflowCursorRoom,
+  type WorkflowOwnSpot,
   type WorkflowPeer,
   type WorkflowPresence,
 } from "./workflow-presence";
-import { activeRun, indexRunView, isOpenRun, type WorkflowRunView } from "./workflow-run-view";
+import {
+  activeRun,
+  indexRunView,
+  isOpenRun,
+  sameNodeRunState,
+  type WorkflowNodeRunState,
+  type WorkflowRunView,
+} from "./workflow-run-view";
+import {
+  templateAvailable,
+  templateClip,
+  WORKFLOW_TEMPLATES,
+  WorkflowStart,
+  type WorkflowTemplate,
+} from "./workflow-start";
 import { type TidyUnit, tidyLayout } from "./workflow-tidy";
 import { DrawArt, ShapesArt, StickyArt } from "./workflow-tool-art";
 
@@ -233,6 +253,7 @@ export interface WorkflowCanvasProps {
   opening?: boolean | undefined;
   readOnly?: boolean | undefined;
   presence?: WorkflowPresence | undefined;
+  onSpot?: ((spot: WorkflowOwnSpot) => void) | undefined;
   build?: WorkflowBuild | undefined;
   frame?: "window" | undefined;
   server?: string | undefined;
@@ -249,7 +270,7 @@ export interface WorkflowCanvasProps {
   onRestoreVersion: (versionId: string) => void;
   onPreviewVersion?: ((versionId: string | null) => void) | undefined;
   onSelect: (workflowId: string) => void;
-  onCreate: (input: { title: string; graph?: WorkflowGraph; paused?: true }) => void;
+  onCreate: (input: { title: string; graph?: WorkflowGraph; paused?: true }) => Promise<boolean>;
   onRename: (workflowId: string, title: string) => void;
   onSetPaused?: ((workflowId: string, paused: boolean) => void) | undefined;
   onExport?: ((workflowId: string) => Promise<WorkflowFileSaveResult>) | undefined;
@@ -548,6 +569,14 @@ const savedJson = (graph: WorkflowGraph) => stableJson(asSaved(graph));
 
 const SENT_LIMIT = 200;
 
+interface Arriving {
+  key: string;
+  workflow: string;
+  at: WfnPoint;
+  media: "image" | "video" | "audio" | "file";
+  url: string | undefined;
+}
+
 export function WorkflowCanvas(props: WorkflowCanvasProps) {
   const { t, format, errorMessage } = useText();
   const initial = untrack(() => snapshotFromGraph(props.workflow.graph));
@@ -560,16 +589,34 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       for (const entry of entries) {
         if (!(entry.target instanceof HTMLElement)) continue;
         const id = entry.target.dataset.slot;
-        if (id) draft[id] = { width: entry.target.offsetWidth, height: entry.target.offsetHeight };
+        if (!id) continue;
+        const width = entry.target.offsetWidth;
+        const height = entry.target.offsetHeight;
+        const previous = draft[id];
+        if (previous?.width === width && previous.height === height) continue;
+        draft[id] = { width, height };
       }
     }),
   );
   const [camera, setCamera] = createStore({ x: 0, y: 0, scale: 1 });
 
   const running = () => openRun() !== undefined;
-  const statusOf = (id: string) => runIndex().get(id)?.status;
-  const waitingOf = (id: string) => statusOf(id) === "running" && runIndex().get(id)?.step.waiting === true;
-  const stepOf = (id: string) => runIndex().get(id)?.step.id;
+  const canvasOwner = getOwner();
+  const runStates = new Map<string, () => WorkflowNodeRunState | undefined>();
+  const runStateOf = (id: string) => {
+    let state = runStates.get(id);
+    if (!state) {
+      state = runWithOwner(canvasOwner, () => createMemo(() => runIndex().get(id), { equals: sameNodeRunState }));
+      runStates.set(id, state);
+    }
+    return state();
+  };
+  const statusOf = (id: string) => runStateOf(id)?.status;
+  const waitingOf = (id: string) => {
+    const state = runStateOf(id);
+    return state?.status === "running" && state.step.waiting === true;
+  };
+  const stepOf = (id: string) => runStateOf(id)?.step.id;
 
   let viewport: HTMLElement | undefined;
   let root: HTMLElement | undefined;
@@ -628,12 +675,12 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     status: statusOf,
     waiting: waitingOf,
     progress: (id) => {
-      const agentId = statusOf(id) === "running" && !waitingOf(id) ? runIndex().get(id)?.step.agentId : null;
+      const agentId = statusOf(id) === "running" && !waitingOf(id) ? runStateOf(id)?.step.agentId : null;
       return agentId ? props.agentProgress?.(agentId) : undefined;
     },
-    error: (id) => runIndex().get(id)?.error,
-    resultsOf: (id) => runIndex().get(id)?.results ?? [],
-    pendingOf: (id) => (kindOf(id) === "image" ? (runIndex().get(id)?.pending ?? []) : []),
+    error: (id) => runStateOf(id)?.error,
+    resultsOf: (id) => runStateOf(id)?.results ?? [],
+    pendingOf: (id) => (kindOf(id) === "image" ? (runStateOf(id)?.pending ?? []) : []),
     duplicate: (id) => duplicateNodes([id]),
     resetSize: (id) => resetSize(id),
     beforeChange: () => commit(),
@@ -659,7 +706,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     rotateWebhookSecret: untrack(() => props.onRotateWebhookSecret),
     runStep: (id) => runNode(id),
     stopStep: (id) => {
-      const pending = runIndex().get(id)?.pending ?? [];
+      const pending = runStateOf(id)?.pending ?? [];
       if (pending.length === 0) {
         const step = stepOf(id);
         if (step) props.onStopStep(step);
@@ -771,15 +818,20 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   };
   onCleanup(dropFrames);
   let stopGesture = () => {};
+  const followRename = (workflowId: string, from: string, to: string) => {
+    if (workflowId === openId() && name() === from) renameTab(workflowId, to);
+  };
   const undo = () => {
     stopGesture();
     dropFrames();
-    edits.undo();
+    const rename = edits.undo();
+    if (rename) followRename(rename.workflowId, rename.after, rename.before);
   };
   const redo = () => {
     stopGesture();
     dropFrames();
-    edits.redo();
+    const rename = edits.redo();
+    if (rename) followRename(rename.workflowId, rename.before, rename.after);
   };
 
   let liveCanvas: CanvasSnapshot | undefined;
@@ -975,6 +1027,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       draft.fill = color;
     });
   const allows = (kind: WorkflowNodeKind) => props.features.kinds.includes(kind);
+  const [arriving, setArriving] = createSignal<readonly Arriving[]>([]);
+  const arrivingHere = () => arriving().filter((item) => item.workflow === openId());
   const [ghost, setGhost] = createSignal<WfnPoint | null>(null);
   const placing = () => ui.tool === "note" || ui.tool === "shape";
   const [drawn, setDrawn] = createSignal<Box | null>(null);
@@ -1170,10 +1224,10 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     if (action.startsWith("version:")) return openVersion(action.slice("version:".length));
     if (action === "live") return closeVersion();
     if (action !== "rename") closeVersion();
-    if (action === "new") props.onCreate({ title: t("workflow.canvas.untitled") });
+    if (action === "new") void props.onCreate({ title: t("workflow.canvas.untitled") });
     else if (action === "rename") startRename();
     else if (action === "duplicate")
-      props.onCreate({
+      void props.onCreate({
         title: t("workflow.canvas.copyOf", { name: name() }),
         graph: liveCanvas ? graphFromSnapshot(liveCanvas) : graph(),
         ...(props.onSetPaused ? { paused: true } : {}),
@@ -1219,9 +1273,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       },
     );
   };
-  const finishImport = (input: { title: string; graph: WorkflowGraph }) => {
-    setImporting(undefined);
-    props.onCreate({ ...input, ...(props.onSetPaused ? { paused: true } : {}) });
+  const finishImport = async (input: { title: string; graph: WorkflowGraph }) => {
+    if (await props.onCreate({ ...input, ...(props.onSetPaused ? { paused: true } : {}) })) setImporting(undefined);
   };
   const startRename = () => {
     setFolderEdit(undefined);
@@ -1345,6 +1398,14 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
 
   const clampScale = (scale: number) => Math.min(Math.max(scale, MIN_SCALE), MAX_SCALE);
   const view = () => ({ width: viewport?.clientWidth ?? 0, height: viewport?.clientHeight ?? 0 });
+  const [viewSize, setViewSize] = createSignal({ width: 0, height: 0 });
+  const cursorRoom = (at: WfnPoint): WorkflowCursorRoom => {
+    const size = viewSize();
+    return {
+      right: size.width - (at.x * camera.scale + camera.x),
+      bottom: size.height - (at.y * camera.scale + camera.y),
+    };
+  };
   const local = (event: { clientX: number; clientY: number }): WfnPoint => {
     const rect = viewport?.getBoundingClientRect();
     return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) };
@@ -1353,6 +1414,22 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     x: (point.x - camera.x) / camera.scale,
     y: (point.y - camera.y) / camera.scale,
   });
+  const ownSelection = () => canvas.selection()[0] ?? null;
+  const reportSpot = (selected: string | null) => {
+    const at = pointer;
+    props.onSpot?.({ at: at ? untrack(() => toWorld(at)) : null, selected });
+  };
+  createEffect(ownSelection, (selected) => {
+    untrack(() => reportSpot(selected));
+  });
+  createEffect(
+    () => `${camera.x} ${camera.y} ${camera.scale}`,
+    () => {
+      untrack(() => {
+        if (pointer) reportSpot(ownSelection());
+      });
+    },
+  );
   const placeCamera = (next: Camera) => {
     setCamera((draft) => {
       draft.x = next.x;
@@ -1824,6 +1901,38 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     canvas.select(copies.map((node) => node.id));
   };
 
+  const [blankFor, setBlankFor] = createSignal<string>();
+  const starting = () =>
+    live().length === 0 && strokes().length === 0 && !frozen() && !props.opening && blankFor() !== openId();
+  const templateHost = () => ({ t, features: props.features, catalogs: props.catalogs });
+  const templates = createMemo(() => WORKFLOW_TEMPLATES.filter((choice) => templateAvailable(choice, templateHost())));
+  const startFromTemplate = (choice: WorkflowTemplate) => {
+    const template = templateClip(choice, templateHost());
+    place(
+      {
+        ...template,
+        fields: Object.fromEntries(
+          template.nodes.map((node) => {
+            const fields = template.fields[node.id] ?? {};
+            const defaults =
+              node.kind === "output" ? {} : hostDefaults(node.kind, props.catalogs, props.features, fields);
+            return [node.id, { ...defaults, ...fields }];
+          }),
+        ),
+      },
+      { x: 0, y: 0 },
+      "template",
+    );
+    canvas.select([]);
+    const before = name();
+    if (before === t("workflow.canvas.untitled")) {
+      const after = t(choice.title);
+      edits.renamedWith({ workflowId: openId(), before, after });
+      renameTab(openId(), after);
+    }
+    afterLayout(() => fitView(true));
+  };
+
   const withoutIds = (clip: Clip): Clip => {
     const kinds = new Map(clip.nodes.map((node) => [node.id, node.kind]));
     return {
@@ -2058,6 +2167,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   const blocksBut = (group?: string) =>
     untrack(() => [
       ...live().flatMap((node) => shownBox(node.id) ?? []),
+      ...arrivingHere().map((item) => ({ ...item.at, ...NEW_NODE })),
       ...nodeGroups().flatMap((entry) => (entry.id === group ? [] : (frameOf(entry) ?? []))),
     ]);
   const rowsBox = (at: WfnPoint, count: number): Box => {
@@ -2065,45 +2175,56 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     if (count < 2) return { ...at, ...size };
     return frameBox({ id: "", name: "", folded: false, members: [] }, { ...at, ...size });
   };
+  const packRows = (elements: readonly (HTMLElement | undefined)[], from: WfnPoint) => {
+    const places: (WfnPoint | undefined)[] = [];
+    let y = from.y;
+    for (let row = 0; row * PICTURE_ROW < elements.length; row++) {
+      let x = from.x;
+      let tallest = 0;
+      for (let index = row * PICTURE_ROW; index < Math.min(elements.length, (row + 1) * PICTURE_ROW); index++) {
+        const element = elements[index];
+        if (!element) continue;
+        places[index] = snapPoint({ x, y });
+        x += element.offsetWidth + GRID * 2;
+        tallest = Math.max(tallest, element.offsetHeight);
+      }
+      y += tallest + GRID * 2;
+    }
+    return places;
+  };
   const reflowRows = (ids: readonly string[], from: WfnPoint) =>
     afterLayout(() => {
+      const places = packRows(
+        ids.map((id) => (board.isRemoved(id) ? undefined : slot(id))),
+        from,
+      );
       const next: Record<string, WfnPoint> = {};
-      let y = from.y;
-      for (let row = 0; row * PICTURE_ROW < ids.length; row++) {
-        let x = from.x;
-        let tallest = 0;
-        for (const id of ids.slice(row * PICTURE_ROW, (row + 1) * PICTURE_ROW)) {
-          const element = slot(id);
-          if (!element || board.isRemoved(id)) continue;
-          next[id] = snapPoint({ x, y });
-          x += element.offsetWidth + GRID * 2;
-          tallest = Math.max(tallest, element.offsetHeight);
-        }
-        y += tallest + GRID * 2;
-      }
+      ids.forEach((id, index) => {
+        const at = places[index];
+        if (at) next[id] = at;
+      });
       setPositions((draft) => {
         for (const [id, at] of Object.entries(next)) draft[id] = at;
       });
     });
   const filesName = (files: readonly StoredFileRow[]) =>
     files.every((file) => file.previewKind === "image") ? t("workflow.canvas.group.imagesName") : "";
+  const rowsStart = (count: number, from?: WfnPoint): WfnPoint => {
+    const blocks = blocksBut();
+    const fits = (at: WfnPoint) => !blocks.some((block) => overlaps(rowsBox(at, count), block));
+    if (from && fits(from)) return from;
+    const room = rowsBox({ x: 0, y: 0 }, count);
+    const at = freePlace({ width: room.width, height: room.height }, "");
+    return { x: at.x - room.x, y: at.y - room.y };
+  };
   const addFiles = (files: readonly StoredFileRow[], from?: WfnPoint) => {
     if (files.length === 0 || deleted() || frozen() || !allows("asset")) return;
-    const blocks = blocksBut();
-    const fits = (at: WfnPoint) => !blocks.some((block) => overlaps(rowsBox(at, files.length), block));
-    const room = rowsBox({ x: 0, y: 0 }, files.length);
-    const free = () => {
-      const at = freePlace({ width: room.width, height: room.height }, "");
-      return { x: at.x - room.x, y: at.y - room.y };
-    };
-    const start = from && fits(from) ? from : free();
+    const start = rowsStart(files.length, from);
     commit();
     const release = edits.join();
     try {
       const places = rowPlaces(files.length, start);
-      const ids = files.map((file, index) =>
-        addNode("asset", places[index] ?? start, { file: file.name, fileId: file.id }),
-      );
+      const ids = files.map((file, index) => addNode("asset", places[index] ?? start, assetFields(file)));
       if (ids.length > 1) canvas.patchFields(joinPatch(ids, filesName(files)));
       canvas.select(ids);
       reflowRows(ids, snapPoint(start));
@@ -2111,12 +2232,72 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       release();
     }
   };
+  const clipsOn = () => workflowClipsAllowed(props.features);
+  const takesFile = (file: File) => !props.catalogs.upload || workflowAssetType(file, clipsOn()) !== null;
+  const takenFiles = (files: readonly File[]) => {
+    const taken = files.filter(takesFile);
+    if (taken.length < files.length)
+      toast.error(t(clipsOn() ? "error.workflow.assetType" : "error.workflow.pictureType"));
+    return taken;
+  };
   const uploadAll = (files: readonly File[]) =>
-    Promise.allSettled(files.map((file) => board.upload(file))).then((results) =>
-      results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
+    Promise.allSettled(files.map((file) => board.upload(file))).then((results) => {
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed) toast.error(errorMessage(failed.reason, t("composer.upload.failed")));
+      return results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+    });
+  const arrivingFor = (file: File, at: WfnPoint): Arriving => {
+    const type = workflowAssetType(file, clipsOn());
+    const media = type ? (workflowAssetClipMedia(type) ?? "image") : "file";
+    return {
+      key: crypto.randomUUID(),
+      workflow: openId(),
+      at,
+      media,
+      url: undefined,
+    };
+  };
+  const showCopy = (file: File, item: Arriving) => {
+    if (item.media !== "image" && item.media !== "video") return;
+    void board.localCopy(file).then((url) => {
+      if (url) setArriving((list) => list.map((each) => (each.key === item.key ? { ...each, url } : each)));
+    });
+  };
+  const insertFiles = (chosen: readonly File[], from?: WfnPoint) => {
+    const files = takenFiles(chosen);
+    if (files.length === 0 || deleted() || frozen() || !allows("asset")) return;
+    if (starting()) setBlankFor(openId());
+    const start = snapPoint(rowsStart(files.length, from));
+    const places = rowPlaces(files.length, start);
+    const shown = files.map((file, index) => arrivingFor(file, places[index] ?? start));
+    const keys = new Set(shown.map((item) => item.key));
+    setArriving((list) => [...list, ...shown]);
+    flush();
+    const packed = packRows(
+      shown.map((item) => viewport?.querySelector<HTMLElement>(`[data-arriving="${item.key}"]`) ?? undefined),
+      start,
     );
-  const dropOnAsset = (id: string, files: readonly File[]) => {
+    setArriving((list) =>
+      list.map((each) => {
+        const at = packed[shown.findIndex((item) => item.key === each.key)];
+        return at ? { ...each, at } : each;
+      }),
+    );
+    files.forEach((file, index) => {
+      const item = shown[index];
+      if (item) showCopy(file, item);
+    });
+    const workflow = openId();
+    void uploadAll(files).then((stored) => {
+      setArriving((list) => list.filter((item) => !keys.has(item.key)));
+      flush();
+      if (openId() === workflow) addFiles(stored, start);
+    });
+  };
+  const dropOnAsset = (id: string, chosen: readonly File[]) => {
     if (frozen() || !props.features.uploads) return;
+    const files = takenFiles(chosen);
+    if (files.length === 0) return;
     void uploadAll(files).then((stored) => {
       const [first, ...rest] = stored;
       if (!first || deleted() || frozen() || board.isRemoved(id) || !allows("asset")) return;
@@ -2126,10 +2307,10 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       commit();
       const release = edits.join();
       try {
-        canvas.patchFields({ [id]: { file: first.name, fileId: first.id } });
+        canvas.patchFields({ [id]: { media: undefined, ...assetFields(first) } });
         if (rest.length === 0) return;
         const places = start ? rowPlaces(rest.length, start) : [];
-        const added = rest.map((file, index) => addNode("asset", places[index], { file: file.name, fileId: file.id }));
+        const added = rest.map((file, index) => addNode("asset", places[index], assetFields(file)));
         canvas.patchFields(
           entry
             ? Object.fromEntries(
@@ -2152,7 +2333,9 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     });
   };
 
-  const peers = createMemo(() => (props.features.presence && props.presence ? peersOf(props.presence) : []));
+  const peers = createMemo<readonly WorkflowPeer[]>((previous) =>
+    props.features.presence && props.presence ? peersOf(props.presence, previous) : [],
+  );
   const self = () =>
     props.features.presence ? props.presence?.members.find((member) => member.id === props.presence?.self) : undefined;
   const spots = () => props.presence?.spots ?? {};
@@ -2449,6 +2632,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     const clip = held && (foreign ? withoutIds(held.clip) : held.clip);
     const box = clip ? union(clip.nodes.map((node) => ({ ...node.at, width: 0, height: 0 }))) : undefined;
     if (!held || !clip || !box) return;
+    if (starting()) setBlankFor(openId());
     const center = () => {
       const middle = toWorld({ x: view().width / 2, y: view().height / 2 });
       return { x: middle.x - box.width / 2, y: middle.y - box.height / 2 };
@@ -2705,6 +2889,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       | undefined;
     let space = false;
     const onResize = new ResizeObserver(() => {
+      setViewSize(view());
       if (!cameraMoved) fitView(false);
     });
     const stopClick = (event: MouseEvent) => {
@@ -3160,6 +3345,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     const onHover = (event: PointerEvent) => {
       const over = event.target instanceof Element && !event.target.closest("[data-wfn-portal]");
       pointer = over ? local(event) : undefined;
+      reportSpot(untrack(ownSelection));
       if (placing()) setGhost(over ? local(event) : null);
       const show = ui.tool === "draw" && ui.draw === "eraser" && over;
       if (!show && ink.eraser === null) return;
@@ -3170,6 +3356,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     };
     const onLeave = () => {
       pointer = undefined;
+      reportSpot(untrack(ownSelection));
       setGhost(null);
       setInk((draft) => {
         draft.eraser = null;
@@ -3220,13 +3407,13 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     const pastePictures = (event: ClipboardEvent) => {
       const data = event.clipboardData;
       const active = document.activeElement;
-      const pictures = [...(data?.files ?? [])].filter((file) => WORKFLOW_PICTURE_TYPES.has(file.type));
+      const pictures = [...(data?.files ?? [])];
       if (pictures.length === 0 || !allows("asset") || !props.features.uploads) return;
       if (!inCanvas(root, active) && (!pointer || isEditable(active))) return;
       if (isEditable(active) && data?.types.includes("text/plain")) return;
       event.preventDefault();
       const start = pointer ? toWorld(pointer) : undefined;
-      void uploadAll(pictures).then((files) => addFiles(files, start));
+      insertFiles(pictures, start);
     };
     const takesFiles = (event: DragEvent) =>
       event.dataTransfer?.types.includes("Files") === true &&
@@ -3234,7 +3421,9 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       !editsBlocked() &&
       allows("asset") &&
       props.features.uploads === true &&
-      !(event.target instanceof Element && event.target.closest("[data-node-id], [data-wfn-portal], .wfn-hud"));
+      event.target instanceof Element &&
+      event.target.closest(".wfn-viewport, .wfn-empty") !== null &&
+      !event.target.closest("[data-node-id], [data-wfn-portal], .wfn-hud");
     const onDragOver = (event: DragEvent) => {
       if (!takesFiles(event) || !event.dataTransfer) return;
       event.preventDefault();
@@ -3244,8 +3433,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       const files = [...(event.dataTransfer?.files ?? [])];
       if (!takesFiles(event) || files.length === 0) return;
       event.preventDefault();
-      const at = toWorld(local(event));
-      void uploadAll(files).then((stored) => addFiles(stored, at));
+      insertFiles(files, toWorld(local(event)));
     };
     const onPaste = (event: ClipboardEvent) => {
       const key = event.clipboardData?.getData(CLIP_TYPE);
@@ -3361,8 +3549,9 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       } else delete area.dataset.space;
     };
     area.addEventListener("dblclick", onDoubleClick);
-    area.addEventListener("dragover", onDragOver);
-    area.addEventListener("drop", onDrop);
+    const surface = root ?? area;
+    surface.addEventListener("dragover", onDragOver);
+    surface.addEventListener("drop", onDrop);
     area.addEventListener("contextmenu", onNativeMenu, { capture: true });
     document.addEventListener("keydown", onShortcut);
     document.addEventListener("copy", onCopy);
@@ -3378,8 +3567,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
       area.removeEventListener("pointermove", onHover);
       area.removeEventListener("pointerleave", onLeave);
       area.removeEventListener("dblclick", onDoubleClick);
-      area.removeEventListener("dragover", onDragOver);
-      area.removeEventListener("drop", onDrop);
+      surface.removeEventListener("dragover", onDragOver);
+      surface.removeEventListener("drop", onDrop);
       area.removeEventListener("contextmenu", onNativeMenu, { capture: true });
       document.removeEventListener("keydown", onShortcut);
       document.removeEventListener("copy", onCopy);
@@ -3530,6 +3719,41 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
                   );
                 }}
               </For>
+              <For each={arrivingHere()} keyed={(item) => item.key}>
+                {(item) => (
+                  <div
+                    class="wfn-slot wfn-arriving"
+                    data-arriving={item().key}
+                    aria-hidden="true"
+                    style={{ left: `${item().at.x}px`, top: `${item().at.y}px` }}
+                  >
+                    <div class="wfn-node" data-kind="asset">
+                      <span class="wfn-label">{t("workflow.asset.title")}</span>
+                      <div class="wfn-card-frame">
+                        <div class="wfn-card" data-media="" style={{ "--wfn-aspect": "4 / 3" }}>
+                          <Show when={item().url} fallback={<CardPictureLoading />}>
+                            {(url) => (
+                              <>
+                                <Show
+                                  when={item().media === "video"}
+                                  fallback={
+                                    <img class="wfn-media" src={url()} alt="" decoding="async" draggable="false" />
+                                  }
+                                >
+                                  <video class="wfn-media" src={url()} muted playsinline preload="metadata" />
+                                </Show>
+                                <span class="wfn-media-spinner">
+                                  <Spinner label={t("common.loading")} />
+                                </span>
+                              </>
+                            )}
+                          </Show>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </For>
               <svg class="wfn-ink" aria-hidden="true">
                 <For each={strokes()}>
                   {(stroke) => <InkLine stroke={stroke} erasing={ink.erasing.includes(stroke.id)} />}
@@ -3636,8 +3860,10 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
                   </div>
                 )}
               </Show>
-              <PeerCursors peers={peers()} spots={spots()} />
-              <Show when={builder()}>{(spot) => <BuilderCursor spot={spot()} glide={BUILD_GLIDE} />}</Show>
+              <PeerCursors peers={peers()} spots={spots()} room={cursorRoom} />
+              <Show when={builder()}>
+                {(spot) => <BuilderCursor spot={spot()} glide={BUILD_GLIDE} room={cursorRoom} />}
+              </Show>
             </div>
             <Show when={marquee()}>
               {(box) => (
@@ -3893,17 +4119,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
             <Spinner label={t("workflow.canvas.opening")} />
           </div>
         </Show>
-        <Show when={live().length === 0 && !frozen() && !props.opening && allows("trigger")}>
-          <div class="wfn-empty">
-            <span class="wfn-menu-icon wfn-empty-icon" data-kind="trigger" aria-hidden="true">
-              <Zap />
-            </span>
-            <h2 class="wfn-empty-title">{t("workflow.canvas.empty.title")}</h2>
-            <Button size="sm" onClick={() => addNode("trigger")}>
-              <Plus aria-hidden="true" />
-              {t("workflow.canvas.empty.add")}
-            </Button>
-          </div>
+        <Show when={starting()}>
+          <WorkflowStart templates={templates()} onTemplate={startFromTemplate} onBlank={() => setBlankFor(openId())} />
         </Show>
         <Show when={props.frame === "window"}>{corner()}</Show>
         <Show when={props.onExport && !props.readOnly}>
@@ -4076,7 +4293,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
           class="wfn-hud wfn-hud-tools"
           role="toolbar"
           aria-label={t("workflow.canvas.tool.label")}
-          hidden={frozen()}
+          hidden={frozen() || starting()}
         >
           <HudButton
             label={t("workflow.canvas.tool.select")}
@@ -4169,30 +4386,32 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
           onHeight={setDropHeight}
         />
 
-        <Show when={minimap()}>
+        <Show when={!starting() && minimap()}>
           {(map) => <WorkflowMinimap map={map()} selected={board.selected()} onPan={panMinimap} />}
         </Show>
 
-        <WorkflowZoomMenu
-          scale={camera.scale}
-          minScale={MIN_SCALE}
-          maxScale={MAX_SCALE}
-          minimap={ui.minimap}
-          canTidy={canTidy()}
-          onTidy={tidyUp}
-          onZoom={(action) => {
-            if (action === "in") zoomBy(ZOOM_STEP);
-            else if (action === "out") zoomBy(1 / ZOOM_STEP);
-            else if (action === "reset") zoomTo(1);
-            else fitView(true);
-          }}
-          onZoomTo={zoomTo}
-          onToggleMinimap={() =>
-            setUi((draft) => {
-              draft.minimap = !draft.minimap;
-            })
-          }
-        />
+        <Show when={!starting()}>
+          <WorkflowZoomMenu
+            scale={camera.scale}
+            minScale={MIN_SCALE}
+            maxScale={MAX_SCALE}
+            minimap={ui.minimap}
+            canTidy={canTidy()}
+            onTidy={tidyUp}
+            onZoom={(action) => {
+              if (action === "in") zoomBy(ZOOM_STEP);
+              else if (action === "out") zoomBy(1 / ZOOM_STEP);
+              else if (action === "reset") zoomTo(1);
+              else fitView(true);
+            }}
+            onZoomTo={zoomTo}
+            onToggleMinimap={() =>
+              setUi((draft) => {
+                draft.minimap = !draft.minimap;
+              })
+            }
+          />
+        </Show>
 
         <Show when={ui.hidden}>
           <Button variant="secondary" size="sm" class="wfn-hud-show" onClick={toggleHud}>

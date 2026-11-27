@@ -1,3 +1,4 @@
+import { sameSignInAddress, withOwnMcpAccount } from "@openbot/contracts/mcp-accounts";
 import {
   Button,
   Field,
@@ -11,6 +12,7 @@ import {
   Text,
   Trash2,
 } from "@openbot/ui";
+import { McpSignInLinkCopy } from "@openbot/ui/features/settings/McpSignInDialog";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createStore, For, onCleanup, Show, untrack } from "solid-js";
@@ -71,12 +73,23 @@ export function McpServerForm(props: McpServerFormProps) {
     testConfig: null,
   });
   let testRun = 0;
+  const accountId = crypto.randomUUID();
+  const submitted = (): McpServerConfig => {
+    const config = normalizeMcpConfig(state.draft);
+    const keepsAccount = props.id !== null && sameSignInAddress(state.baseline.url, config.url);
+    if (keepsAccount) return config;
+    return withOwnMcpAccount(
+      config,
+      props.tools.servers().filter((row) => row.id !== props.id),
+      accountId,
+    );
+  };
 
   const errors = createMemo(() => mcpConfigErrors(state.draft));
   const visible = (key: "name" | "command" | "url" | "headers") => (state.touched ? errors()[key] : undefined);
   const changed = () => mcpConfigChanged(state.draft, state.baseline);
   const test = createMemo(() =>
-    state.testConfig && !mcpConfigChanged(state.draft, state.testConfig) ? state.test : null,
+    state.testConfig && !mcpConfigChanged(submitted(), state.testConfig) ? state.test : null,
   );
   const signingIn = () => (state.test?.status === "signing-in" ? state.testConfig : null);
   const waiting = () => signingIn() !== null || test()?.status === "testing";
@@ -96,7 +109,7 @@ export function McpServerForm(props: McpServerFormProps) {
     });
     if (!mcpConfigIsValid(state.draft)) return null;
     const run = ++testRun;
-    const tested = normalizeMcpConfig(state.draft);
+    const tested = submitted();
     setState((current) => {
       current.test = { status: pending };
       current.testConfig = tested;
@@ -168,7 +181,7 @@ export function McpServerForm(props: McpServerFormProps) {
     let saved: McpServerConfig | null = null;
     try {
       if (!connects || (await connectBeforeSave(tested))) {
-        saved = await props.tools.save(normalizeMcpConfig(state.draft));
+        saved = await props.tools.save(submitted());
       }
     } catch (error) {
       setState((current) => {
@@ -626,6 +639,17 @@ export function McpServerForm(props: McpServerFormProps) {
                     <Button type="button" size="sm" variant="outline" onClick={() => cancelSignIn(pending().url)}>
                       {t("mcp.panel.cancelSignIn")}
                     </Button>
+                  </div>
+                )}
+              </Show>
+              <Show when={signingIn() ? props.tools.signIn()?.copyLink : undefined}>
+                {(copy) => (
+                  <div class="server-mcp-sign-in-link">
+                    <McpSignInLinkCopy
+                      onCopy={copy()}
+                      onPaste={props.tools.signIn()?.pasteAddress}
+                      waitingNote={false}
+                    />
                   </div>
                 )}
               </Show>

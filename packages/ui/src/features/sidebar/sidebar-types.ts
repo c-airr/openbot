@@ -86,6 +86,8 @@ export interface SidebarProps {
   layoutMutable?: boolean | undefined;
   chatOrder?: SidebarChatOrder | undefined;
   onChatOrderChange?: ((order: SidebarChatOrder) => void) | undefined;
+  tabIds?: readonly string[] | undefined;
+  onTabIdsChange?: ((tabIds: string[]) => void) | undefined;
   collapsedSectionIds: string[];
   onMutateLayout: (action: SidebarLayoutAction) => Promise<void>;
   foldersSupported?: boolean | undefined;
@@ -157,6 +159,8 @@ export interface SidebarAgentThreads {
   load: (agentId: string) => void;
   onOpen: (agentId: string, threadId: string) => void;
   onNew?: ((agentId: string) => void) | undefined;
+  onArchive?: ((agentId: string, threadId: string) => void) | undefined;
+  onDelete?: ((agentId: string, threadId: string) => void) | undefined;
 }
 
 export interface SidebarChatHistory {

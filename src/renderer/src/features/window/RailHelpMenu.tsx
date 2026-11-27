@@ -3,6 +3,8 @@ import { whatsNewEntry } from "@openbot/ui/features/updates/whats-new";
 import { createSignal } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
 import { useI18n } from "../../i18n-context";
+import { useCreditModels } from "../credits/credits-context";
+import { openCreditPrices } from "../servers/credit-prices";
 import { compareReleaseVersions } from "../updates/whats-new-history";
 import { loadWhatsNewReleases } from "../updates/whats-new-releases";
 
@@ -14,8 +16,10 @@ export function RailHelpMenu(props: {
   version: string | null;
   onOpenWhatsNew: () => void;
   onOpenLink: (destination: HelpLink) => void;
+  onOpenUrl: (url: string) => Promise<void>;
 }) {
   const i18n = useI18n();
+  const creditModels = useCreditModels();
   const [news, setNews] = createSignal<readonly HelpMenuNews[]>([]);
   let newsLocale: string | null = null;
   const openLink = (destination: HelpLink) => {
@@ -53,6 +57,7 @@ export function RailHelpMenu(props: {
   return (
     <HelpMenu
       news={news()}
+      creditModels={creditModels()}
       triggerClass="window-rail-button"
       onOpen={() => void loadNews()}
       onOpenWhatsNew={props.onOpenWhatsNew}
@@ -61,6 +66,8 @@ export function RailHelpMenu(props: {
       onOpenDiscord={() => openLink("discord")}
       onReportProblem={() => openLink("report-problem")}
       onSendFeedback={() => openLink("feedback")}
+      onOpenCreditsExplainer={() => desktopAnalytics.track("help_link_opened", { destination: "credits-explainer" })}
+      onOpenCreditPrices={() => openCreditPrices(props.onOpenUrl)}
     />
   );
 }

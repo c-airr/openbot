@@ -61,6 +61,7 @@ export const messages = {
   "provider.aria.install": "{name} installeren",
   "provider.aria.signIn": "Inloggen bij {name}",
   "provider.aria.codeFallback": "Inloggen bij {name} met een code",
+  "provider.aria.addressFallback": "Plak het aanmeldadres voor {name}",
   "provider.aria.moreActions": "Meer acties voor {name}",
   "provider.aria.use": "{name} gebruiken in OpenBot",
   "provider.use.inUseOne": "{agent} gebruikt {name}. Wijzig het model van deze agent en zet {name} daarna uit.",
@@ -87,10 +88,14 @@ export const messages = {
   "provider.codeLogin.pasteExpiresIn": "Wacht op jou. Deze inlogpoging stopt over {time}.",
   "provider.codeLogin.linkTitle": "Inloggen bij {name} op een ander apparaat",
   "provider.codeLogin.pageTitle": "Inloggen bij {name}",
+  "provider.codeLogin.addressDescription":
+    "Rond de aanmelding af in je browser. Dit venster sluit wanneer de aanmelding klaar is.",
   "provider.codeLogin.pageDescription": "Deze pagina is geopend in de browser op {host}. Log hier in.",
   "provider.codeLogin.relayStarting": "Inloggen bij {name} starten op {host}…",
   "provider.codeLogin.pageOpening": "Inlogpagina van {name} openen op {host}…",
   "provider.codeLogin.linkStep": "Log in bij {name}. OpenBot gaat vanzelf verder.",
+  "provider.codeLogin.thisComputerDescription": "Open deze link in een browser op deze computer. OpenBot wacht hier.",
+  "provider.codeLogin.copyLink": "Link kopiëren",
   "provider.codeLogin.chatgptDeviceSetting":
     "Open in ChatGPT op een computer de beveiligingsinstellingen en zet inloggen met apparaatcode voor Codex aan. Bij een werkaccount zet de beheerder van je workspace dit aan.",
   "provider.useApp.title": "Verbind {name} in de OpenBot-app",
@@ -222,6 +227,7 @@ export const messages = {
   "provider.account.apiKey": "API-sleutel",
   "provider.account.listLabel": "Accounts van {name}",
   "provider.account.usedBy": "Gebruikt door {agents}",
+  "provider.account.sameEmail": "Zelfde e-mail als {name}",
   "provider.account.failed": "Inloggen mislukt",
   "provider.account.moreActions": "Meer acties voor {name}",
   "provider.account.renameLabel": "Naam van {name}",
@@ -247,6 +253,11 @@ export const messages = {
   "provider.account.pool": "Accounts bundelen",
   "provider.account.poolDescription":
     "Agents gebruiken één account tot het een gebruikslimiet nadert, en dan het account waarvan de limiet het eerst reset.",
+  "provider.account.poolStrategy": "Accounts gebruiken",
+  "provider.account.poolFillFirst": "Eerst vullen",
+  "provider.account.poolSpread": "Spreiden",
+  "provider.account.poolSpreadDescription":
+    "Agents verdelen zich over de accounts met het meeste gebruik over. Een agent wisselt alleen van account als een ander account veel meer ruimte heeft.",
   "provider.account.inUse": "In gebruik",
   "provider.account.notInPool": "Niet in pool",
   "provider.account.leaveOutOfPool": "Uit pool halen",

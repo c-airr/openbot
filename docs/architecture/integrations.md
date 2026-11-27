@@ -20,7 +20,7 @@ computer of the user who signs in. A sign-in uses one of these kinds:
 
 | Kind | Example | On this computer | On a joined server |
 | --- | --- | --- | --- |
-| Loopback callback | URL MCP servers (`McpOAuth`), Codex browser sign-in, a page that an agent's CLI prints | The page sends the browser to `http://127.0.0.1:<port>/...`. The MCP listener uses port 28417 and path `/mcp-auth` ([`mcp-oauth-redirect-server.ts`](../../src/main/mcp-oauth-redirect-server.ts)). | The [callback relay](#remote-sign-in-the-callback-relay) (`sign-in-relay-v1`). MCP on an older host: the host's live view (`mcp-sign-in-v1`). |
+| Loopback callback | URL MCP servers (`McpOAuth`), Codex browser sign-in, a page that an agent's CLI prints | The page sends the browser to `http://127.0.0.1:<port>/...`. The MCP listener uses port 28417 and takes the paths `/mcp-auth` and `/callback` ([`mcp-oauth-redirect-server.ts`](../../src/main/mcp-oauth-redirect-server.ts)). A sign-in on this computer registers `/callback` first: New Relic accepts a loopback page only on a common path such as `/callback` (#13216). A client that never finished a sign-in at `/mcp-auth` registers again. A sign-in that another computer opens (relay or live view) keeps `/mcp-auth`, because clients older than 0.70.0 take only that path. A server that refuses one path at registration gets the other. | The [callback relay](#remote-sign-in-the-callback-relay) (`sign-in-relay-v1`). MCP on an older host: the host's live view (`mcp-sign-in-v1`). |
 | Device code | Codex (`codex-device`), Grok, Cline, Kimi, Muse, the GitHub connector | The user types a short code on the provider's page. Nothing comes back to OpenBot. | The host starts it and the client shows the code (`providers-v1` to `providers-v5`; Kimi `providers-v8` only). Muse: the relay opens its device page with no callback. GitHub: `connectors-v1`. |
 | Pasted code | Claude on Linux (`cli` / `paste`), Cursor (`cli` / `link`) | The page shows a code, and the user pastes it into OpenBot. | The host starts it and the client takes the code (`providers-v3` to `providers-v5`). |
 | CLI-owned browser login | Claude (`auth login`), Codex, Gemini (`acp-authenticate`) | The provider's CLI opens the browser and takes its own callback. | The relay (`provider/start`): the host captures the page, and the client sends the callback query to the CLI's listener on the host. Grok, Cursor and Cline: a code kind. Mistral: the host takes the page from Vibe (`acp-delegated`) and the client shows it as a link (`providers-v8` with `mistral-code-sign-in-v1`). |
@@ -76,10 +76,12 @@ message tags the account with `@<row name>`.
 | Address | The first account keeps the listing URL and name, so a released client still finds it. Add account adds `#account-<id>` to the URL ([`mcp-accounts.ts`](../../packages/contracts/src/mcp-accounts.ts)). A row from before accounts has no fragment and keeps its sign-in. |
 | Sign-in | `McpOAuth` keeps one record for each address with its fragment (`mcpOAuthAccountKey`). Discovery, registration, tokens and revocation use the address without the fragment, so the fragment never leaves the computer. |
 | Provider | `McpGateway.endpoint` removes the fragment. The proxy target keeps it, so a token refresh reads the sign-in of that account, and the proxy removes it before each request. The proxy route is a digest of the row id and its URL, so each account has its own route. |
+| Own sign-in | A new row on an address that another row signs in with gets its own `#account-<id>`, so it never takes the sign-in of the other row. The MCP server form and the Marketplace install add it to the draft before the first test or sign-in (`withOwnMcpAccount`). `McpGateway.accountConfig` applies the same rule at each save and before the agent tool `save_mcp_server` tests a server, so a plain address from an older client also gets its own account. An edit keeps the account of the row unless the row moves to an address that another row uses. Rows that already share an address keep their shared sign-in. To split them, edit one row and add `#account-<name>` to its address. |
 | Catalog | `isPluginAppConfig` gives each row with an account fragment to the catalog app, whatever its name. A row with no fragment needs the catalog name, so it has no Rename. Disconnect removes all accounts of the app. |
 | Joined server | The client offers Add account only when the host sends `mcp-accounts-v1`. An older host keys sign-ins by the address without the fragment, so two accounts would share one sign-in. |
 
-Run `bun scripts/mcp-oauth-store-e2e.ts` to check that two accounts keep separate sign-ins.
+Run `bun scripts/mcp-oauth-store-e2e.ts` to check that two accounts keep separate sign-ins, and
+`bun run test:mcp-own-sign-in` to check that a new row on a used address gets its own account.
 
 ### Members and the MCP servers of a joined server
 
@@ -93,7 +95,7 @@ The host checks each request in [`mcp-member-access.ts`](../../src/main/team-api
 | Read and add | A member reads the whole list, with its `env` and header values, tests a server, and adds a server, a stdio command too. |
 | Change | A member changes, turns on or off, or removes only a server that the member added. Any other row gets 403 `error.team.mcpServerNotYours`. Owners and admins change every row. |
 | Owners | `McpServerOwnersStore` keeps the member ID of each row that a joined server added, in `openbot-mcp-server-owners-v1.json`. A row with no entry, such as one added on the host, counts as an admin's. A damaged file reads as empty. |
-| Sign-in | A sign-in belongs to an address (`mcpOAuthAccountKey`), not to a row. A member starts, cancels or signs out a sign-in, or changes a sign-in app, only when each row on that address is the member's. Each server keeps one sign-in, which every agent of the host uses. |
+| Sign-in | A sign-in belongs to an address with its account fragment (`mcpOAuthAccountKey`), not to a row. A member starts, cancels or signs out a sign-in, or changes a sign-in app, only when each row with that sign-in is the member's. A new member row on the address of another person gets its own account, so the member signs it in. Each server keeps one sign-in, which every agent of the host uses. |
 | Providers | Provider sign-ins, account starts and agent links on the relay stay with owners and admins. |
 
 Run `bun run test:mcp-member-access` to check these rules on a real host.
@@ -107,7 +109,7 @@ A host with `mcp-access-v1` keeps one entry for each MCP server in
 | --- | --- |
 | Agents | `agents: null` gives the server to each agent, also to a new one. A list gives it only to those agents. `AgentService` applies the list when it gives the enabled servers to a provider session. |
 | Members | `everyone` and each role have a level: `none` hides the server and refuses it, `use` gives the rights on a server of another person, `manage` gives the rights of the person who added it. A member gets the highest level. An owner, an admin and the person who added the server always manage. |
-| `none` | The host leaves the server out of the list and out of the sign-in states, and it refuses a change, a test, a sign-in and a sign-in status for the server. The sign-in belongs to the address, so the host also refuses the member each saved row (new or moved), test, sign-in status and sign-in state on that address, the member's own rows included. |
+| `none` | The host leaves the server out of the list and out of the sign-in states, and it refuses a change, a test, a sign-in and a sign-in status for the server. The host also refuses the member each saved row (new or moved), test, sign-in status and sign-in state on that address, with any account fragment, the member's own rows included. |
 | Routes | `POST /v1/mcp-access` reads and `POST /v1/mcp-access/set` replaces one entry ([`route-mcp-access.ts`](../../src/main/team-api/route-mcp-access.ts)). Only an owner or admin reads the entries and sets them; a member reads `mine`. |
 | Revision | The snapshot has a `revision`, and a replace names the one that the client read. Each replace adds 1. When another admin saved first, the host answers 409 `error.team.mcpAccessStale` and changes nothing; the client reads again. |
 | Sessions | A replace that changes the agents of a server gives each agent a new provider session. A replace of the levels only does not. |
@@ -682,6 +684,35 @@ pins, with a SHA-256 per target, into `<userData>/provider-state/protonpass-cli`
 the record and the session; the agent access key stays on the Proton account until it ends or the
 user removes it there.
 
+## NEAR Intents wallet
+
+The Crypto tab of the Vault connects one NEAR Intents agent account (Agent API, SDK
+`@near-intents-agent-api/sdk`) for agent payments. Main owns it:
+[`near-wallet-service.ts`](../../src/main/near-wallet-service.ts) and
+[`near-wallet-store.ts`](../../src/main/near-wallet-store.ts). The renderer, the backend and the
+agent processes never get the partner key, the grant token or a signature.
+
+- **Owner.** A passkey. OpenBot does not support an EVM wallet owner. Each owner action (register, create, grant, budget, freeze,
+  unfreeze, auto-pay, a vote on a payment) opens `/near/sign` of the account service in the system
+  browser ([`near-wallet-signing.ts`](../../src/main/near-wallet-signing.ts)). The request is in the
+  URL fragment, which no server gets. The page returns the signature with
+  `openbot://near-signature?nonce=…&data=…`; a development build uses a loopback listener. Main takes
+  only the result of the one waiting nonce (32 random bytes, used once) and checks its shape and the
+  passkey key type.
+- **Grant.** OpenBot holds an agent grant for 30 days. Payments use it; Renew signs a new one.
+- **Payments.** An agent calls `request_near_payment`
+  ([`attention-registry.ts`](../../src/backend/agent/attention-registry.ts)). All agents can ask, also
+  agents made later, until the owner chooses a list on the wallet page; a wallet stored with a list
+  keeps it. A new wallet's daily budget is $25. A request from a Slack, Discord or Telegram chat is
+  refused. A payment that no rule allows waits for the owner on the chat card. A rule of "Pay without asking" allows a
+  recipient for a domain up to a daily USD limit; the first rule turns off `owner_approval` with one
+  signature. The Agent API keeps the daily budget of all payments.
+- **No double payment.** A payment is stored with its idempotency key before it is sent. A lost
+  answer is `uncertain`: OpenBot sends it again with the same key, also after a restart, for one hour.
+- **Test.** `bun run test:near-wallet-e2e` runs the service against a fake Agent API on 127.0.0.1
+  with a real P-256 passkey owner key. The real Agent API has no test network; do not run payments
+  against it without the owner's consent.
+
 ## Add a Team API capability
 
 A new remote feature is a new optional capability. Do not change a shipped capability: released
@@ -737,9 +768,157 @@ Use `bun run dev:automation` for snapshots and screenshots. Do not drive another
 | --- | --- |
 | A sign-in that returns to a public `https:` address of the provider | The provider finishes it by itself. The host only waits. Nothing comes back to a loopback port. |
 | A sign-in that opens an app on the host, such as Pi, which opens Terminal | The step happens on the host's screen. There is no page address to open somewhere else. |
+| The owner signature of the NEAR Intents wallet | The passkey belongs to the `api.openbot.run` page on the host's browser, and the Agent API checks its origin. The wallet is on this computer only; a joined server has no Crypto tab. |
 | A vault that approves in its desktop app, such as 1Password or Bitwarden | The approval is in the vault app on the host. A relay cannot approve for it. 1Password on a joined server uses a service account token (`onepassword-connector-v1`); Bitwarden uses an API key and the master password (`bitwarden-connector-v1`). Proton Pass signs in on the host and the client opens Proton's page (`password-managers-v1`). |
 | The Slack development return address (`returnUrl`) | Development builds only. It returns to `http://127.0.0.1:<port>/...` on the host, and the relay does not carry it. Use the hosted install. |
 | An agent link for a member who is not an admin | The relay routes are admin only. The link opens as it is, and its callback cannot reach the host. |
 | An agent link in a command, tool output or commentary | The host relays only a link that the text of an agent message holds. |
 | A CLI that opens its own browser and honors no `BROWSER` | The host never gets the page address. Grok, Cursor and Cline use a code kind. |
 | The iPhone app | It does not take relayed sign-ins. It keeps its current behavior. |
+
+## The browser extension on X
+
+The extension (`apps/browser-extension`) sends a post from X to the user's X agent
+(`X_AGENT_LISTING_ID` in `packages/contracts/src/browser-extension-x.ts`, a Marketplace Agent in
+`marketplace/production-catalog`). On desktop and web, the user adds this agent with the X app of
+the Marketplace (`MarketplaceXAppPage` in `packages/ui/src/features/marketplace`), not from the Agents
+tab. Its setup has two steps, as a chat app has: get the extension (`X_EXTENSION_URL`), then add the
+agent through the usual Marketplace install. `X_EXTENSION_URL` is the Chrome Web Store page of the
+extension (ID `eggdpikcggoicfcfdpdihfkinajchpfj`, also in `BROWSER_EXTENSION_IDS` of
+`apps/auth-api/wrangler.jsonc`). The X app shows on this computer, and on a joined server only for an
+admin that can install agents (`agent-install-v1`), as Discord and the other chat apps do.
+There are three parts:
+
+- **Content script** (`src/x-content.ts`, built as one IIFE file, `x-content.js`). It finds the parts of
+  an X page with CSS selectors only. When a reply mentions @OpenBot_ and the server answers `ready`, it
+  sets `data-openbot-x` on the reply button, and CSS gives the button the OpenBot look and motion. A
+  click (or Cmd/Ctrl+Enter) is stopped in the capture phase. The script reads the post, the posts above
+  it and the author's next posts (no replies by other people), gives them to the worker, and clicks the
+  button again with `data-openbot-x-pass`, so X posts the reply at once.
+  Each part has selectors for the earlier X web app (`data-testid`) and for the X web app of November
+  2026, which has no test ids: its text box is a `textarea`, so the script reads its value. That app
+  shows no `<time datetime>`, so the time comes from the status ID in the post link (an X ID holds its
+  creation time). In the reply dialog the post has no link; the script then takes the ID from
+  `in_reply_to` in the page address when the address has one.
+- **Worker** (`src/background.ts`). It answers the selectors, and keeps each post in a queue
+  (`src/x-outbox.ts`, `chrome.storage.local`) until the server has it. Each post keeps one
+  `clientMessageId`, and the host answers a repeated id with the first receipt for a day, so a retry
+  makes no second thread. A failed send waits 30 s, then longer, up to 30 minutes (`chrome.alarms`
+  wakes the worker). A browser start (`onStartup`, or `onInstalled` for an extension that Chrome loads
+  again) and a side panel that has connected send every waiting post at once. Each failure says whether it may have
+  reached the server (`XSendResult.reached`): a post that no attempt can have sent waits up to 7 days,
+  and one that an attempt may have sent is tried only for 23 hours after that attempt. Nothing of
+  OpenBot shows on X for a post that waits; a post that arrives after a failed attempt, or that is
+  dropped, gets a browser notification. The worker cannot load a language, so it keeps the texts that the last
+  `status` answer brought. The side panel shows the posts that wait, with "Send now". The selectors come from the account service (`X_PAGE_RULES_ROUTE`, at most once an
+  hour, by hash) and stay in `chrome.storage.local`. A copy whose hash does not match is dropped. The
+  content script tries the served selectors first, then the built-in ones (`X_PAGE_RULES_DEFAULT`).
+- **One connection at a time.** The account service gives a sign-in one logical session per server
+  (`startSession` in `apps/auth-api/src/server/remote-control-plane.ts`), and the server keeps one
+  connection per session, so a second connection of the same sign-in takes the session of the first.
+  Each open side panel holds a port (`PANEL_PORT`) to the worker. While a panel is open, the worker
+  passes `status` and `send` to it (`src/x-agent.ts` with the panel's connection), closes the offscreen
+  page, and does not open a second panel. With no panel, the offscreen page (`offscreen.html`,
+  `src/offscreen.tsx`) makes the connection. Chrome gives an offscreen page `chrome.runtime` only, so it
+  reads and writes storage through the worker, which takes these requests only from that page. It
+  closes after 10 minutes with no work. Two panels in two windows still take the session from each
+  other.
+
+The E2E (`scripts/browser-extension-e2e.ts`, step 7) uses a local copy of an X post page whose reply
+button has a test id that only the served selectors know, then a local page in the markup of the new X
+web app that only the new selectors find.
+
+## Agents on the member's Chrome (host side)
+
+A member can share tabs of the member's own Chrome with the agents of a server, through the OpenBot
+Chrome extension (`client-browser-v1`, `packages/contracts/src/team-protocol/client-browser-v1.ts`).
+The extension is a remote client, so no new data channel is necessary:
+
+- **Presence.** The extension sends `POST /v1/client-browser/presence` (`{ sharing, tabs }`, at most 50
+  tabs) when sharing starts or changes, and every 30 s. `ClientBrowserHub` (`src/main/client-browser-hub.ts`)
+  keeps it per member and logical session. It ends at `sharing: false`, when the last event connection
+  of the session closes (`team-api-server.ts`), or after 75 s with no presence. The newest session of a
+  member that started to share gets the commands.
+- **Commands.** The hub sends each command as the `client-browser-command` event to the event
+  connections of that session that read the capability, and to no other member. The extension answers
+  with `POST /v1/client-browser/result`. The hub accepts the answer only from the same member and
+  session, waits at most 120 s (the person's approval included), and stops waiting when the tool call
+  is cancelled. A command that the contract decoder refuses never leaves the host, because the client
+  closes its event stream on a malformed event.
+- **Tools** (`src/backend/agent/client-browser-tools.ts`). A shared tab has the id
+  `chrome:<member key>:<Chrome key>:<tab id>`; the member key is a short hash of the member id, and the
+  Chrome key a short hash of the session that shares the tab, so a command reaches only the Chrome that
+  listed the tab (else `not-found`). Only a turn with a message from a session that shares Chrome tabs
+  reaches a Chrome: the Team API request context sets `fromChrome` from the hub, the routes pass it to
+  `sendMessage` and `startTask`, and the agent service keeps those delivery ids in memory (the newest
+  200; a message that waits through a host restart counts as an app message). Such a turn gets a note
+  in its prompt to work in that Chrome, and `list_tabs` adds the shared tabs of each Chrome of the one
+  person who requested it (`#turnRequesters`). `open` with `browser: "chrome"` opens a tab in that
+  person's newest shared Chrome. A message from the OpenBot app or the web app, a routine run, or a
+  message from another agent reaches no Chrome, and the agent instructions do not mention Chrome.
+  On a Chrome tab, only `snapshot`, `screenshot`, `navigate`, `click`, `type`, `press`, `scroll`,
+  `wait_for` and `close_tab` run; each other tool (Vault, secrets, takeover, uploads, `evaluate`,
+  `run_script`) gets a refusal, and so do a role target and `nth`.
+
+### The extension side
+
+The extension (`apps/browser-extension`) shares the user's open web tabs while the user is signed in.
+There is no switch to stop it. A tab that an agent works in joins the Chrome tab group "OpenBot" of its
+window.
+
+- **Worker** (`src/client-browser-worker.ts`). Only the worker can use `chrome.debugger`, so it owns the
+  group, the approvals and the commands. Sharing is always on; `openbot.client-browser.sharing.v1` keeps
+  only the ID of the OpenBot group, and the worker ignores an `{ off: true }` that an older version
+  stored. The worker
+  answers the presence (the open web tabs, the active tab first, at most 50), and tells the page with
+  the connection when a tab opens, closes or changes. A command groups its tab on attach, unless the tab
+  is in another group.
+- **Connection** (`src/client-browser-link.ts`). The page that holds the server connection (the side
+  panel, else the offscreen page) sends the presence when it changes (at most once in 5 s, and an
+  unchanged presence only every 30 s) and at once after a reconnection. It passes each `client-browser-command` event to the worker and posts the worker's
+  answer to `/v1/client-browser/result`. The offscreen page does not close when it is idle, and the
+  worker opens it when the last panel closes or the browser starts.
+- **Commands** (`src/client-browser-executor.ts`). CDP 1.3 on any open web tab: it attaches on demand,
+  puts the tab into the OpenBot group of its window, and detaches after 30 s with no command. Page
+  scripts run in one isolated world per tab, made again after a navigation. `snapshot` keeps a map from
+  each `ref` to its element in that world, where page scripts cannot change it. A command gets `not-found` for a closed tab. The X agent's chat of each post is kept for its notification (`openbot.x-chats.v1`,
+  the newest 20), and becomes the chat to open only when the user clicks that notification.
+- **Approvals.** Before a command, the worker checks the site (origin) of the tab or address. A site
+  that is not in `openbot.client-browser.sites.v1` gets a card in the side panel (Allow once / Always
+  for this site / Deny), or a notification when no panel is open. The card waits 100 s, then the
+  command fails with `timeout`. A command also has a deadline 10 s before the host gives up on it
+  (120 s from its arrival): after the deadline it does not act, so the agent is never told "timeout"
+  for an action that then runs. These ask every time, also on an allowed site, and have no "Always":
+  typing into a password field, a field with `autocomplete="cc-*"`, or a field inside a frame or a closed shadow root, which the extension cannot see into (card and login fields are often there); fields in an open shadow root are checked as usual; a download; and a click, key,
+  `navigate` or `open` on an address whose path has `oauth` or `authorize` and that has a `client_id`
+  parameter. `chrome.debugger` cannot stop downloads (`Page.setDownloadBehavior` is a browser-level
+  command that an extension may not send), so the worker uses `chrome.downloads.onDeterminingFilename`:
+  for 30 s after an agent acts on a site, Chrome holds each new download from that site (by referrer or
+  address) until the person answers. Allow once lets it go on; Deny or no answer cancels it. A download
+  link asks before the click. A download that the person starts on such a site in those 30 s asks too.
+  A browser that Playwright drives skips the listener, so this check runs in a Chrome that Playwright
+  only connects to.
+
+While an agent works in a tab, the executor draws an overlay in the page (`pageOverlay`): a glow
+around the page with "<agent> is using this tab", and a cursor that glides to each click or field
+(350 ms) with a ripple on the click. It is a shadow root on `<html>` with `pointer-events: none`, so
+snapshots (which read `document.body`) and clicks do not see it, and it is hidden while the agent takes
+a screenshot. Styles go through the CSSOM and motion through the Web Animations API, which a page's
+CSP and Trusted Types allow. It is removed when the debugger detaches, and fades out by itself 36 s
+after the last command, also when Chrome's Cancel bar detached the debugger first.
+
+The extension E2E (`scripts/browser-extension-e2e.ts`, step 6b) shares a local page and lets the agent
+click its button through the card.
+
+Chrome Web Store permission notes (for the store listing):
+
+| Permission | Justification |
+| --- | --- |
+| `debugger` | When the user shares tabs, the user's own agents read and use the user's open tabs (page text, screenshots, clicks and typing), after the user allows each site. Chrome shows its debugging bar while it is attached. |
+| `tabs` | Lists the address and title of the user's open tabs for the user's agents, and opens or closes a tab when an agent asks. |
+| `tabGroups` | Puts the tabs that an agent works in into the "OpenBot" tab group, so the user sees them. |
+| `downloads` | Holds a download that starts on a site where the user's agent works until the user allows it in the side panel, and cancels it when the user denies it. The extension does not read, open or list the user's files. |
+
+The Team API E2E (`scripts/team-api-routes-e2e.ts`, "A member's shared Chrome tabs") checks the
+capability, presence, delivery to one session, foreign and late answers, denial, timeout, refusals,
+and the end of a presence.

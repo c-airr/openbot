@@ -2,12 +2,29 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { McpServerConfig } from "@openbot/contracts/ipc";
-import { registerSecretValue } from "@openbot/logging";
+import { redactText, registerSecretValue } from "@openbot/logging";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mcpSecretValues, redactMcpRecord } from "./mcp-redaction";
+import { mcpSecretValues, redactMcpModelText, redactMcpRecord } from "./mcp-redaction";
 import { piCustomEndpointSecrets } from "./pi-custom-endpoints";
 import { createPiMcpExtension } from "./pi-mcp";
+
+describe("redactMcpModelText", () => {
+  it("masks a known key format and a value of the agent's apps", () => {
+    expect(redactMcpModelText("Key sk-ant-api03-abcdefghijkl, header magpie-token-77", ["magpie-token-77"])).toBe(
+      "Key [redacted], header •••",
+    );
+  });
+
+  it("keeps a word around a saved value, and the full rule stays for logs and tool output", () => {
+    registerSecretValue("pazq", { allowShort: true });
+    expect(redactMcpModelText("Let me bypazq it. The code is pazq.", [])).toBe(
+      "Let me bypazq it. The code is [redacted].",
+    );
+    expect(redactText("Let me bypazq it.")).toBe("Let me [redacted] it.");
+    expect(redactMcpRecord({ output: "bypazq" }, [])).toEqual({ output: "[redacted]" });
+  });
+});
 
 describe("redactMcpRecord", () => {
   it("keeps JSON literals and setting words when a known value is `true` or `null`", () => {
@@ -68,6 +85,54 @@ describe("redactMcpRecord", () => {
     expect(redactMcpRecord(record, values)).toEqual({
       item: { type: "agentMessage", text: "Provider `magpie` (Magpie), token •••" },
     });
+  });
+
+  it("keeps the values of public custom provider headers and masks the others", () => {
+    const values = piCustomEndpointSecrets([
+      {
+        id: "studio",
+        name: "Studio",
+        baseUrl: "http://127.0.0.1:8080/v1",
+        apiKey: "studio-key-5e6f7a8b9c",
+        headers: [
+          { name: "Content-Type", value: "application/json" },
+          { name: "X-Title", value: "OpenBotStudio" },
+          { name: "HTTP-Referer", value: "https://studio.example.test/app" },
+          { name: "X-Portkey-Provider", value: "anthropic" },
+          { name: "X-Tenant-Token", value: "tenant-c93e18f2a7" },
+        ],
+        models: [{ id: "auto", name: "auto" }],
+      },
+    ]);
+    const text =
+      "App OpenBotStudio from https://studio.example.test/app sends application/json to anthropic. Tenant tenant-c93e18f2a7";
+    expect(redactMcpRecord({ item: { type: "agentMessage", text } }, values)).toEqual({
+      item: {
+        type: "agentMessage",
+        text: "App OpenBotStudio from https://studio.example.test/app sends application/json to anthropic. Tenant •••",
+      },
+    });
+  });
+
+  it("keeps a long html answer with many CSS rules whole (#9778)", () => {
+    const rules = Array.from({ length: 40 }, (_, index) => `.card-${index}{display:flex;color:#fff}`);
+    const jsx = "{items.map((item) => <li key={item.id}>{item.name}</li>)}";
+    const text = ["```html", '<div class="digest">', "<style>", ...rules, "</style>", jsx, "</div>", "```"].join("\n");
+    expect(redactMcpRecord({ item: { type: "agentMessage", text } }, [])).toEqual({
+      item: { type: "agentMessage", text },
+    });
+  });
+
+  it("still redacts secrets after many brace runs in an answer", () => {
+    const rules = Array.from({ length: 20 }, (_, index) => `.card-${index}{color:#fff}`).join("\n");
+    const record = (tail: string) => ({ item: { type: "agentMessage", text: `${rules}\n${tail}` } });
+    const keyed = JSON.stringify(redactMcpRecord(record("key sk-ant-abcdefghijklmnop"), []));
+    expect(keyed).not.toContain("sk-ant-abcdefghijklmnop");
+    expect(keyed).toContain(".card-19{color:#fff}");
+    const named = JSON.stringify(redactMcpRecord(record('{"name":"api_key","value":"plain-value-1"}'), []));
+    expect(named).not.toContain("plain-value-1");
+    for (const tail of ['"tokens": {\n  "prod": "plain-value-2"\n}', "tokens = {'prod': 'plain-value-2'}"])
+      expect(JSON.stringify(redactMcpRecord(record(tail), []))).not.toContain("plain-value-2");
   });
 });
 

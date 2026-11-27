@@ -100,6 +100,7 @@ export type CreditModelMaker =
   | "openai"
   | "pixverse"
   | "recraft"
+  | "sandai"
   | "sync"
   | "tencent"
   | "topaz"
@@ -122,6 +123,7 @@ export const CREDIT_MODEL_MAKERS: Readonly<Record<CreditModelMaker, string>> = {
   openai: "OpenAI",
   pixverse: "PixVerse",
   recraft: "Recraft",
+  sandai: "Sand AI",
   sync: "Sync Labs",
   tencent: "Tencent",
   topaz: "Topaz Labs",
@@ -129,6 +131,18 @@ export const CREDIT_MODEL_MAKERS: Readonly<Record<CreditModelMaker, string>> = {
   vidu: "Vidu",
   xai: "xAI",
 };
+
+const isCreditModelMaker = (value: string): value is CreditModelMaker => Object.hasOwn(CREDIT_MODEL_MAKERS, value);
+
+const CREDIT_MODEL_MAKER_BY_NAME = new Map(
+  Object.keys(CREDIT_MODEL_MAKERS)
+    .filter(isCreditModelMaker)
+    .map((key) => [CREDIT_MODEL_MAKERS[key].toLowerCase(), key]),
+);
+
+export function creditModelMakerNamed(name: string): CreditModelMaker | undefined {
+  return CREDIT_MODEL_MAKER_BY_NAME.get(name.trim().toLowerCase());
+}
 
 export interface CreditModelCost {
   modelId: string;
@@ -141,8 +155,6 @@ export interface CreditModelCost {
 }
 
 export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
-  { modelId: "veo-3.1", name: "Veo 3.1", maker: "google", kind: "video", unit: "clip", credits: 65 },
-  { modelId: "seedance-2.5", name: "Seedance 2.5", maker: "bytedance", kind: "video", unit: "clip", credits: 39 },
   {
     modelId: "wand-vega-1.5-pro",
     name: "WAND-Vega 1.5 Pro",
@@ -151,44 +163,12 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     unit: "clip",
     credits: 31,
   },
-  { modelId: "kling-4.0", name: "Kling 4.0", maker: "kling", kind: "video", unit: "clip", credits: 26.5 },
+  { modelId: "seedance-2.5", name: "Seedance 2.5", maker: "bytedance", kind: "video", unit: "clip", credits: 30 },
   { modelId: "kling-4.0-omni", name: "Kling 4.0 Omni", maker: "kling", kind: "video", unit: "clip", credits: 26.5 },
-  { modelId: "seedance-2.0", name: "Seedance 2.0", maker: "bytedance", kind: "video", unit: "clip", credits: 25.5 },
-  {
-    modelId: "seedance-2.5-flash",
-    name: "Seedance 2.5 Flash",
-    maker: "bytedance",
-    kind: "video",
-    unit: "clip",
-    credits: 25.5,
-  },
-  {
-    modelId: "grok-imagine-video-1.5",
-    name: "Grok Imagine Video 1.5",
-    maker: "xai",
-    kind: "video",
-    unit: "clip",
-    credits: 23.5,
-  },
   { modelId: "happy-horse-1.0", name: "Happy Horse 1.0", maker: "alibaba", kind: "video", unit: "clip", credits: 23 },
   { modelId: "happy-horse-1.1", name: "Happy Horse 1.1", maker: "alibaba", kind: "video", unit: "clip", credits: 23 },
   { modelId: "wan-3.0-prime", name: "Wan 3.0 Prime", maker: "alibaba", kind: "video", unit: "clip", credits: 23 },
-  {
-    modelId: "kling-video-v3-pro",
-    name: "Kling Video v3 Pro",
-    maker: "kling",
-    kind: "video",
-    unit: "clip",
-    credits: 21,
-  },
-  {
-    modelId: "seedance-2.0-fast",
-    name: "Seedance 2.0 Fast",
-    maker: "bytedance",
-    kind: "video",
-    unit: "clip",
-    credits: 20.5,
-  },
+  { modelId: "veo-3.1", name: "Veo 3.1", maker: "google", kind: "video", unit: "clip", credits: 22 },
   {
     modelId: "wand-vega-1.0-pro",
     name: "WAND-Vega 1.0 Pro",
@@ -197,22 +177,17 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     unit: "clip",
     credits: 20.5,
   },
-  { modelId: "kling-3.0-omni", name: "Kling 3.0 Omni", maker: "kling", kind: "video", unit: "clip", credits: 18 },
-  { modelId: "kling-3.0-turbo", name: "Kling 3.0 Turbo", maker: "kling", kind: "video", unit: "clip", credits: 19 },
+  { modelId: "seedance-2.0", name: "Seedance 2.0", maker: "bytedance", kind: "video", unit: "clip", credits: 20 },
   {
-    modelId: "gemini-omni-flash-1.1",
-    name: "Gemini Omni Flash 1.1",
-    maker: "google",
+    modelId: "seedance-2.5-flash",
+    name: "Seedance 2.5 Flash",
+    maker: "bytedance",
     kind: "video",
     unit: "clip",
-    credits: 17,
+    credits: 20,
   },
-  { modelId: "veo-3.1-fast", name: "Veo 3.1 Fast", maker: "google", kind: "video", unit: "clip", credits: 17 },
+  { modelId: "kling-4.0", name: "Kling 4.0", maker: "kling", kind: "video", unit: "clip", credits: 19.5 },
   { modelId: "vidu-q3-mix", name: "Vidu Q3 Mix", maker: "vidu", kind: "video", unit: "clip", credits: 17 },
-  { modelId: "vidu-q3-pro", name: "Vidu Q3 Pro", maker: "vidu", kind: "video", unit: "clip", credits: 17 },
-  { modelId: "wan-3.0", name: "Wan 3.0", maker: "alibaba", kind: "video", unit: "clip", credits: 17 },
-  { modelId: "vidu-v4", name: "Vidu v4", maker: "vidu", kind: "video", unit: "clip", credits: 16 },
-  { modelId: "vidu-v4-reference", name: "Vidu v4 Reference", maker: "vidu", kind: "video", unit: "clip", credits: 16 },
   {
     modelId: "wand-vega-1.0-pro-fast",
     name: "WAND-Vega 1.0 Pro Fast",
@@ -221,41 +196,27 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     unit: "clip",
     credits: 17,
   },
-  { modelId: "kling-o1-video", name: "Kling O1", maker: "kling", kind: "video", unit: "clip", credits: 14.5 },
+  { modelId: "vidu-q3-pro", name: "Vidu Q3 Pro", maker: "vidu", kind: "video", unit: "clip", credits: 16.5 },
+  { modelId: "kling-3.0-turbo", name: "Kling 3.0 Turbo", maker: "kling", kind: "video", unit: "clip", credits: 16 },
+  { modelId: "vidu-v4-reference", name: "Vidu v4 Reference", maker: "vidu", kind: "video", unit: "clip", credits: 16 },
   {
-    modelId: "minimax-h3",
-    name: "MiniMax H3",
-    maker: "minimax",
+    modelId: "grok-imagine-video-1.5",
+    name: "Grok Imagine Video 1.5",
+    maker: "xai",
     kind: "video",
     unit: "clip",
-    credits: 13,
-    variant: "768p",
+    credits: 15.5,
   },
   {
-    modelId: "minimax-h3-max",
-    name: "MiniMax H3 Max",
-    maker: "minimax",
-    kind: "video",
-    unit: "clip",
-    credits: 13,
-    variant: "768p",
-  },
-  {
-    modelId: "seedance-2.0-mini",
-    name: "Seedance 2.0 Mini",
+    modelId: "seedance-2.0-fast",
+    name: "Seedance 2.0 Fast",
     maker: "bytedance",
     kind: "video",
     unit: "clip",
-    credits: 13,
+    credits: 13.5,
   },
-  {
-    modelId: "gemini-omni-1.2-flash",
-    name: "Gemini Omni 1.2 Flash",
-    maker: "google",
-    kind: "video",
-    unit: "clip",
-    credits: 12,
-  },
+  { modelId: "vidu-v4", name: "Vidu v4", maker: "vidu", kind: "video", unit: "clip", credits: 13 },
+  { modelId: "magi-2", name: "MAGI-2", maker: "sandai", kind: "video", unit: "clip", credits: 11 },
   {
     modelId: "wand-vega-1.0-pro-mini",
     name: "WAND-Vega 1.0 Pro Mini",
@@ -265,7 +226,17 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     credits: 11,
   },
   { modelId: "vidu-q3", name: "Vidu Q3", maker: "vidu", kind: "video", unit: "clip", credits: 10 },
-  { modelId: "vidu-q3-turbo", name: "Vidu Q3 Turbo", maker: "vidu", kind: "video", unit: "clip", credits: 10.5 },
+  {
+    modelId: "kling-video-v3-pro",
+    name: "Kling Video v3 Pro",
+    maker: "kling",
+    kind: "video",
+    unit: "clip",
+    credits: 9.5,
+  },
+  { modelId: "kling-3.0-omni", name: "Kling 3.0 Omni", maker: "kling", kind: "video", unit: "clip", credits: 9.5 },
+  { modelId: "wan-3.0", name: "Wan 3.0", maker: "alibaba", kind: "video", unit: "clip", credits: 9.5 },
+  { modelId: "kling-o1-video", name: "Kling O1", maker: "kling", kind: "video", unit: "clip", credits: 9.5 },
   { modelId: "pixverse-c1", name: "PixVerse C1", maker: "pixverse", kind: "video", unit: "clip", credits: 9.5 },
   {
     modelId: "wand-vega-1.0-lite",
@@ -274,6 +245,26 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     kind: "video",
     unit: "clip",
     credits: 9.5,
+    variant: "768p",
+  },
+  { modelId: "veo-3.1-fast", name: "Veo 3.1 Fast", maker: "google", kind: "video", unit: "clip", credits: 9 },
+  { modelId: "kling-2.6", name: "Kling 2.6", maker: "kling", kind: "video", unit: "clip", credits: 9 },
+  {
+    modelId: "minimax-h3",
+    name: "MiniMax H3",
+    maker: "minimax",
+    kind: "video",
+    unit: "clip",
+    credits: 9,
+    variant: "768p",
+  },
+  {
+    modelId: "minimax-h3-max",
+    name: "MiniMax H3 Max",
+    maker: "minimax",
+    kind: "video",
+    unit: "clip",
+    credits: 9,
     variant: "768p",
   },
   {
@@ -285,8 +276,23 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     credits: 8.5,
     variant: "2K",
   },
-  { modelId: "pixverse-v6", name: "PixVerse V6", maker: "pixverse", kind: "video", unit: "clip", credits: 8.5 },
-  { modelId: "veo-3.1-lite", name: "Veo 3.1 Lite", maker: "google", kind: "video", unit: "clip", credits: 8.5 },
+  {
+    modelId: "seedance-2.0-mini",
+    name: "Seedance 2.0 Mini",
+    maker: "bytedance",
+    kind: "video",
+    unit: "clip",
+    credits: 8.5,
+  },
+  { modelId: "mingmou-1", name: "Mingmou 1", maker: "tencent", kind: "video", unit: "clip", credits: 8 },
+  {
+    modelId: "gemini-omni-1.2-flash",
+    name: "Gemini Omni 1.2 Flash",
+    maker: "google",
+    kind: "video",
+    unit: "clip",
+    credits: 8,
+  },
   {
     modelId: "hailuo-2.3",
     name: "Hailuo 2.3",
@@ -296,8 +302,8 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     credits: 7.5,
     variant: "768p",
   },
-  { modelId: "mingmou-1", name: "Mingmou 1", maker: "tencent", kind: "video", unit: "clip", credits: 8 },
-  { modelId: "kling-2.6", name: "Kling 2.6", maker: "kling", kind: "video", unit: "clip", credits: 7.5 },
+  { modelId: "vidu-q3-turbo", name: "Vidu Q3 Turbo", maker: "vidu", kind: "video", unit: "clip", credits: 7 },
+  { modelId: "veo-3.1-lite", name: "Veo 3.1 Lite", maker: "google", kind: "video", unit: "clip", credits: 5.5 },
   {
     modelId: "hailuo-2.3-fast",
     name: "Hailuo 2.3 Fast",
@@ -307,6 +313,7 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     credits: 5.5,
     variant: "768p",
   },
+  { modelId: "pixverse-v6", name: "PixVerse V6", maker: "pixverse", kind: "video", unit: "clip", credits: 4.5 },
   {
     modelId: "heygen-video-1",
     name: "HeyGen Video 1",
@@ -316,36 +323,8 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     credits: 3,
     variant: "768p",
   },
-  { modelId: "chatgpt-image-2", name: "ChatGPT Image 2", maker: "openai", kind: "image", unit: "image", credits: 7.1 },
-  { modelId: "nano-banana-pro", name: "Nano Banana Pro", maker: "google", kind: "image", unit: "image", credits: 4.5 },
   { modelId: "ideogram-4.5", name: "Ideogram 4.5", maker: "ideogram", kind: "image", unit: "image", credits: 3.5 },
-  { modelId: "flux-kontext-max", name: "Flux Kontext Max", maker: "bfl", kind: "image", unit: "image", credits: 3 },
-  { modelId: "ideogram-v3", name: "Ideogram V3", maker: "ideogram", kind: "image", unit: "image", credits: 3 },
-  {
-    modelId: "gpt-image-2.5-flare",
-    name: "GPT Image 2.5 Flare",
-    maker: "openai",
-    kind: "image",
-    unit: "image",
-    credits: 2,
-  },
-  {
-    modelId: "gpt-image-2.5-sunburst",
-    name: "GPT Image 2.5 Sunburst",
-    maker: "openai",
-    kind: "image",
-    unit: "image",
-    credits: 2,
-  },
-  { modelId: "gpt-image-2.6", name: "GPT Image 2.6 Flare", maker: "openai", kind: "image", unit: "image", credits: 2 },
-  {
-    modelId: "gpt-image-2.6-sunburst",
-    name: "GPT Image 2.6 Sunburst",
-    maker: "openai",
-    kind: "image",
-    unit: "image",
-    credits: 2,
-  },
+  { modelId: "nano-banana-pro", name: "Nano Banana Pro", maker: "google", kind: "image", unit: "image", credits: 3 },
   {
     modelId: "qwen-image-layered",
     name: "Qwen Image Layered",
@@ -354,18 +333,23 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     unit: "image",
     credits: 2,
   },
-  { modelId: "nano-banana", name: "Nano Banana", maker: "google", kind: "image", unit: "image", credits: 1.5 },
-  { modelId: "nano-banana-2.1", name: "Nano Banana 2.1", maker: "google", kind: "image", unit: "image", credits: 1.8 },
-  { modelId: "recraft-v4", name: "Recraft V4", maker: "recraft", kind: "image", unit: "image", credits: 1.5 },
+  { modelId: "flux-kontext-max", name: "Flux Kontext Max", maker: "bfl", kind: "image", unit: "image", credits: 1.8 },
   { modelId: "recraft-v4.1", name: "Recraft V4.1", maker: "recraft", kind: "image", unit: "image", credits: 1.5 },
-  { modelId: "seedream-4.5", name: "Seedream 4.5", maker: "bytedance", kind: "image", unit: "image", credits: 1.5 },
   {
-    modelId: "seedream-5.0-lite",
-    name: "Seedream 5.0 Lite",
-    maker: "bytedance",
+    modelId: "gpt-image-2.6",
+    name: "GPT Image 2.6 Flare",
+    maker: "openai",
     kind: "image",
     unit: "image",
-    credits: 1.5,
+    credits: 1.2,
+  },
+  {
+    modelId: "gpt-image-2.6-sunburst",
+    name: "GPT Image 2.6 Sunburst",
+    maker: "openai",
+    kind: "image",
+    unit: "image",
+    credits: 1.2,
   },
   {
     modelId: "seedream-5.0-pro",
@@ -373,9 +357,8 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     maker: "bytedance",
     kind: "image",
     unit: "image",
-    credits: 2,
+    credits: 1,
   },
-  { modelId: "grok-imagine", name: "Grok Imagine", maker: "xai", kind: "image", unit: "image", credits: 1 },
   { modelId: "kling-image-3.0", name: "Kling Image 3.0", maker: "kling", kind: "image", unit: "image", credits: 1 },
   {
     modelId: "kling-image-3.0-omni",
@@ -386,8 +369,6 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     credits: 1,
   },
   { modelId: "kling-o1-image", name: "Kling O1", maker: "kling", kind: "image", unit: "image", credits: 1 },
-  { modelId: "seedream-4.0", name: "Seedream 4.0", maker: "bytedance", kind: "image", unit: "image", credits: 1.1 },
-  { modelId: "seedream-5.5", name: "Seedream 5.5", maker: "bytedance", kind: "image", unit: "image", credits: 1 },
   {
     modelId: "seedream-5.5-layers",
     name: "Seedream 5.5 Layers",
@@ -396,7 +377,18 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
     unit: "image",
     credits: 1,
   },
-  { modelId: "z-image-turbo", name: "Z-Image Turbo", maker: "alibaba", kind: "image", unit: "image", credits: 0.6 },
+  {
+    modelId: "seedream-5.0-lite",
+    name: "Seedream 5.0 Lite",
+    maker: "bytedance",
+    kind: "image",
+    unit: "image",
+    credits: 0.8,
+  },
+  { modelId: "nano-banana-2.1", name: "Nano Banana 2.1", maker: "google", kind: "image", unit: "image", credits: 0.8 },
+  { modelId: "grok-imagine", name: "Grok Imagine", maker: "xai", kind: "image", unit: "image", credits: 0.5 },
+  { modelId: "seedream-5.5", name: "Seedream 5.5", maker: "bytedance", kind: "image", unit: "image", credits: 0.5 },
+  { modelId: "z-image-turbo", name: "Z-Image Turbo", maker: "alibaba", kind: "image", unit: "image", credits: 0.4 },
   { modelId: "veed-fabric-1.0", name: "VEED Fabric 1.0", maker: "veed", kind: "avatar", unit: "clip", credits: 25 },
   { modelId: "sync-lipsync-3", name: "Sync Lipsync 3", maker: "sync", kind: "avatar", unit: "clip", credits: 22 },
   { modelId: "omnihuman-1.5", name: "OmniHuman 1.5", maker: "bytedance", kind: "avatar", unit: "clip", credits: 20 },
@@ -506,6 +498,9 @@ export const CREDIT_MODEL_COSTS: readonly CreditModelCost[] = [
 ];
 
 export const CREDIT_CLIP_SECONDS = 5;
+export const CREDIT_WELCOME = 10;
+
+export const CREDIT_PRICES_URL = "https://openbot.run/credits";
 
 export const CREDIT_MIN_RATE = 0.1;
 
@@ -527,6 +522,10 @@ export function creditsFromTenths(tenths: number): number {
   return tenths / CREDIT_TENTHS;
 }
 
+export function creditsMovable(credits: Pick<CreditsState, "balance" | "welcome">): number {
+  return creditsFromTenths(Math.max(0, creditTenths(credits.balance) - creditTenths(credits.welcome ?? 0)));
+}
+
 export function creditCharge(credits: number): number {
   return creditsFromTenths(Math.ceil(Math.round(credits * CREDIT_TENTHS * 100) / 100));
 }
@@ -542,11 +541,31 @@ export function creditModelCharge(model: CreditModelCost): number {
   return creditCharge(creditModelRate(model) * units);
 }
 
-export const CREDIT_ESTIMATE_MODEL_IDS: readonly string[] = ["nano-banana-pro", "seedance-2.5"];
-
-export function creditEstimateModels(): CreditModelCost[] {
-  return CREDIT_MODEL_COSTS.filter((model) => CREDIT_ESTIMATE_MODEL_IDS.includes(model.modelId));
+export interface CreditEstimate {
+  model: CreditModelCost;
+  resolution: string;
+  charge: number;
 }
+
+export interface CreditEstimateSpec {
+  resolution: string;
+  credits: number;
+}
+
+export const CREDIT_ESTIMATE_SPECS: Readonly<Record<string, CreditEstimateSpec>> = {
+  "nano-banana-pro": { resolution: "1K", credits: 3 },
+  "seedance-2.5": { resolution: "480p", credits: 13.5 },
+  "magi-2": { resolution: "1080p", credits: 11 },
+};
+
+export function creditEstimates(): CreditEstimate[] {
+  return CREDIT_MODEL_COSTS.flatMap((model) => {
+    const spec = CREDIT_ESTIMATE_SPECS[model.modelId];
+    if (spec === undefined) return [];
+    return [{ model, resolution: spec.resolution, charge: creditModelCharge({ ...model, credits: spec.credits }) }];
+  });
+}
+
 export const CREDIT_PRODUCT_ID = "openbot_credits";
 export const CREDIT_METADATA_KIND = "credits";
 export const CREDIT_METADATA = {
@@ -601,6 +620,7 @@ export interface CreditsState {
   balance: number;
   servers: CreditServerWallet[];
   expiring?: CreditExpiring;
+  welcome?: number;
 }
 
 export const CREDITS_UNAVAILABLE_STATE: CreditsState = {
@@ -623,6 +643,41 @@ export interface CreditTransferRequest {
   direction: CreditTransferDirection;
   credits: number;
 }
+
+export interface CreditRedeemRequest {
+  code: string;
+  serverId?: string;
+}
+
+export interface CreditRedeemResult {
+  credits: number;
+  state: CreditsState;
+}
+
+export const CREDIT_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+export const CREDIT_CODE_LENGTH = 16;
+const CREDIT_CODE_GROUP = 4;
+const MAX_CREDIT_CODE_INPUT = 64;
+
+export function normalizeCreditCode(value: string): string {
+  return value.toUpperCase().replace(/[^0-9A-Z]/gu, "");
+}
+
+export function isCreditCode(value: string): boolean {
+  return (
+    value.length === CREDIT_CODE_LENGTH && [...value].every((character) => CREDIT_CODE_ALPHABET.includes(character))
+  );
+}
+
+export function formatCreditCode(value: string): string {
+  const code = normalizeCreditCode(value).slice(0, CREDIT_CODE_LENGTH);
+  const groups: string[] = [];
+  for (let start = 0; start < code.length; start += CREDIT_CODE_GROUP)
+    groups.push(code.slice(start, start + CREDIT_CODE_GROUP));
+  return groups.join("-");
+}
+
+export const CREDIT_CODE_INPUT_LENGTH = CREDIT_CODE_LENGTH + CREDIT_CODE_LENGTH / CREDIT_CODE_GROUP - 1;
 
 const CREDIT_SERVER_ROLES: readonly CreditServerRole[] = ["owner", "admin", "member"];
 const CREDIT_TRANSFER_DIRECTIONS: readonly CreditTransferDirection[] = ["to_server", "to_personal"];
@@ -691,6 +746,7 @@ export function parseCreditsState(value: unknown): CreditsState | null {
   };
   const expiring = parseExpiring(value.expiring);
   if (expiring) state.expiring = expiring;
+  if (isCreditAmount(value.welcome) && value.welcome > 0) state.welcome = Math.min(value.welcome, value.balance);
   return state;
 }
 
@@ -717,6 +773,22 @@ export function parseCreditTransferRequest(value: unknown): CreditTransferReques
   )
     return null;
   return { serverId: value.serverId, direction: value.direction, credits: value.credits };
+}
+
+export function parseCreditRedeemRequest(value: unknown): CreditRedeemRequest | null {
+  if (!isDynamicRecord(value) || !isString(value.code) || value.code.length > MAX_CREDIT_CODE_INPUT) return null;
+  const request: CreditRedeemRequest = { code: value.code };
+  if (value.serverId !== undefined) {
+    if (!isServerId(value.serverId)) return null;
+    request.serverId = value.serverId;
+  }
+  return request;
+}
+
+export function parseCreditRedeemResult(value: unknown): CreditRedeemResult | null {
+  if (!isDynamicRecord(value) || !isCreditAmount(value.credits) || value.credits <= 0) return null;
+  const state = parseCreditsState(value.state);
+  return state ? { credits: value.credits, state } : null;
 }
 
 export function parseCreditCheckoutUrl(value: unknown): string | null {

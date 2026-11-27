@@ -88,7 +88,9 @@ import {
   promptInstructionsFile,
 } from "./workspace-instructions";
 import {
+  agentWriteAreas,
   type CodexApprovalPolicy,
+  type CodexSandboxConfig,
   checkAgentFolders,
   codexApprovalPolicy,
   codexSandboxConfig,
@@ -123,14 +125,33 @@ const CODEX_TOOLS_CONFIG = {
   experimental_request_user_input: { enabled: false },
 } as const;
 
-export const CODEX_FEATURES_CONFIG = { "features.goals": false, "features.request_permissions_tool": false } as const;
+export const CODEX_FEATURES_CONFIG = {
+  "features.goals": false,
+  "features.request_permissions_tool": false,
+  "features.multi_agent_v2_dynamic_tools": true,
+} as const;
 
 const CODEX_COMPUTER_USE_PLUGINS_OFF = {
   "plugins.computer-use@openai-bundled.enabled": false,
   "plugins.unified-computer-use@openai-bundled.enabled": false,
 } as const;
 
+const CODEX_BROWSER_PLUGINS_OFF = {
+  "plugins.browser@openai-bundled.enabled": false,
+  "plugins.chrome@openai-bundled.enabled": false,
+  "plugins.chrome-dev@openai-bundled.enabled": false,
+  "plugins.chrome-internal@openai-bundled.enabled": false,
+} as const;
+
 const CODEX_MCP_STARTUP_GRACE_MS = 10_000;
+const CODEX_WAIT_FOR_MCP_STARTUP_MS = 0;
+
+function waitingForMcpStartup(params: DynamicRecord): DynamicRecord {
+  const config = params.config;
+  return isDynamicRecord(config)
+    ? { ...params, config: { ...config, mcp_optional_startup_grace_ms: CODEX_WAIT_FOR_MCP_STARTUP_MS } }
+    : params;
+}
 
 const CODEX_DIRECT_ONLY_NAMESPACES = [...visibleDynamicTools("codex").map((namespace) => namespace.name), "image_gen"];
 
@@ -163,6 +184,7 @@ export interface ThreadLifecycleOptions {
   agentCursorDrawn?: boolean;
   computerUseOnWayland?: boolean;
   computerUseInputRefused?: () => boolean;
+  computerUseForegroundInput?: boolean;
   responseStyle?: () => ResponseStyle;
   memoryReview?: () => boolean;
   skillRevision?: () => boolean;
@@ -197,6 +219,7 @@ export class ThreadLifecycle {
   readonly #agentCursorDrawn: boolean;
   readonly #computerUseOnWayland: boolean;
   readonly #computerUseInputRefused: () => boolean;
+  readonly #computerUseForegroundInput: boolean;
   readonly #responseStyle: () => ResponseStyle;
   readonly #memoryReview: () => boolean;
   readonly #skillRevision: () => boolean;
@@ -240,6 +263,7 @@ export class ThreadLifecycle {
     this.#agentCursorDrawn = options.agentCursorDrawn ?? false;
     this.#computerUseOnWayland = options.computerUseOnWayland ?? false;
     this.#computerUseInputRefused = options.computerUseInputRefused ?? (() => false);
+    this.#computerUseForegroundInput = options.computerUseForegroundInput ?? false;
     this.#responseStyle = options.responseStyle ?? (() => DEFAULT_RESPONSE_STYLE);
     this.#memoryReview = options.memoryReview ?? (() => false);
     this.#skillRevision = options.skillRevision ?? (() => false);
@@ -548,7 +572,11 @@ export class ThreadLifecycle {
     });
     const { params } = yield* this.#startParams(owner, client, publicThreadId);
     const response = yield* client
-      .request("thread/start", { ...params, ephemeral: false, persistSession: false }, decodeThreadResponse)
+      .request(
+        "thread/start",
+        { ...waitingForMcpStartup(params), ephemeral: false, persistSession: false },
+        decodeThreadResponse,
+      )
       .pipe(toThreadOperationFailed);
     const externalThreadId = response.thread.id;
     this.#conversation.bindThread(externalThreadId, owner.id, publicThreadId);
@@ -823,15 +851,16 @@ export class ThreadLifecycle {
       config?: {
         mcp_servers?: Record<string, CodexMcpServer | CodexDisabledMcpServer>;
         tools: typeof CODEX_TOOLS_CONFIG;
+        model_reasoning_effort: AgentSummary["reasoningEffort"];
         project_doc_max_bytes: number;
         mcp_optional_startup_grace_ms: number;
-        "features.goals": false;
-        "features.request_permissions_tool": false;
         "features.code_mode.direct_only_tool_namespaces": string[];
         [variable: `shell_environment_policy.set.${string}`]: string;
-      } & CodexPromptSettings &
+      } & typeof CODEX_FEATURES_CONFIG &
+        CodexPromptSettings &
+        typeof CODEX_BROWSER_PLUGINS_OFF &
         Partial<typeof CODEX_COMPUTER_USE_PLUGINS_OFF> &
-        ReturnType<typeof codexSandboxConfig>;
+        CodexSandboxConfig;
     },
     ThreadOperationFailed
   > {
@@ -846,8 +875,10 @@ export class ThreadLifecycle {
       config: {
         ...(Object.keys(mcpServers).length > 0 ? { mcp_servers: mcpServers } : {}),
         tools: CODEX_TOOLS_CONFIG,
+        model_reasoning_effort: agent.reasoningEffort,
         ...CODEX_FEATURES_CONFIG,
         ...codexPromptSettings(own.read),
+        ...CODEX_BROWSER_PLUGINS_OFF,
         ...(agentComputerUseEnabled(agent) ? {} : CODEX_COMPUTER_USE_PLUGINS_OFF),
         project_doc_max_bytes: AGENT_INSTRUCTIONS_FILE_BYTES,
         mcp_optional_startup_grace_ms: CODEX_MCP_STARTUP_GRACE_MS,
@@ -855,7 +886,7 @@ export class ThreadLifecycle {
           ...CODEX_DIRECT_ONLY_NAMESPACES,
           ...codexDirectMcpNamespaces(servers),
         ],
-        ...codexSandboxConfig(agent, this.#store.sharedRoot),
+        ...(yield* codexSandboxConfig(agent, this.#store.sharedRoot, this.writeAreas())),
         ...Object.fromEntries(
           Object.entries(environment).map(([name, value]) => [`shell_environment_policy.set.${name}`, value]),
         ),
@@ -1026,14 +1057,30 @@ export class ThreadLifecycle {
     return agentMcpServers(this.#mcpServers(agent.id), agentComputerUseEnabled(agent));
   }
 
-  #workspaceOnlyParam(agent: AgentSummary, client: AgentClient): { workspaceOnly?: true; excludedFolders?: string[] } {
+  #workspaceOnlyParam(
+    agent: AgentSummary,
+    client: AgentClient,
+  ): { workspaceOnly?: true; excludedFolders?: string[]; writeAreas?: string[] } {
     if (
       agentProviderDescriptor(client.provider).workspaceEnforcement !== "tool-sandbox" ||
       !workspaceAccessEnforced(agent)
     )
       return {};
     const excluded = workspaceExcludedFolders(agent);
-    return { workspaceOnly: true, ...(excluded.length ? { excludedFolders: excluded } : {}) };
+    return {
+      workspaceOnly: true,
+      ...(excluded.length ? { excludedFolders: excluded } : {}),
+      writeAreas: this.writeAreas(),
+    };
+  }
+
+  writeAreasParam(agent: AgentSummary, client: AgentClient): { writeAreas?: string[] } {
+    const { writeAreas } = this.#workspaceOnlyParam(agent, client);
+    return writeAreas ? { writeAreas } : {};
+  }
+
+  writeAreas(): string[] {
+    return agentWriteAreas(this.#store.list(), this.#store.sharedRoot);
   }
 
   #computerUseParam(agent: AgentSummary, client: AgentClient): { computerUse?: false } {
@@ -1167,6 +1214,7 @@ export class ThreadLifecycle {
       agentCursorDrawn: this.#agentCursorDrawn,
       computerUseOnWayland: this.#computerUseOnWayland,
       computerUseInputRefused: this.#computerUseInputRefused(),
+      computerUseForegroundInput: this.#computerUseForegroundInput,
       responseStyle: this.#responseStyle(),
       memoryReview: this.#memoryReview(),
       skillRevision: this.#skillRevision(),

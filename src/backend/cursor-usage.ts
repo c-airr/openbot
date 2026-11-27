@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Option, Schema } from "effect";
 import { type AccountRateLimitsReadResult, type AccountRateLimitWindowResult, getRecord } from "./protocol";
@@ -15,6 +15,13 @@ const KEYCHAIN_TIMEOUT_MS = 3_000;
 const SECRET_TOOL_PATHS = ["/usr/bin/secret-tool", "/usr/local/bin/secret-tool"];
 const SECRET_SERVICE_ATTRIBUTES = ["service", "cursor-credentials", "account", "cursor-user"];
 const SECRET_SERVICE_MISS_REUSE_MS = 30 * 60_000;
+const DPAPI_UNPROTECT_SCRIPT = [
+  "$ErrorActionPreference='Stop'",
+  "Add-Type -AssemblyName System.Security",
+  "$blob=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim())",
+  "$plain=[Security.Cryptography.ProtectedData]::Unprotect($blob,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)",
+  "[Console]::Out.Write([Convert]::ToBase64String($plain))",
+].join(";");
 
 const execFileAsync = promisify(execFile);
 
@@ -40,50 +47,84 @@ const CursorAuth = Schema.Struct({
   storedIn: Schema.optional(Schema.String),
 });
 const decodeCursorAuth = Schema.decodeUnknownOption(Schema.fromJsonString(CursorAuth));
-const WINDOWS_DPAPI_SCRIPT = `
-Add-Type -AssemblyName System.Security
-$stored = Get-Content -LiteralPath $env:OPENBOT_CURSOR_DPAPI_FILE -Raw | ConvertFrom-Json
-$encrypted = [Convert]::FromBase64String($stored.dpapi)
-$plain = [Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
-[Console]::Out.Write([Text.Encoding]::UTF8.GetString($plain))
-`;
 
 function secretServiceEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   if (env.DBUS_SESSION_BUS_ADDRESS || !env.XDG_RUNTIME_DIR) return env;
   return { ...env, DBUS_SESSION_BUS_ADDRESS: `unix:path=${join(env.XDG_RUNTIME_DIR, "bus")}` };
 }
 
-let secretServiceRead: { authFile: string; modifiedMs: number; readAt: number; accessToken: string | null } | null =
+let storedSecretRead: { versionFile: string; modifiedMs: number; readAt: number; accessToken: string | null } | null =
   null;
 
-const readSecretServiceAccessToken = Effect.fn("Cursor.readSecretServiceAccessToken")(function* (authFile: string) {
+const readStoredAccessToken = Effect.fn("Cursor.readStoredAccessToken")(function* (
+  versionFile: string,
+  readSecret: Effect.Effect<string | undefined>,
+) {
   const modified = yield* Effect.tryPromise({
-    try: () => stat(authFile),
+    try: () => stat(versionFile),
     catch: (cause) => new CursorUsageFailed({ cause }),
   }).pipe(Effect.option);
   if (Option.isNone(modified)) return null;
   const modifiedMs = modified.value.mtimeMs;
   if (
-    secretServiceRead?.authFile === authFile &&
-    secretServiceRead.modifiedMs === modifiedMs &&
-    (secretServiceRead.accessToken !== null || Date.now() - secretServiceRead.readAt < SECRET_SERVICE_MISS_REUSE_MS)
+    storedSecretRead?.versionFile === versionFile &&
+    storedSecretRead.modifiedMs === modifiedMs &&
+    (storedSecretRead.accessToken !== null || Date.now() - storedSecretRead.readAt < SECRET_SERVICE_MISS_REUSE_MS)
   ) {
-    return secretServiceRead.accessToken;
+    return storedSecretRead.accessToken;
   }
-  const output = yield* Effect.tryPromise({
-    try: () =>
-      execFileAsync(
-        SECRET_TOOL_PATHS.find((path) => existsSync(path)) ?? "secret-tool",
-        ["search", ...SECRET_SERVICE_ATTRIBUTES],
-        { timeout: CURSOR_USAGE_TIMEOUT_MS, env: secretServiceEnvironment() },
-      ),
-    catch: (cause) => new CursorUsageFailed({ cause }),
-  }).pipe(Effect.option);
-  const secret = Option.isSome(output) ? /^secret = (.*)$/mu.exec(output.value.stdout)?.[1] : undefined;
+  const secret = yield* readSecret;
   const auth = secret === undefined ? Option.none() : decodeCursorAuth(secret);
   const accessToken = Option.isSome(auth) && auth.value.accessToken ? auth.value.accessToken : null;
-  secretServiceRead = { authFile, modifiedMs, readAt: Date.now(), accessToken };
+  storedSecretRead = { versionFile, modifiedMs, readAt: Date.now(), accessToken };
   return accessToken;
+});
+
+const readSecretServiceSecret = Effect.tryPromise({
+  try: () =>
+    execFileAsync(
+      SECRET_TOOL_PATHS.find((path) => existsSync(path)) ?? "secret-tool",
+      ["search", ...SECRET_SERVICE_ATTRIBUTES],
+      { timeout: CURSOR_USAGE_TIMEOUT_MS, env: secretServiceEnvironment() },
+    ),
+  catch: (cause) => new CursorUsageFailed({ cause }),
+}).pipe(
+  Effect.option,
+  Effect.map((output) => (Option.isSome(output) ? /^secret = (.*)$/mu.exec(output.value.stdout)?.[1] : undefined)),
+);
+
+const DpapiFile = Schema.Struct({ version: Schema.Literal(1), dpapi: Schema.String });
+const decodeDpapiFile = Schema.decodeUnknownOption(Schema.fromJsonString(DpapiFile));
+
+function windowsPowerShell(env: NodeJS.ProcessEnv = process.env): string {
+  return win32.join(env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
+
+function unprotectDpapiBlob(blob: string, signal: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = execFile(
+      windowsPowerShell(),
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", DPAPI_UNPROTECT_SCRIPT],
+      { timeout: CURSOR_USAGE_TIMEOUT_MS, windowsHide: true, signal },
+      (error, stdout) => (error ? reject(error) : resolve(Buffer.from(stdout.trim(), "base64").toString("utf8"))),
+    );
+    child.stdin?.on("error", reject);
+    child.stdin?.end(blob);
+  });
+}
+
+const readDpapiSecret = Effect.fn("Cursor.readDpapiSecret")(function* (dpapiFile: string) {
+  const text = yield* Effect.tryPromise({
+    try: () => readFile(dpapiFile, "utf8"),
+    catch: (cause) => new CursorUsageFailed({ cause }),
+  }).pipe(Effect.option);
+  const file = Option.isSome(text) ? decodeDpapiFile(text.value) : Option.none();
+  if (Option.isNone(file)) return undefined;
+  const secret = yield* Effect.tryPromise({
+    try: (signal) => unprotectDpapiBlob(file.value.dpapi, signal),
+    catch: (cause) => new CursorUsageFailed({ cause }),
+  }).pipe(Effect.option);
+  return Option.getOrUndefined(secret);
 });
 
 const readAccessToken = Effect.fn("Cursor.readAccessToken")(function* () {
@@ -110,20 +151,16 @@ const readAccessToken = Effect.fn("Cursor.readAccessToken")(function* () {
   if (Option.isNone(auth)) return null;
   if (auth.value.accessToken) return auth.value.accessToken;
   if (auth.value.storedIn !== "os-secret-store") return null;
-  if (platform() === "linux") return yield* readSecretServiceAccessToken(authFile);
-  if (platform() !== "win32") return null;
-  const decrypted = yield* Effect.tryPromise({
-    try: () =>
-      execFileAsync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_DPAPI_SCRIPT], {
-        timeout: CURSOR_USAGE_TIMEOUT_MS,
-        windowsHide: true,
-        env: { ...process.env, OPENBOT_CURSOR_DPAPI_FILE: join(dirname(authFile), "auth.dpapi") },
-      }),
-    catch: (cause) => new CursorUsageFailed({ cause }),
-  }).pipe(Effect.option);
-  if (Option.isNone(decrypted)) return null;
-  const stored = decodeCursorAuth(decrypted.value.stdout);
-  return Option.isSome(stored) ? stored.value.accessToken || null : null;
+  switch (platform()) {
+    case "linux":
+      return yield* readStoredAccessToken(authFile, readSecretServiceSecret);
+    case "win32": {
+      const dpapiFile = join(dirname(authFile), "auth.dpapi");
+      return yield* readStoredAccessToken(dpapiFile, readDpapiSecret(dpapiFile));
+    }
+    default:
+      return null;
+  }
 });
 
 const postDashboard = Effect.fn("Cursor.postDashboard")(function* (

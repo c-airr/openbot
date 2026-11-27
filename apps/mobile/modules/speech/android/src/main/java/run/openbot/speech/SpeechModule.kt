@@ -11,6 +11,8 @@ import android.media.AudioTrack
 import android.media.PlaybackParams
 import android.net.Uri
 import android.os.Build
+import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.InputMethodSubtype
 import com.k2fsa.sherpa.onnx.GenerationConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
@@ -24,6 +26,7 @@ import expo.modules.kotlin.typedarray.Uint8Array
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -46,6 +49,13 @@ private val CALL_HEADSETS = setOf(
   AudioDeviceInfo.TYPE_BLE_HEADSET,
 )
 
+private fun keyboardLocale(subtype: InputMethodSubtype): Locale {
+  if (subtype.languageTag.isNotEmpty()) return Locale.forLanguageTag(subtype.languageTag)
+  @Suppress("DEPRECATION")
+  val legacy = subtype.locale
+  return Locale.forLanguageTag(legacy.split('_').take(2).joinToString("-"))
+}
+
 /** A path from a `file://` URI, as the app's file system API names its files, or a plain path. */
 private fun pathOf(location: String): String =
   if (location.startsWith("file:")) Uri.parse(location).path ?: location else location
@@ -67,6 +77,7 @@ class SpeechModule : Module() {
   private var playback: Thread? = null
   /** The audio mode before GPT live voice set the call mode; null while no call runs. */
   private var callModeBefore: Int? = null
+  private var callBluetoothScoStarted = false
   /** Only the recognition executor reads and writes it. */
   private var recognizer: OfflineSpeechRecognizer? = null
   private val recognition = Executors.newSingleThreadExecutor()
@@ -185,6 +196,13 @@ class SpeechModule : Module() {
       captureExecutor.execute { capture.cancel() }
     }
 
+    AsyncFunction("keyboardLanguage") {
+      val keyboard = appContext.reactContext?.getSystemService(InputMethodManager::class.java)
+      val subtype = keyboard?.currentInputMethodSubtype ?: return@AsyncFunction null
+      if (subtype.mode != "keyboard") return@AsyncFunction null
+      keyboardLocale(subtype).toLanguageTag().takeUnless { it == "und" }
+    }
+
     /**
      * GPT live voice: WebRTC plays the reply as a call, which Android puts on the earpiece. The call
      * mode keeps echo cancellation on, and the reply goes to the loudspeaker, or to a headset that is
@@ -202,9 +220,19 @@ class SpeechModule : Module() {
             ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
           if (output != null) audio.setCommunicationDevice(output)
         } else {
-          val headset = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in CALL_HEADSETS }
+          val outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type }
+          val headset = outputs.any { it in CALL_HEADSETS }
+          val bluetoothOnly = AudioDeviceInfo.TYPE_BLUETOOTH_SCO in outputs &&
+            outputs.none { it in CALL_HEADSETS && it != AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
           @Suppress("DEPRECATION")
           audio.isSpeakerphoneOn = !headset
+          if (bluetoothOnly && !callBluetoothScoStarted) {
+            callBluetoothScoStarted = true
+            @Suppress("DEPRECATION")
+            audio.startBluetoothSco()
+            @Suppress("DEPRECATION")
+            audio.isBluetoothScoOn = true
+          }
         }
       } else {
         val before = callModeBefore ?: return@Function
@@ -214,6 +242,13 @@ class SpeechModule : Module() {
         } else {
           @Suppress("DEPRECATION")
           audio.isSpeakerphoneOn = false
+          if (callBluetoothScoStarted) {
+            callBluetoothScoStarted = false
+            @Suppress("DEPRECATION")
+            audio.isBluetoothScoOn = false
+            @Suppress("DEPRECATION")
+            audio.stopBluetoothSco()
+          }
         }
         audio.mode = before
       }

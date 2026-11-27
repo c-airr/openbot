@@ -1,4 +1,5 @@
 import { AppLogo, type AppLogoVariant, ProviderLogo } from "@openbot/brand";
+import type { CreditMediaModel } from "@openbot/contracts/credit-media";
 import type { FreeLlmBudget, OpenRouterBalance } from "@openbot/contracts/ipc";
 import { usageTone } from "@openbot/team-client/plan-limits";
 import {
@@ -11,6 +12,8 @@ import {
   ContextMenu,
   DropdownMenu,
   Ellipsis,
+  Eye,
+  EyeOff,
   GalleryVerticalEnd,
   Gauge,
   ListChecks,
@@ -21,6 +24,7 @@ import {
   Settings,
   Sparkles,
   Store,
+  toast,
   Waypoints,
 } from "@openbot/ui";
 import { AccountUsageDetails, AccountUsageWindowList } from "@openbot/ui/features/account/AccountUsageDetails";
@@ -29,6 +33,7 @@ import { useText } from "@openbot/ui/text";
 import { Dynamic, type JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, onSettled, Show } from "solid-js";
 import { CreditIcon } from "../credits/CreditIcon";
+import { CreditsRailChip } from "../credits/CreditsRailChip";
 import { FreeLlmBudgetCard, freeLlmUsedPercent } from "./FreeLlmBudget";
 
 interface RailMenuItem {
@@ -66,6 +71,7 @@ function RailContextMenu(props: {
 function RailButton(props: {
   label: string;
   card?: () => JSX.Element;
+  tooltip?: string;
   current?: boolean;
   class?: string;
   menu?: readonly RailMenuItem[] | undefined;
@@ -121,7 +127,7 @@ function RailButton(props: {
     <Show
       when={props.card}
       fallback={
-        <MotionTooltip content={props.label} suppressed={menuOpen()}>
+        <MotionTooltip content={props.tooltip ?? props.label} suppressed={menuOpen()}>
           {button()}
         </MotionTooltip>
       }
@@ -165,8 +171,6 @@ const RING = { size: 34, stroke: 2.25, spacing: 4.5 };
  * weekly ones included, with their reset times. `shared` are the readings that count the same quota,
  * such as Cursor on a merged Grok plan: the card lists them, with no ring of their own. The ring
  * draws the reading with the least left, so a shared reading that runs out first still shows.
- * Fork: an OpenRouter row adds its credit balance as one arc inside those windows, in the tone of
- * what is left, so the account keeps a single circle; the hover card reads it in USD and PLN.
  */
 function UsageRings(props: {
   row: AccountUsageProviderRow;
@@ -175,24 +179,20 @@ function UsageRings(props: {
 }) {
   const { t, format } = useText();
   const rows = () => [props.row, ...props.shared];
-  const balance = () => props.row.balance;
-  const balanceLabel = () => {
-    const value = balance();
-    return value ? t("app.rail.openrouterBalance", { amount: openRouterMoney(value, format) }) : null;
-  };
-  const label = () => {
-    const money = balanceLabel();
-    const usage = unavailable()
+  const label = () =>
+    unavailable()
       ? t("app.rail.usageUnavailable", { name: format.list(rows().map((row) => row.name)) })
       : t("app.rail.usageRings", {
           name: format.list(rows().map((row) => row.name)),
           windows: rows()
             .flatMap((row) => row.windows)
-            .map((window) => t("account.usage.row.windowUsed", { window: window.label, percent: window.usedPercent }))
+            .map((window) =>
+              window.showRemaining
+                ? t("account.usage.row.window", { window: window.label, percent: window.remainingPercent })
+                : t("account.usage.row.windowUsed", { window: window.label, percent: window.usedPercent }),
+            )
             .join(", "),
         });
-    return money ? `${usage}, ${money}` : usage;
-  };
   const ringRow = () => {
     const read = rows().filter((row) => !row.readFailed);
     return (read.length > 0 ? read : rows()).reduce((lowest, row) =>
@@ -205,51 +205,40 @@ function UsageRings(props: {
   return (
     <RailButton
       label={label()}
-      card={() => (
-        <>
-          <UsageCard rows={rows()} />
-          <Show when={balance()}>{(value) => <OpenRouterBalanceCard balance={value()} />}</Show>
-        </>
-      )}
+      card={() => <UsageCard rows={rows()} />}
       class="window-rail-usage"
       onClick={props.onOpen}
     >
       <svg class="window-rail-usage-ring" viewBox={`0 0 ${RING.size} ${RING.size}`} fill="none" aria-hidden="true">
         <For each={windows()} keyed={false}>
-          {(window, index) => (
-            <g>
-              <circle
-                class="window-rail-usage-track"
-                cx={RING.size / 2}
-                cy={RING.size / 2}
-                r={outerRadius - index * RING.spacing}
-                stroke-width={RING.stroke}
-              />
-              <Show when={window().usedPercent > 0}>
+          {(window, index) => {
+            const percent = () => (window().showRemaining ? window().remainingPercent : window().usedPercent);
+            return (
+              <g>
                 <circle
-                  class="window-rail-usage-arc"
-                  data-usage-tone={window().tone}
+                  class="window-rail-usage-track"
                   cx={RING.size / 2}
                   cy={RING.size / 2}
                   r={outerRadius - index * RING.spacing}
                   stroke-width={RING.stroke}
-                  stroke-linecap="round"
-                  pathLength={100}
-                  stroke-dasharray={`${window().usedPercent} 100`}
                 />
-              </Show>
-            </g>
-          )}
+                <Show when={percent() > 0}>
+                  <circle
+                    class="window-rail-usage-arc"
+                    data-usage-tone={window().tone}
+                    cx={RING.size / 2}
+                    cy={RING.size / 2}
+                    r={outerRadius - index * RING.spacing}
+                    stroke-width={RING.stroke}
+                    stroke-linecap="round"
+                    pathLength={100}
+                    stroke-dasharray={`${percent()} 100`}
+                  />
+                </Show>
+              </g>
+            );
+          }}
         </For>
-        <Show when={windows().length === 0 && balance() !== null}>
-          <circle
-            class="window-rail-usage-track"
-            cx={RING.size / 2}
-            cy={RING.size / 2}
-            r={outerRadius}
-            stroke-width={RING.stroke}
-          />
-        </Show>
         <Show when={unavailable()}>
           <circle
             class="window-rail-usage-track"
@@ -260,21 +249,6 @@ function UsageRings(props: {
             pathLength={100}
             stroke-dasharray="4 6"
           />
-        </Show>
-        <Show when={balance()}>
-          {(value) => (
-            <circle
-              class="window-rail-usage-arc"
-              data-usage-tone={openRouterBalanceTone(value())}
-              cx={RING.size / 2}
-              cy={RING.size / 2}
-              r={outerRadius - windows().length * RING.spacing}
-              stroke-width={RING.stroke}
-              stroke-linecap="round"
-              pathLength={100}
-              stroke-dasharray={`${openRouterSpentPercent(value())} 100`}
-            />
-          )}
         </Show>
       </svg>
       <ProviderLogo provider={props.row.provider} class="window-rail-usage-logo" />
@@ -307,14 +281,7 @@ function MoreUsageRings(props: { rings: readonly UsageRing[]; onOpen: (button: H
   return (
     <RailButton
       label={t("app.rail.moreUsage", { count: rows().length })}
-      card={() => (
-        <>
-          <UsageCard rows={rows()} />
-          <For each={rows().flatMap((row) => (row.balance ? [row.balance] : []))}>
-            {(balance) => <OpenRouterBalanceCard balance={balance} />}
-          </For>
-        </>
-      )}
+      card={() => <UsageCard rows={rows()} />}
       class="window-rail-usage window-rail-usage-more"
       onClick={props.onOpen}
     >
@@ -424,45 +391,47 @@ function openRouterBalanceTone(balance: OpenRouterBalance): "critical" | "warnin
   return balance.remainingUsd < 0.5 ? "critical" : balance.remainingUsd < 2 ? "warning" : undefined;
 }
 
-/** The share of the bought credits already spent, which the balance arc draws. */
-function openRouterSpentPercent(balance: OpenRouterBalance): number {
-  return balance.totalUsd > 0 ? Math.min(100, Math.round((balance.usedUsd / balance.totalUsd) * 100)) : 100;
-}
-
-function OpenRouterBalanceCard(props: { balance: OpenRouterBalance }) {
+function OpenRouterBalanceButton(props: { balance: OpenRouterBalance; onOpen: (button: HTMLElement) => void }) {
   const { t, format } = useText();
+  const amount = () => openRouterMoney(props.balance, format);
+  const remaining = () =>
+    props.balance.totalUsd > 0
+      ? Math.max(0, Math.min(100, (props.balance.remainingUsd / props.balance.totalUsd) * 100))
+      : 0;
+  const radius = (RING.size - RING.stroke) / 2;
   return (
-    <>
-      <header class="account-usage-popover-header">
-        <div class="account-usage-popover-heading">
-          <ProviderLogo provider="openrouter" aria-hidden="true" />
-          <h2 class="account-usage-popover-title">{t("account.openrouter.balance.title")}</h2>
-        </div>
-      </header>
-      <p class="account-usage-empty">
-        <strong>{openRouterMoney(props.balance, format)}</strong>
-      </p>
-      <p class="account-usage-empty">
-        {t("account.openrouter.balance.spent", {
-          spent: format.currencyUsd(props.balance.usedUsd),
-          total: format.currencyUsd(props.balance.totalUsd),
-        })}
-      </p>
-      <Show when={props.balance.plnPerUsd}>
-        {(rate) => (
-          <p class="account-usage-empty">
-            {t("account.openrouter.balance.rate", {
-              rate: format.number(rate(), { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
-            })}
-          </p>
-        )}
-      </Show>
-      <p class="account-usage-empty">
-        {t("account.openrouter.balance.readAt", {
-          time: format.date(new Date(props.balance.readAt * 1_000), { hour: "numeric", minute: "2-digit" }),
-        })}
-      </p>
-    </>
+    <RailButton
+      label={t("app.rail.openrouterBalance", { amount: amount() })}
+      tooltip={amount()}
+      class="window-rail-usage"
+      onClick={props.onOpen}
+    >
+      <svg class="window-rail-usage-ring" viewBox={`0 0 ${RING.size} ${RING.size}`} fill="none" aria-hidden="true">
+        <circle
+          class="window-rail-usage-track"
+          cx={RING.size / 2}
+          cy={RING.size / 2}
+          r={radius}
+          stroke-width={RING.stroke}
+        />
+        <Show when={remaining() > 0}>
+          <circle
+            class="window-rail-usage-arc"
+            data-usage-tone={openRouterBalanceTone(props.balance)}
+            cx={RING.size / 2}
+            cy={RING.size / 2}
+            r={radius}
+            stroke-width={RING.stroke}
+            stroke-linecap="round"
+            pathLength={100}
+            stroke-dasharray={`${remaining()} 100`}
+          />
+        </Show>
+      </svg>
+      <span class="window-rail-usage-logo window-rail-usage-dollar" aria-hidden="true">
+        $
+      </span>
+    </RailButton>
   );
 }
 
@@ -486,33 +455,47 @@ function mediaCreditsTone(row: MediaCreditsRailRow) {
   return row.available > 0 ? "neutral" : "critical";
 }
 
-const EXACT_CREDITS_LIMIT = 10_000;
-
-function CreditsRailButton(props: { balance: number | undefined; current: boolean; onOpen: () => void }) {
-  const { t, format } = useText();
-  const amount = (credits: number) =>
-    credits < EXACT_CREDITS_LIMIT
-      ? format.number(credits, { maximumFractionDigits: 0, roundingMode: "trunc" })
-      : format.number(credits, { notation: "compact", maximumFractionDigits: 1, roundingMode: "trunc" });
-  const balance = () => props.balance;
-  const label = () => {
-    const credits = balance();
-    return credits === undefined
-      ? t("app.rail.credits")
-      : t("app.rail.creditsBalance", { count: credits, amount: format.number(credits) });
-  };
-  const layout = () => (balance() === undefined ? "credit-rail-icon" : "credit-rail-icon window-rail-credits");
+function CreditsRailButton(props: {
+  balance: number | undefined;
+  welcome: number | null | undefined;
+  current: boolean;
+  agents: boolean | undefined;
+  onAgentsChange: ((agents: boolean) => void) | undefined;
+  ask: boolean | undefined;
+  onAskChange: ((ask: boolean) => void) | undefined;
+  walletName: string | null | undefined;
+  onMove: (() => void) | undefined;
+  onOpenPrices: (() => void) | undefined;
+  creditModels: readonly CreditMediaModel[] | undefined;
+  onOpen: () => void;
+}) {
+  const { t } = useText();
   return (
-    <RailButton label={label()} class={layout()} current={props.current} onClick={props.onOpen}>
-      <span class="credit-rail-tile">
-        <CreditIcon />
-      </span>
-      <Show when={balance() !== undefined}>
-        <span class="window-rail-credits-count" data-empty={(balance() ?? 0) <= 0 ? "" : undefined} aria-hidden="true">
-          {amount(balance() ?? 0)}
+    <Show
+      when={props.balance === undefined}
+      fallback={
+        <CreditsRailChip
+          balance={props.balance ?? 0}
+          welcome={props.welcome}
+          current={props.current}
+          agents={props.agents}
+          onAgentsChange={props.onAgentsChange}
+          ask={props.ask}
+          onAskChange={props.onAskChange}
+          walletName={props.walletName}
+          onMove={props.onMove}
+          onOpenPrices={props.onOpenPrices}
+          creditModels={props.creditModels}
+          onBuy={props.onOpen}
+        />
+      }
+    >
+      <RailButton label={t("app.rail.credits")} class="credit-rail-icon" current={props.current} onClick={props.onOpen}>
+        <span class="credit-rail-tile">
+          <CreditIcon />
         </span>
-      </Show>
-    </RailButton>
+      </RailButton>
+    </Show>
   );
 }
 
@@ -609,6 +592,9 @@ export const PAGE_RAIL_PINNABLE_PAGES = [
 ] as const satisfies readonly PageRailPage[];
 export type PageRailPinnablePage = (typeof PAGE_RAIL_PINNABLE_PAGES)[number];
 
+export const PAGE_RAIL_HIDEABLE_ITEMS = ["credits", "marketplace", "help"] as const;
+export type PageRailHideableItem = (typeof PAGE_RAIL_HIDEABLE_ITEMS)[number];
+
 export interface PageRailProps {
   hidden: boolean;
   current: PageRailPage | null;
@@ -634,6 +620,17 @@ export interface PageRailProps {
   onMarketplace?: (() => void) | undefined;
   onCredits?: (() => void) | undefined;
   creditBalance?: number | undefined;
+  creditWelcome?: number | null | undefined;
+  creditAgents?: boolean | undefined;
+  onCreditAgentsChange?: ((agents: boolean) => void) | undefined;
+  creditAsk?: boolean | undefined;
+  onCreditAskChange?: ((ask: boolean) => void) | undefined;
+  creditWalletName?: string | null | undefined;
+  onCreditMove?: (() => void) | undefined;
+  onCreditPrices?: (() => void) | undefined;
+  creditModels?: readonly CreditMediaModel[] | undefined;
+  hiddenItems?: readonly PageRailHideableItem[] | undefined;
+  onHiddenChange?: ((item: PageRailHideableItem, hidden: boolean) => void) | undefined;
   onSettings: (button: HTMLElement) => void;
   settingsNotice?: string | undefined;
   help: JSX.Element;
@@ -716,6 +713,45 @@ function RailMoreMenu(props: {
   );
 }
 
+function RailItemsMenu(props: {
+  items: readonly { id: PageRailHideableItem; label: string }[];
+  hidden: (item: PageRailHideableItem) => boolean;
+  onHiddenChange: (item: PageRailHideableItem, hidden: boolean) => void;
+}) {
+  const { t } = useText();
+  const hide = (item: { id: PageRailHideableItem; label: string }) => {
+    props.onHiddenChange(item.id, true);
+    toast(t("app.rail.itemHidden", { name: item.label }), {
+      description: t("app.rail.itemHiddenHint"),
+      action: { label: t("menu.undo"), onClick: () => props.onHiddenChange(item.id, false) },
+    });
+  };
+  return (
+    <ContextMenu.Portal>
+      <ContextMenu.Content class="agent-context-menu" aria-label={t("app.rail.label")}>
+        <For each={props.items} keyed={(item) => item.id}>
+          {(item) => (
+            <Show
+              when={props.hidden(item().id)}
+              fallback={
+                <ContextMenu.Item onSelectAfterClose={() => hide(item())}>
+                  <EyeOff class="agent-context-icon size-4" aria-hidden="true" />
+                  <span>{t("app.rail.hideItem", { name: item().label })}</span>
+                </ContextMenu.Item>
+              }
+            >
+              <ContextMenu.Item onSelectAfterClose={() => props.onHiddenChange(item().id, false)}>
+                <Eye class="agent-context-icon size-4" aria-hidden="true" />
+                <span>{t("app.rail.showItem", { name: item().label })}</span>
+              </ContextMenu.Item>
+            </Show>
+          )}
+        </For>
+      </ContextMenu.Content>
+    </ContextMenu.Portal>
+  );
+}
+
 function RailLogo(props: { variant: AppLogoVariant; href: string | undefined }) {
   const { t } = useText();
   return (
@@ -741,6 +777,7 @@ function RailLogo(props: { variant: AppLogoVariant; href: string | undefined }) 
 
 export function PageRail(props: PageRailProps) {
   const { t } = useText();
+  const openRouterBalance = () => props.usageRows.find((row) => row.provider === "openrouter")?.balance;
   const rings = createMemo((): UsageRing[] => {
     const rows = props.usageRows.filter((row) => row.reportsUsage && (row.windows.length > 0 || row.readFailed));
     const owner = (row: AccountUsageProviderRow) =>
@@ -834,108 +871,139 @@ export function PageRail(props: PageRailProps) {
     }
     return list;
   });
+  const shown = (item: PageRailHideableItem) => !props.hiddenItems?.includes(item);
+  const hideableItems = () => [
+    ...(props.onCredits ? [{ id: "credits" as const, label: t("app.rail.credits") }] : []),
+    ...(props.onMarketplace ? [{ id: "marketplace" as const, label: t("app.rail.marketplace") }] : []),
+    { id: "help" as const, label: t("app.help.label") },
+  ];
   return (
-    <nav
-      class="window-rail"
-      aria-label={t("app.rail.label")}
-      hidden={props.hidden}
-      ref={(element) => {
-        rail = element;
-      }}
-    >
-      <Show when={props.logo}>{(logo) => <RailLogo variant={logo().variant} href={logo().href} />}</Show>
-      <div
-        class="window-rail-group"
-        ref={(element) => {
-          pageGroup = element;
+    <ContextMenu.Root modal={false}>
+      <ContextMenu.Trigger
+        as="nav"
+        class="window-rail"
+        aria-label={t("app.rail.label")}
+        hidden={props.hidden}
+        disabled={!props.onHiddenChange}
+        ref={(element: HTMLElement) => {
+          rail = element;
         }}
       >
-        <RailButton label={t("app.rail.agents")} current={props.current === "agents"} onClick={props.onAgents}>
-          <Bot aria-hidden="true" />
-        </RailButton>
-        <For each={pages().filter((page) => props.pinned.includes(page.id))} keyed={(page) => page.id}>
-          {(page) => (
-            <RailButton
-              label={page().label}
-              current={props.current === page().id}
-              menu={[
-                ...(page().menu ?? []),
-                { label: t("sidebar.unpin"), icon: PinOff, open: () => props.onPinChange(page().id, false) },
-              ]}
-              onClick={page().open}
-              onPreload={page().preload}
-            >
-              <Dynamic component={page().icon} aria-hidden="true" />
-            </RailButton>
-          )}
-        </For>
-        <RailMoreMenu pages={pages()} current={props.current} pinned={props.pinned} onPinChange={props.onPinChange} />
-      </div>
-      <div
-        class="window-rail-end"
-        ref={(element) => {
-          railEnd = element;
-        }}
-      >
+        <Show when={props.logo}>{(logo) => <RailLogo variant={logo().variant} href={logo().href} />}</Show>
         <div
           class="window-rail-group"
           ref={(element) => {
-            endGroup = element;
+            pageGroup = element;
           }}
         >
-          <For each={ringLayout().shown} keyed={(ring) => accountUsageRowKey(ring.row)}>
-            {(ring) => <UsageRings row={ring().row} shared={ring().shared} onOpen={props.onUsage} />}
-          </For>
-          <Show when={ringLayout().more.length > 0}>
-            <MoreUsageRings rings={ringLayout().more} onOpen={props.onUsage} />
-          </Show>
-          <For each={props.customAgentUsage ?? []} keyed={(row) => row.id}>
-            {(row) => <CustomAgentUsageButton row={row()} onOpen={props.onUsage} />}
-          </For>
-          <Show when={props.freeLlm}>
-            {(freeLlm) => <FreeLlmButton budget={freeLlm().budget} onOpen={freeLlm().onOpen} />}
-          </Show>
-          <For each={props.mediaCredits ?? []} keyed={(row) => row.key}>
-            {(row) => <MediaCreditsButton row={row()} onOpen={() => props.onMediaCredits?.(row().provider)} />}
-          </For>
-          <Show when={props.onCredits}>
-            {(onCredits) => (
-              <CreditsRailButton
-                balance={props.creditBalance}
-                current={props.current === "credits"}
-                onOpen={() => onCredits()()}
-              />
-            )}
-          </Show>
-          <Show when={props.onMarketplace}>
-            {(onMarketplace) => (
+          <RailButton label={t("app.rail.agents")} current={props.current === "agents"} onClick={props.onAgents}>
+            <Bot aria-hidden="true" />
+          </RailButton>
+          <For each={pages().filter((page) => props.pinned.includes(page.id))} keyed={(page) => page.id}>
+            {(page) => (
               <RailButton
-                label={t("app.rail.marketplace")}
-                current={props.current === "marketplace"}
-                onClick={() => onMarketplace()()}
+                label={page().label}
+                current={props.current === page().id}
+                menu={[
+                  ...(page().menu ?? []),
+                  { label: t("sidebar.unpin"), icon: PinOff, open: () => props.onPinChange(page().id, false) },
+                ]}
+                onClick={page().open}
+                onPreload={page().preload}
               >
-                <Store aria-hidden="true" />
+                <Dynamic component={page().icon} aria-hidden="true" />
               </RailButton>
             )}
-          </Show>
-          {props.help}
-          <RailButton
-            label={
-              props.settingsNotice
-                ? t("app.rail.settingsNotice", { notice: props.settingsNotice })
-                : t("app.rail.settings")
-            }
-            current={props.current === "settings"}
-            onClick={props.onSettings}
-          >
-            <Settings aria-hidden="true" />
-            <Show when={props.settingsNotice}>
-              <span class="window-rail-notice" aria-hidden="true" />
-            </Show>
-          </RailButton>
+          </For>
+          <RailMoreMenu pages={pages()} current={props.current} pinned={props.pinned} onPinChange={props.onPinChange} />
         </div>
-        <div class="window-rail-server-slot">{props.server}</div>
-      </div>
-    </nav>
+        <div
+          class="window-rail-end"
+          ref={(element) => {
+            railEnd = element;
+          }}
+        >
+          <div
+            class="window-rail-group"
+            ref={(element) => {
+              endGroup = element;
+            }}
+          >
+            <For each={ringLayout().shown} keyed={(ring) => accountUsageRowKey(ring.row)}>
+              {(ring) => <UsageRings row={ring().row} shared={ring().shared} onOpen={props.onUsage} />}
+            </For>
+            <Show when={ringLayout().more.length > 0}>
+              <MoreUsageRings rings={ringLayout().more} onOpen={props.onUsage} />
+            </Show>
+            <Show when={openRouterBalance()}>
+              {(balance) => <OpenRouterBalanceButton balance={balance()} onOpen={props.onUsage} />}
+            </Show>
+            <For each={props.customAgentUsage ?? []} keyed={(row) => row.id}>
+              {(row) => <CustomAgentUsageButton row={row()} onOpen={props.onUsage} />}
+            </For>
+            <Show when={props.freeLlm}>
+              {(freeLlm) => <FreeLlmButton budget={freeLlm().budget} onOpen={freeLlm().onOpen} />}
+            </Show>
+            <For each={props.mediaCredits ?? []} keyed={(row) => row.key}>
+              {(row) => <MediaCreditsButton row={row()} onOpen={() => props.onMediaCredits?.(row().provider)} />}
+            </For>
+            <Show when={shown("credits") && props.onCredits}>
+              {(onCredits) => (
+                <CreditsRailButton
+                  balance={props.creditBalance}
+                  welcome={props.creditWelcome}
+                  current={props.current === "credits"}
+                  agents={props.creditAgents}
+                  onAgentsChange={props.onCreditAgentsChange}
+                  ask={props.creditAsk}
+                  onAskChange={props.onCreditAskChange}
+                  walletName={props.creditWalletName}
+                  onMove={props.onCreditMove}
+                  onOpenPrices={props.onCreditPrices}
+                  creditModels={props.creditModels}
+                  onOpen={() => onCredits()()}
+                />
+              )}
+            </Show>
+            <Show when={shown("marketplace") && props.onMarketplace}>
+              {(onMarketplace) => (
+                <RailButton
+                  label={t("app.rail.marketplace")}
+                  current={props.current === "marketplace"}
+                  onClick={() => onMarketplace()()}
+                >
+                  <Store aria-hidden="true" />
+                </RailButton>
+              )}
+            </Show>
+            <Show when={shown("help")}>{props.help}</Show>
+            <RailButton
+              label={
+                props.settingsNotice
+                  ? t("app.rail.settingsNotice", { notice: props.settingsNotice })
+                  : t("app.rail.settings")
+              }
+              current={props.current === "settings"}
+              onClick={props.onSettings}
+            >
+              <Settings aria-hidden="true" />
+              <Show when={props.settingsNotice}>
+                <span class="window-rail-notice" aria-hidden="true" />
+              </Show>
+            </RailButton>
+          </div>
+          <div class="window-rail-server-slot">{props.server}</div>
+        </div>
+      </ContextMenu.Trigger>
+      <Show when={props.onHiddenChange}>
+        {(onHiddenChange) => (
+          <RailItemsMenu
+            items={hideableItems()}
+            hidden={(item) => !shown(item)}
+            onHiddenChange={(item, hidden) => onHiddenChange()(item, hidden)}
+          />
+        )}
+      </Show>
+    </ContextMenu.Root>
   );
 }

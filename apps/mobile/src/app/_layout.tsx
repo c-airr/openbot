@@ -28,6 +28,7 @@ import { installQuickActions, resetQuickActions } from "@/features/quick-actions
 import { ThemeSweep } from "@/features/settings/components/theme-sweep";
 import { loadAppLanguage } from "@/features/settings/model/app-language";
 import { loadAppearance, useAppearance } from "@/features/settings/model/appearance";
+import { loadFullScreenCameraPreference } from "@/features/settings/model/camera-mode";
 import { loadChatBackdrop } from "@/features/settings/model/chat-backdrop";
 import { loadChatBackground } from "@/features/settings/model/chat-background";
 import { loadChatDetailPreferences } from "@/features/settings/model/chat-details";
@@ -55,6 +56,7 @@ import { checkRecognitionModels } from "@/features/voice/model/recognition-model
 import { supertonicModel } from "@/features/voice/model/supertonic-model";
 import { loadVoiceServer } from "@/features/voice/model/voice-server";
 import { loadVoiceSettings } from "@/features/voice/model/voice-settings";
+import { installWatch, resetWatch } from "@/features/watch/watch-native";
 import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/components/app-loading-overlay";
 import { useBloubColors } from "@/shared/components/bloub-stage/bloub-look";
 import { BloubStage } from "@/shared/components/bloub-stage/bloub-stage";
@@ -76,6 +78,7 @@ export const unstable_settings = {
 installSupportLog();
 installQuickActions();
 installShortcuts();
+installWatch();
 installAppLock();
 installNotificationHandler();
 backgroundRefreshNative?.install();
@@ -136,6 +139,7 @@ function RootNavigator() {
     resetShortcutDirectory();
     resetShortcuts();
     resetNotificationAvatars();
+    resetWatch();
   }, [loading, session]);
 
   useLayoutEffect(() => {
@@ -222,6 +226,7 @@ export default function RootLayout() {
       void loadHapticsPreference().catch(() => undefined);
       void loadLargeFilePreference().catch(() => undefined);
       void loadPhotoQualityPreference().catch(() => undefined);
+      void loadFullScreenCameraPreference().catch(() => undefined);
       void loadMessageColor().catch(() => undefined);
       void loadChatBackground().catch(() => undefined);
       void loadChatBackdrop().catch(() => undefined);

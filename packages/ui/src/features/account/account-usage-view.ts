@@ -28,8 +28,8 @@ export interface AccountUsageWindowRow {
   label: string;
   group?: { name: string; window: string };
   remainingPercent: number;
-  /** What the UI shows: the share already used. */
   usedPercent: number;
+  showRemaining?: boolean;
   tone: AccountUsageTone;
   durationMins: number | null;
   resetsAt: number | null;
@@ -52,7 +52,6 @@ export interface AccountUsageProviderRow {
   reportsUsage: boolean;
   sharedQuotaWith: AgentProviderId | null;
   readFailed: boolean;
-  /** Fork, OpenRouter only: the credit balance, drawn as an arc inside that provider's ring. */
   balance: OpenRouterBalance | null;
 }
 
@@ -112,12 +111,17 @@ function usageRow(
   limit: AccountUsageLimit | null,
   text: UsageText,
 ): AccountUsageProviderRow {
+  const freeRequests = provider === "openrouter" ? limit?.freeRequests : undefined;
   const windowRow = (window: AccountUsageWindow, label: string): AccountUsageWindowRow => {
-    const remainingPercent = usageRemainingPercent(window.usedPercent);
+    const showRemaining = freeRequests !== undefined && freeRequests.limit > 0 && window === limit?.primary;
+    const remainingPercent = showRemaining
+      ? Math.max(0, Math.min(100, ((freeRequests.limit - freeRequests.used) / freeRequests.limit) * 100))
+      : usageRemainingPercent(window.usedPercent);
     return {
       label,
       remainingPercent,
       usedPercent: 100 - remainingPercent,
+      ...(showRemaining ? { showRemaining } : {}),
       tone: usageTone(remainingPercent),
       durationMins: window.windowDurationMins,
       resetsAt: window.resetsAt,
@@ -284,7 +288,11 @@ export function accountUsageRowLabel(
     return t(loading ? "account.usage.row.loading" : "account.usage.row.unavailable", { name: row.name });
   const parts = [row.name];
   for (const window of row.windows) {
-    parts.push(t("account.usage.row.windowUsed", { window: window.label, percent: window.usedPercent }));
+    parts.push(
+      window.showRemaining
+        ? t("account.usage.row.window", { window: window.label, percent: window.remainingPercent })
+        : t("account.usage.row.windowUsed", { window: window.label, percent: window.usedPercent }),
+    );
     if (window.resetsAtLabel) parts.push(t("account.usage.row.resets", { time: window.resetsAtLabel }));
   }
   return parts.join(", ");

@@ -112,6 +112,12 @@ import {
   type ThreadMessageSearchRequest,
 } from "@openbot/contracts/team-protocol/thread-message-search-v1";
 import { decodeTeamProtocolV1CurrentHttpResponse } from "@openbot/contracts/team-protocol/v1-adapter";
+import {
+  WORKFLOW_PRESENCE_CAPABILITY,
+  WORKFLOW_SPOT_CONTROL,
+  type WorkflowSpotControl,
+  type WorkflowSpotInput,
+} from "@openbot/contracts/team-protocol/workflow-presence-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createFocusUsePing } from "@openbot/team-client/focus-use";
 import { followHostKeyHandovers } from "@openbot/team-client/host-key-handover";
@@ -173,7 +179,7 @@ import {
 } from "./remote-server-host-directory";
 import { requestJson, throwRemoteResponseError } from "./remote-server-http";
 import { RemotePresenceCache } from "./remote-server-presence";
-import { RemoteServerStore, type TokenCipher } from "./remote-server-store";
+import { RemoteServerStore, type StoredRemoteServerView, type TokenCipher } from "./remote-server-store";
 import type { StoredRemoteServer } from "./remote-server-stored-shape";
 import { remoteServerSummaries } from "./remote-server-summaries";
 import { addRemotePreviewUrls, isLocalDevelopmentApi, pageQuery } from "./remote-server-urls";
@@ -243,6 +249,7 @@ interface RemoteServerManagerOptions {
   accountReady?: Effect.Effect<unknown, RemoteWorkflowError>;
   localNotificationLevels?: LocalNotificationLevels;
   computerActivity?: ComputerActivityOptions;
+  headlessHost?: boolean;
 }
 
 interface ComputerActivityOptions {
@@ -284,6 +291,7 @@ const REMOTE_DESKTOP_SESSION_HTTP_TIMEOUT_MS = 60_000;
 export const AGENT_IMPORT_UPLOAD_TIMEOUT_MS = TEAM_WEBRTC_REMOTE_REQUEST_TIMEOUT_MILLISECONDS;
 const INSTANCE_TRANSFER_PART_TIMEOUT_MS = 3 * 60_000;
 const HOST_RESTART_RETRY_MS = 30 * 60_000;
+const DROP_RECHECK_SPREAD_MS = 30_000;
 const REMOTE_PICTURES_DIRECTORY = "remote-pictures";
 export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly #scope = Scope.makeUnsafe();
@@ -311,9 +319,11 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   #duplicateIds = retryOperationIds(randomUUID);
   readonly #hostRestartAway = new Map<string, number>();
   readonly #webrtcTransport: TeamWebRtcClientTransport | null;
+  readonly #workflowSpotSends = new Map<string, WorkflowSpotControl | null>();
   readonly #getLocalHostId: () => string | null;
-  #localMemberLimit: number | null = null;
+  #localMemberLimit: Pick<ServerSummary, "memberLimit" | "licenseRaisesMemberLimit"> = {};
   #keyChangedAt = new Map<string, number>();
+  #accountHidden: ReadonlyMap<string, boolean> = new Map();
   #thisComputerServers: ReadonlySet<string> = new Set();
   #registeredThisComputerServers: ReadonlySet<string> = new Set();
   #thisComputerMembersChanged: (serverId: string) => void = () => undefined;
@@ -330,6 +340,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#background(this.request(serverId, FOCUS_USE_ROUTES.ping, acceptEmpty, { method: "POST", body: {} })),
   );
   readonly #computerActivity: ComputerActivityReport | null;
+  readonly #headlessHost: boolean;
   readonly #remoteViewerProxy: RemoteViewerProxy | null;
   #selections = Semaphore.makeUnsafe(1);
   readonly #directorySync = Semaphore.makeUnsafe(1);
@@ -337,6 +348,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly #connectTrace: RemoteConnectTrace | null;
   readonly #accountReady: Effect.Effect<unknown, RemoteWorkflowError>;
   #muteExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+  #dropRecheckTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     path: string,
@@ -365,6 +377,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#connectTrace = options.connectTrace ?? null;
     this.#accountReady = options.accountReady ?? Effect.void;
     this.#localLevels = options.localNotificationLevels ?? null;
+    this.#headlessHost = options.headlessHost ?? false;
     const activity = options.computerActivity;
     this.#computerActivity = activity
       ? new ComputerActivityReport({
@@ -479,16 +492,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       this.#background(
         this.#owned(
           Effect.gen({ self: this }, function* () {
-            if (server && capabilityRead !== null)
-              yield* this.#client.refreshWebRtcCompatibility(server).pipe(
-                Effect.catch(() => Effect.void),
-                Effect.ensuring(
-                  Effect.sync(() => {
-                    this.#connections.endCapabilityRead(serverId, capabilityRead);
-                    this.#emitChanged();
-                  }),
-                ),
-              );
+            if (server && capabilityRead !== null) yield* this.#readCapabilities(server, capabilityRead);
             this.#connectTrace?.mark(serverId, "compatibility");
             if (capabilityRead === null) this.#emitChanged();
             yield* Effect.all(
@@ -524,7 +528,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       this.#emitChanged();
       const firstDrop = this.#events.transportDisconnected(serverId);
       this.#events.scheduleReconnect(serverId);
-      if (wasOnline && firstDrop) this.emit("directoryInvalidated");
+      if (wasOnline && firstDrop) this.#scheduleDropRecheck();
     });
     this.#webrtcTransport?.on("connectFailed", (serverId, failure) => {
       if (!this.#store.has(serverId) || this.#connections.hasIssue(serverId)) return;
@@ -634,6 +638,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   }).bind(this);
 
   connectActiveServer(): void {
+    if (this.#headlessHost) return;
     const transport = this.#webrtcTransport;
     const server = this.#store.find(this.#store.activeServerId);
     if (!transport || server?.transport !== "webrtc-v2") return;
@@ -658,11 +663,13 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       (serverId) => this.#keyChangedAt.get(serverId),
     ).map((server) => {
       const mute = this.#store.muteState(server.id);
+      const hidden = this.#accountHidden.get(server.id);
       return {
         ...server,
         notificationsMuted: mute.muted,
         notificationsMutedUntil: mute.mutedUntil,
         notificationLevel: this.cachedNotificationLevels(server.id).server ?? this.#store.notificationLevel(server.id),
+        ...(hidden === undefined ? {} : { hidden }),
       };
     });
   }
@@ -866,6 +873,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly startEventConnections = Effect.fn("RemoteManager.startEventConnections")(function* (
     this: RemoteServerManager,
   ) {
+    if (this.#headlessHost) return;
     this.#computerActivity?.start();
     yield* this.#events.start();
   }).bind(this);
@@ -873,6 +881,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly refreshRuntimeSnapshots = Effect.fn("RemoteManager.refreshRuntimeSnapshots")(function* (
     this: RemoteServerManager,
   ) {
+    if (this.#headlessHost) return;
     yield* this.#events.refreshRuntimeSnapshots();
   }).bind(this);
 
@@ -921,6 +930,27 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     (operation) => this.#owned(operation),
   ).bind(this);
 
+  readonly setHidden = Effect.fn("RemoteManager.setHidden")(
+    function* (
+      this: RemoteServerManager,
+      serverId: string,
+      hidden: boolean,
+    ): Effect.fn.Return<ServerSummary[], RemoteWorkflowError, RemoteRequest> {
+      const transport = this.#webrtcTransport;
+      if (!transport)
+        return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.remote.webRtcUnavailable")) });
+      const hostId = serverId === LOCAL_SERVER_ID ? this.#getLocalHostId() : serverId;
+      if (hostId === null || !this.#accountHidden.has(serverId))
+        return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.remote.serverNotFound")) });
+      yield* transport.setHostHidden(hostId, hidden);
+      this.#accountHidden = new Map(this.#accountHidden).set(serverId, hidden);
+      this.#emitChanged();
+      this.requestDirectoryRefresh();
+      return this.list();
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
   readonly setNotificationLevel = Effect.fn("RemoteManager.setNotificationLevel")(
     function* (
       this: RemoteServerManager,
@@ -947,6 +977,15 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     },
     (operation) => this.#owned(operation),
   ).bind(this);
+
+  #scheduleDropRecheck(): void {
+    if (this.#dropRecheckTimer || this.#stopping) return;
+    this.#dropRecheckTimer = setTimeout(() => {
+      this.#dropRecheckTimer = null;
+      if (!this.#stopping) this.emit("directoryInvalidated");
+    }, Math.random() * DROP_RECHECK_SPREAD_MS);
+    this.#dropRecheckTimer.unref?.();
+  }
 
   #scheduleMuteExpiry(): void {
     if (this.#muteExpiryTimer) clearTimeout(this.#muteExpiryTimer);
@@ -1350,9 +1389,13 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
           yield* transport.retry(serverId);
           if (this.#connections.stateFor(serverId) === "connecting" && transport.isConnected(serverId)) {
             const hostRestart = this.#connections.hostRestartFor(serverId);
+            const compatibility = this.#connections.compatibilityFor(serverId);
             this.#connections.markConnected(serverId);
             this.#connections.setHostRestart(serverId, hostRestart);
+            if (compatibility) this.#connections.setCompatibility(serverId, compatibility);
+            const capabilityRead = this.#connections.startCapabilityRead(serverId);
             this.#emitChanged();
+            this.#background(this.#owned(this.#readCapabilities(server, capabilityRead)));
           }
           return yield* remoteDecode(() => requiredServerSummary(this.list(), serverId));
         }
@@ -1882,6 +1925,40 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       recipientMemberId: input.memberId,
       typing: input.typing,
     });
+  }).bind(this);
+
+  readonly setWorkflowSpot = Effect.fn("RemoteManager.setWorkflowSpot")(function* (
+    this: RemoteServerManager,
+    serverId: string,
+    input: WorkflowSpotInput,
+  ) {
+    if (!this.supportsCapability(serverId, WORKFLOW_PRESENCE_CAPABILITY)) return;
+    const control: WorkflowSpotControl = { type: WORKFLOW_SPOT_CONTROL, ...input };
+    if (this.#store.find(serverId)?.transport === "webrtc-v2") {
+      const transport = this.#webrtcTransport;
+      if (!transport) return;
+      const sending = this.#workflowSpotSends.has(serverId);
+      this.#workflowSpotSends.set(serverId, control);
+      if (!sending) yield* Effect.forkIn(this.#owned(this.#sendWorkflowSpots(transport, serverId)), this.#scope);
+      return;
+    }
+    this.#events.sendWorkflowSpot(serverId, control);
+  }).bind(this);
+
+  readonly #sendWorkflowSpots = Effect.fn("RemoteManager.sendWorkflowSpots")(function* (
+    this: RemoteServerManager,
+    transport: TeamWebRtcClientTransport,
+    serverId: string,
+  ) {
+    const sends = this.#workflowSpotSends;
+    const drain = Effect.gen(function* () {
+      for (let control = sends.get(serverId); control; control = sends.get(serverId)) {
+        sends.set(serverId, null);
+        yield* transport.setWorkflowSpot(serverId, control).pipe(Effect.catch(() => Effect.void));
+      }
+      sends.delete(serverId);
+    });
+    yield* drain.pipe(Effect.onInterrupt(() => Effect.sync(() => sends.delete(serverId))));
   }).bind(this);
 
   checkRemoteDesktopSetup(serverId: string) {
@@ -2576,6 +2653,8 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#stopping = done;
     return yield* Effect.gen({ self: this }, function* () {
       for (const serverId of [...this.#hostedStartAt.keys()]) this.#clearHostedStart(serverId);
+      if (this.#dropRecheckTimer) clearTimeout(this.#dropRecheckTimer);
+      this.#dropRecheckTimer = null;
       this.#focusUse.dispose();
       this.#computerActivity?.dispose();
       yield* this.#events.stop();
@@ -2605,6 +2684,10 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     function* (this: RemoteServerManager): Effect.fn.Return<void, RemoteWorkflowError, RemoteRequest> {
       const transport = this.#webrtcTransport;
 
+      if (this.#accountHidden.size > 0) {
+        this.#accountHidden = new Map();
+        this.#emitChanged();
+      }
       this.#attachments.clear();
       this.#attachmentPreviews.clear();
       yield* this.#pictures.clear();
@@ -2634,7 +2717,13 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     const hosts = yield* transport.listHosts();
     const email = yield* remoteDecode(() => this.#centralAccount.getEmail());
     const localHostId = this.#getLocalHostId();
-    this.#localMemberLimit = hosts.find((host) => host.hostId === localHostId)?.memberLimit ?? null;
+    const localHost = hosts.find((host) => host.hostId === localHostId);
+    this.#localMemberLimit = {
+      ...(localHost?.memberLimit === undefined ? {} : { memberLimit: localHost.memberLimit }),
+      ...(localHost?.licenseRaisesMemberLimit === undefined
+        ? {}
+        : { licenseRaisesMemberLimit: localHost.licenseRaisesMemberLimit }),
+    };
     const followedHandovers = yield* followedHostKeyHandovers({
       hosts,
       servers: this.#store.servers,
@@ -2660,6 +2749,9 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#keyChangedAt = new Map(
       [...changeTimes].map(([hostId, changedAt]) => [hostId === localHostId ? LOCAL_SERVER_ID : hostId, changedAt]),
     );
+    this.#accountHidden = new Map(
+      hosts.map((host) => [host.hostId === localHostId ? LOCAL_SERVER_ID : host.hostId, host.hidden === true]),
+    );
     for (const serverId of removedHostIds) {
       yield* transport.disconnect(serverId).pipe(Effect.catch(() => Effect.void));
       this.#clearServerConnectionState(serverId);
@@ -2680,6 +2772,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     else if (event.type === "host-appearance") this.#applyHostAppearance(serverId, event);
     else if (event.type === "machine-alert") this.emit("machineAlert", serverId, event);
     else if (event.type === "live-voice") this.emit("liveVoice", serverId, event);
+    else if (event.type === "client-browser-command") return;
     else this.#background(this.#owned(this.#refresh.forward(serverId, event)));
   }
 
@@ -2717,6 +2810,18 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
           Effect.tap(() => Effect.sync(() => this.#emitChanged())),
           Effect.catch(() => Effect.void),
         ),
+      ),
+    );
+  }
+
+  #readCapabilities(server: StoredRemoteServerView, capabilityRead: number): Effect.Effect<void> {
+    return this.#client.refreshWebRtcCompatibility(server).pipe(
+      Effect.catch(() => Effect.void),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#connections.endCapabilityRead(server.id, capabilityRead);
+          this.#emitChanged();
+        }),
       ),
     );
   }

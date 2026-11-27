@@ -9,6 +9,7 @@ import {
   MAX_PROVIDER_ACCOUNTS,
   type ProviderAccountCodeLoginStart,
   type ProviderAccountCodeLoginStatus,
+  type ProviderAccountPoolStrategy,
   type ProviderAccountState,
   type ProviderAccountStatus,
   type ProviderUsageResetOutcome,
@@ -36,7 +37,7 @@ import { stopProcessTree } from "../windows-process-tree";
 import { usageWindowResetSince } from "./account-usage";
 import { captureBrowser, signInPageByOpenBot } from "./browser-capture";
 import { type CliCodeLogin, type CliCodePrompt, pasteCodeLoginSupported, startCliCodeLogin } from "./cli-code-login";
-import type { ProviderAccountStore, StoredProviderAccount } from "./provider-account-store";
+import type { ProviderAccountStore, StoredProviderAccount, StoredProviderAccountPool } from "./provider-account-store";
 import { ProviderProcessFailed, waitForSignInProcess, waitForSuccessfulProcess } from "./provider-status";
 import { providerLabel } from "./thread-items";
 import { UsageReadGate } from "./usage-read-gate";
@@ -108,6 +109,7 @@ export class ProviderAccounts {
   readonly #store: ProviderAccountStore;
   readonly #host: ProviderAccountsHost;
   readonly #states = new Map<string, AccountState>();
+  readonly #removing = new Set<string>();
   readonly #signIns = new Map<string, Fiber.Fiber<string | null>>();
   readonly #added = new Set<string>();
   readonly #codeResults = new Map<string, { error: string | null }>();
@@ -181,7 +183,9 @@ export class ProviderAccounts {
             label: account.label,
             email: state?.email ?? null,
             state: state?.state ?? "checking",
-            message: state?.message ?? null,
+            message: this.#removing.has(removalKey(provider, account.id))
+              ? sourceText("status.provider.accountRemovesAfterTurn")
+              : (state?.message ?? null),
             ...(models ? { models: structuredClone(models) } : {}),
           };
         }),
@@ -216,7 +220,12 @@ export class ProviderAccounts {
     if (!cli) return yield* accountFailure(sourceText("error.provider.accountNeedsConnection", { provider: name }));
     if (code && !support.codeSignIn)
       return yield* accountFailure(sourceText("error.provider.noCodeSignIn", { provider: name }));
-    if (code && support.codeSignIn?.flow === "paste" && !pasteCodeLoginSupported())
+    if (
+      code &&
+      support.codeSignIn?.flow === "paste" &&
+      !support.codeSignIn.command.pipedInput &&
+      !pasteCodeLoginSupported()
+    )
       return yield* accountFailure(sourceText("error.provider.codeLoginUnsupported"));
     let account: StoredProviderAccount;
     const added = accountId === null;
@@ -257,13 +266,16 @@ export class ProviderAccounts {
     const signIn = Effect.scoped(
       Effect.gen({ self: this }, function* () {
         if (code && codeSignIn) {
+          const { argv, closeInput, pipedInput } = codeSignIn.command;
+          const env = { ...cliPathEnvironment(cli), ...codeSignIn.command.env(cli), ...this.environment(account) };
           const login = yield* startCliCodeLogin({
             flow: codeSignIn.flow,
             executable: cli.executable,
-            argv: codeSignIn.command.argv,
-            env: { ...cliPathEnvironment(cli), ...codeSignIn.command.env(cli), ...this.environment(account) },
+            argv: typeof argv === "function" ? argv({ ...process.env, ...env }) : argv,
+            env,
             timeoutMs: codeSignIn.command.timeoutMs,
-            ...(codeSignIn.command.closeInput ? { closeInput: true } : {}),
+            ...(closeInput ? { closeInput: true } : {}),
+            ...(pipedInput ? { pipedInput: true } : {}),
           }).pipe(Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause })));
           const prompt = yield* login.prompt.pipe(
             Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause })),
@@ -505,7 +517,19 @@ export class ProviderAccounts {
     this.#host.changed();
   }).bind(this);
 
-  pool(provider: AgentProviderId): { leftOut: readonly string[] } | null {
+  removing(provider: AgentProviderId, accountId: string): boolean {
+    return this.#removing.has(removalKey(provider, accountId));
+  }
+
+  setRemoving(provider: AgentProviderId, accountId: string, removing: boolean): void {
+    const key = removalKey(provider, accountId);
+    if (this.#removing.has(key) === removing) return;
+    if (removing) this.#removing.add(key);
+    else this.#removing.delete(key);
+    this.#host.changed();
+  }
+
+  pool(provider: AgentProviderId): StoredProviderAccountPool | null {
     return this.#support(provider) ? this.#store.pool(provider) : null;
   }
 
@@ -514,13 +538,19 @@ export class ProviderAccounts {
     provider: AgentProviderId,
     enabled: boolean,
     leftOut: readonly string[],
+    strategy?: ProviderAccountPoolStrategy,
   ) {
     const name = providerLabel(provider);
     if (provider === "acp" || !this.#support(provider))
       return yield* accountFailure(sourceText("error.provider.accountsUnsupported", { provider: name }));
     const known = new Set([DEFAULT_PROVIDER_ACCOUNT_ID, ...this.#store.list(provider).map((account) => account.id)]);
     yield* this.#store
-      .setPool(provider, enabled ? { leftOut: leftOut.filter((accountId) => known.has(accountId)) } : null)
+      .setPool(
+        provider,
+        enabled
+          ? { leftOut: leftOut.filter((accountId) => known.has(accountId)), ...(strategy ? { strategy } : {}) }
+          : null,
+      )
       .pipe(Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause })));
     this.#host.changed();
   }).bind(this);
@@ -808,7 +838,11 @@ export class ProviderAccounts {
         Effect.gen({ self: this }, function* () {
           const email = signedIn.email ?? null;
           const organization = signedIn.organization ?? null;
-          if (afterSignIn && email && this.#loginTaken(provider, account.id, { email, organization })) {
+          if (
+            afterSignIn &&
+            email &&
+            this.#loginTaken(provider, account.id, { email, organization }, yield* this.#ownLogin(provider))
+          ) {
             this.#usage.delete(account.id);
             return yield* accountFailure(
               sourceText("error.provider.accountAlreadyAdded", { provider: providerLabel(provider) }),
@@ -854,7 +888,6 @@ export class ProviderAccounts {
   ) {
     const running = this.#host.agentClient(account.provider, account.id);
     if (running) return yield* this.#storeUsage(account, running, yield* this.#host.readUsage(running, model));
-    if (homeSupport(account.provider)?.usageLeavesSession) return this.#usage.get(account.id)?.limit ?? null;
     const cli = this.#host.cli(account.provider);
     if (!cli) return null;
     return yield* Effect.acquireUseRelease(
@@ -966,10 +999,17 @@ export class ProviderAccounts {
     );
   }
 
-  #loginTaken(provider: AgentProviderId, accountId: string, login: AccountLogin): boolean {
+  #ownLogin(provider: AgentProviderId): Effect.Effect<AccountLogin | null> {
+    const login = this.#host.defaultLogin(provider);
+    const readOwnEmail = homeSupport(provider)?.readOwnEmail;
+    if (login?.email || !readOwnEmail || this.#host.apiKey(provider)) return Effect.succeed(login);
+    return readOwnEmail().pipe(Effect.map((email) => (email ? { email, organization: null } : login)));
+  }
+
+  #loginTaken(provider: AgentProviderId, accountId: string, login: AccountLogin, own: AccountLogin | null): boolean {
     const same = (other: AccountLogin | null | undefined) =>
       other?.email?.toLowerCase() === login.email?.toLowerCase() && other?.organization === login.organization;
-    if (same(this.#host.defaultLogin(provider))) return true;
+    if (same(own)) return true;
     return this.#store.list(provider).some((other) => other.id !== accountId && same(this.#states.get(other.id)));
   }
 
@@ -1012,7 +1052,7 @@ export class ProviderAccounts {
   }
 
   #message(provider: AgentProviderId, error: unknown): string {
-    const cause = error instanceof ProviderAccountFailed ? error.cause : error;
+    const cause = signInCause(error) ?? (error instanceof ProviderAccountFailed ? error.cause : error);
     const text = cause instanceof Error ? cause.message : String(cause);
     return shortenDiagnostic(this.#host.redact(text)) || providerLabel(provider);
   }
@@ -1050,4 +1090,8 @@ function signInCause(error: unknown): ProviderSignInError | null {
 
 export function defaultUsageModel(provider: AgentProviderId): string | undefined {
   return provider === "codex" ? undefined : agentProviderDescriptor(provider).defaultModel || undefined;
+}
+
+function removalKey(provider: AgentProviderId, accountId: string): string {
+  return `${provider}\n${accountId}`;
 }

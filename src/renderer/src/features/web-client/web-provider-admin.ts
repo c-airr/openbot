@@ -1,10 +1,12 @@
 import { isKeyOnlyProvider, isKnownAgentProvider } from "@openbot/contracts/agent-providers";
+import { providerCliSource } from "@openbot/contracts/cli-version";
 import { bugReportFormUrl } from "@openbot/contracts/feedback";
 import type {
   AgentProviderId,
   AgentStatus,
   ExternalDestination,
   HostDefaultProvider,
+  ProviderAccountPoolStrategy,
   ProviderAdminDesktopApi,
   ServerSummary,
   UpdateCustomProviderInput,
@@ -30,6 +32,7 @@ import { LIVE_VOICE_ACCOUNT_CAPABILITY } from "@openbot/contracts/team-protocol/
 import { PROVIDER_ACCOUNT_CODE_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-code-v1";
 import { PROVIDER_ACCOUNT_KEYS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-keys-v1";
 import { PROVIDER_ACCOUNT_MODELS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-models-v1";
+import { PROVIDER_ACCOUNT_POOL_STRATEGY_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-pool-strategy-v1";
 import { PROVIDER_ACCOUNT_POOL_CAPABILITY } from "@openbot/contracts/team-protocol/provider-account-pool-v1";
 import {
   type ProviderAccountRelay,
@@ -176,6 +179,7 @@ function webProviderAdmin(
   accountRelay: () => ProviderAccountRelay | null,
   accountModels: () => boolean,
   accountPools: () => boolean,
+  accountPoolStrategy: () => boolean,
   liveVoiceAccount: () => boolean,
   providerRelay: (provider: AgentProviderId) => ReturnType<typeof providerSignInRelay>,
 ): ProviderAdminDesktopApi {
@@ -265,9 +269,13 @@ function webProviderAdmin(
       ),
     accounts: async (serverId) =>
       runTeamEffect(
-        listProviderAccountsWithModels(request(serverId), accountModels(), accountPools(), liveVoiceAccount()).pipe(
-          Effect.mapError((error) => error.cause),
-        ),
+        listProviderAccountsWithModels(
+          request(serverId),
+          accountModels(),
+          accountPools(),
+          liveVoiceAccount(),
+          accountPoolStrategy(),
+        ).pipe(Effect.mapError((error) => error.cause)),
       ),
     accountUsage: async (serverId) =>
       runTeamEffect(providerAccountUsage(request(serverId)).pipe(Effect.mapError((error) => error.cause))),
@@ -304,7 +312,11 @@ function webProviderAdmin(
     removeAccount: async (input, serverId) =>
       runTeamEffect(removeProviderAccount(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     setAccountPool: async (input, serverId) =>
-      runTeamEffect(setProviderAccountPool(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
+      runTeamEffect(
+        setProviderAccountPool(request(serverId), input, accountPoolStrategy()).pipe(
+          Effect.mapError((error) => error.cause),
+        ),
+      ),
     setLiveVoiceAccount: async (input, serverId) =>
       runTeamEffect(setLiveVoiceAccount(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     hostDefaultProvider: async (serverId) =>
@@ -415,6 +427,7 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
     accountRelayOfServer,
     () => serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_MODELS_CAPABILITY),
     () => serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_POOL_CAPABILITY),
+    () => serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_POOL_STRATEGY_CAPABILITY),
     () => serverSupportsCapability(options.server(), LIVE_VOICE_ACCOUNT_CAPABILITY),
     (provider) => providerSignInRelay(provider, (capability) => serverSupportsCapability(options.server(), capability)),
   );
@@ -425,9 +438,9 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
       return id ? remoteProviderRuntimes(() => admin, id) : undefined;
     }),
     {
-      systemCliVersion: (provider) => {
+      systemCliVersion: (provider, runtime) => {
         const row = options.status().providers?.find((candidate) => candidate.id === provider);
-        return row?.cliSource === "system" ? (row.version ?? null) : null;
+        return row && providerCliSource(row, runtime) === "system" ? row.version : null;
       },
       isLocalServer: () => false,
       managesRuntimes: () => serverId() !== undefined,
@@ -626,8 +639,19 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
         : {}),
       ...(remoteAdminServer(options.server(), PROVIDER_ACCOUNT_POOL_CAPABILITY)?.id === id
         ? {
-            setPool: (provider: AgentProviderId, enabled: boolean, leftOut: readonly string[]) =>
-              changed(admin.setAccountPool({ provider, enabled, leftOut: [...leftOut] }, id)),
+            setPool: (
+              provider: AgentProviderId,
+              enabled: boolean,
+              leftOut: readonly string[],
+              strategy?: ProviderAccountPoolStrategy,
+            ) =>
+              changed(
+                admin.setAccountPool(
+                  { provider, enabled, leftOut: [...leftOut], ...(strategy ? { strategy } : {}) },
+                  id,
+                ),
+              ),
+            poolStrategy: serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_POOL_STRATEGY_CAPABILITY),
           }
         : {}),
       ...(remoteAdminServer(options.server(), LIVE_VOICE_ACCOUNT_CAPABILITY)?.id === id

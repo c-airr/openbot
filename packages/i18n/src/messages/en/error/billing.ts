@@ -24,10 +24,18 @@ export const messages = defineMessages("error.billing", {
   "error.billing.creditsSpendNotEnough": "There are not enough credits for this generation.",
   "error.billing.creditsSpendMember": "You can use only the credits of a server that you are a member of.",
   "error.billing.creditsJobConflict": "This generation already uses other credits.",
+  "error.billing.creditCodeInvalid": "This code is not valid. Check it and try again.",
+  "error.billing.creditCodeRedeemed": "You already redeemed this code.",
+  "error.billing.creditCodeExpired": "This code expired.",
+  "error.billing.creditCodeUsed": "This code was already used.",
+  "error.billing.creditCodeAttempts": "Too many tries. Try again in one hour.",
+  "error.billing.creditCodeServerMember": "You can redeem a code only for a server that you are a member of.",
   "error.billing.mediaUnavailable": "Generation with credits is not available now. Try again later.",
   "error.billing.mediaModelUnavailable": "This model is not available for generation with credits.",
   "error.billing.mediaRequestInvalid": "The generation settings do not match this model.",
   "error.billing.mediaRequestRefused": "The model refused this generation. No credits were used.",
+  "error.billing.mediaContentRefused":
+    "The model's safety check refused the prompt or the pictures. It often refuses real people, famous characters, brands, violence and adult content. Change them and try again. No credits were used.",
   "error.billing.mediaBusy": "Generation is busy now. Try again in a moment.",
   "error.billing.mediaJobNotFound": "This generation was not found.",
   "error.billing.mediaResultUnavailable": "The result of this generation is not available now. Try again later.",
@@ -40,8 +48,6 @@ export const messages = defineMessages("error.billing", {
   "error.billing.detailsInvalid": "Check the country and the VAT ID. The VAT ID must be one of the selected country.",
   "error.billing.vatIdInvalid":
     "The EU VAT system does not know this VAT ID. Check the number, or continue without a VAT ID.",
-  "error.billing.vatIdUnverified":
-    "The EU VAT system cannot check the VAT ID now. Try again later, or continue without a VAT ID.",
   "error.billing.vatUnavailable": "Payment is not available now. Try again later.",
   "error.billing.invalidRequest": "The billing request is invalid.",
   "error.billing.invalidResponse": "The billing response is invalid.",

@@ -46,8 +46,45 @@ The bootstrap also creates the `openbot_credits` Product and one Price for each 
 (`openbot_credits_<n>`). `GET /v1/me/credits` returns the balance of the account and of its servers,
 `POST /v1/me/credits/checkout` with `{credits, currency, serverId?}` opens a Checkout, and
 `POST /v1/me/credits/transfer` with `{serverId, direction, credits}` moves credits between the account
-and a server that it owns. The web client uses the same routes under `/api/browser`.
-`bun run test:credits` checks them.
+and a server that it owns. `POST /v1/me/credits/redeem` with `{code, serverId?}` redeems a credit code
+for the account or for a server that the account is a member of. The web client uses the same routes
+under `/api/browser`. `bun run test:credits` checks them.
+
+Make credit codes with `bun apps/auth-api/scripts/credit-codes.ts`:
+
+```sh
+bun apps/auth-api/scripts/credit-codes.ts create --credits 500 --count 200 --expires 2027-03-31 --campaign launch-week --note "Launch" --out ~/launch-codes.csv --production --confirm-production --apply
+bun apps/auth-api/scripts/credit-codes.ts list --campaign launch-week --production
+bun apps/auth-api/scripts/credit-codes.ts disable <code id> --production --confirm-production --apply
+```
+
+A code has 16 random characters from a 32-character alphabet (80 bits), for example
+`7KQ2-M9XD-4TPA-HW3C`. The script shows each code one time. D1 keeps only the SHA-256 hash of the
+code, so nobody can read a code back from the database. `--max-redemptions <m>` lets up to `<m>`
+accounts redeem the same code, one time each (default 1). The credits are free credits that end
+`--grant-days` days after the redemption (default 365). An account can redeem each code one time and
+any number of different codes. `--count` makes up to 1000 codes in one run. `--campaign` (lower-case
+letters, digits and dashes) groups codes in `list` and in the OpenPanel Credits dashboard. `--out`
+writes the codes to a new CSV file with mode 0600 instead of the terminal. `disable` stops a code;
+credits that accounts already redeemed stay.
+
+Redemptions have hourly limits (`CREDIT_CODE_LIMITS` in `src/server/credit-codes.ts`): 30 tries and 10
+wrong codes for each account, 120 tries and 30 wrong codes for each network address (IPv6 to its /64),
+and 20 redemptions of one code from one network. Only a code that does not exist or is disabled is a
+wrong code; a used, expired or already redeemed code counts only as a try. A try over a limit gets
+`429 credit_code_attempts`.
+D1 keeps only SHA-256 hashes of the counted keys in `credit_code_limits`, and the retention job deletes
+old hours.
+Without `--apply` the script makes no change. `--local` (the default) and `--test` work the same way.
+
+Each account gets 10 welcome credits once, with no end date. They pay only for the models that the
+media gateway gives a welcome route. The Worker reaches the media generation processor only through
+the private Worker `openbot-media-gateway` (service binding `MEDIA_GATEWAY`, production only). D1 keeps
+the models, prices, holds and ledger; the gateway keeps the adapters, routes and keys. Its source is
+in the private repository [`nightly-labs/openbot-media-gateway`](https://github.com/nightly-labs/openbot-media-gateway):
+change processors, routes and welcome routes there, then deploy that Worker. Without the
+binding, as in local development, every credits model is unavailable. `bun run test:credit-media`
+checks the service against a fake gateway.
 
 The optional Worker variable `VIES_REQUESTER_VAT_ID` is the seller's EU VAT ID (for example
 `PL1234567890`). With it, the EU VIES check of a buyer's VAT ID returns a consultation number, which the
@@ -209,6 +246,18 @@ make it an alias of the `EMAIL_SMTP_USERNAME` mailbox. An empty value uses `EMAI
 does. A reply goes to `EMAIL_LICENSE_REPLY_TO` (`licenses@openbot.run` in production), or to the
 license sender when it is empty.
 
+When the `no_reply@openbot.run` mailbox reaches its sender limit (500 messages an hour), the email goes
+again from the overflow mailbox `EMAIL_SMTP_OVERFLOW_2_USERNAME` (`signin@openbot.run` in production),
+with that address as the sender. Its password is the `EMAIL_SMTP_OVERFLOW_2_PASSWORD` secret, in the
+same places as `EMAIL_SMTP_PASSWORD`; it is optional, and without it this mailbox is off.
+When that mailbox also reaches its limit, the email goes from the overflow mailbox
+`EMAIL_SMTP_OVERFLOW_3_USERNAME` (`sign@openbot.run` in production), with the
+`EMAIL_SMTP_OVERFLOW_3_PASSWORD` secret, set in the same way. After that, the email goes from the overflow mailbox
+`EMAIL_SMTP_OVERFLOW_USERNAME` (`hello@openbot.run` in production), with the
+`EMAIL_SMTP_OVERFLOW_PASSWORD` secret, set in the same way. When all mailboxes reach their limit, Cloudflare Email Service sends the email from
+`EMAIL_FROM` (`EMAIL_FALLBACK`). Cloudflare also has a daily quota: past it, the binding refuses with
+`E_DAILY_LIMIT_EXCEEDED`.
+
 `bun run env:set:smtp` encrypts the app password into `.env.production` only.
 
 Production does not open the SMTP socket itself. From some Cloudflare locations, such as FSD, a
@@ -267,12 +316,37 @@ of each archive in `hosted_server_archives`; with another value, no archive can 
 key reads the `openbot-pool-archive-eu` bucket and nothing else. The encrypted `.env.production` has
 all three, and GitHub Actions reads them from the `cloudflare-production` Environment. When you
 change one, change it in both places and deploy the Worker.
+`BROWSER_EXTENSION_IDS` lists the ids of the published OpenBot browser extensions, separated by
+commas (a Chrome id is 32 letters from `a` to `p`). Only they get a sign-in from the web app: the
+extension opens `/app?extension=<id>&challenge=<c>&state=<s>` in its sign-in window, the person
+allows it, `/api/browser/extension/code` gives a one-time code, and the extension spends it with its
+verifier at `/v1/mobile-auth/company/exchange` (`platform: "unknown"`), as the phone does after a company sign-in. The extension first asks with no window (`&silent=1`,
+`launchWebAuthFlow` not interactive): the web app gives the code at once when this account allowed this
+extension in this browser before (`openbot.web.extension-allowed.v1` in local storage), and else answers
+`login_required` or `consent_required`, and the extension opens the window. Without the variable, production gives no extension a
+code; a development API (`AUTH_EXPOSE_DEVELOPMENT_CODE`) accepts any extension id, because an
+unpacked extension gets its id from its folder. It is not a secret: set it in `wrangler.jsonc` `vars`
+when the store gives the extension its id.
+
+`GET /v1/browser-extension/x-rules?hash=<hex>` answers the CSS selectors that the extension uses on
+X (`server/browser-extension-x-rules.ts`) as `{ hash, rules }`, with `rules: null` when the extension
+already has that hash. When X changes its page, put new selectors in that file and deploy: extensions
+take them within an hour, with no store review. It holds selectors only, never code.
 
 `SERVER_CLAIMS_ADMIN_TOKEN` lets an operator sign a new server in for a user without an email code: see
 [server claims](../../docs/self-hosted-server.md#sign-in-with-a-server-claim). Without it, the endpoint answers 401.
 The encrypted `.env.production` has it, so `scripts/hosting/leaseweb-pool.ts custom` can sign a custom
 server in for its owner. GitHub Actions reads it from the `cloudflare-production` Environment. When you
 change it, change it in both places and deploy the Worker.
+
+`STORE_REVIEW_EMAIL` and `STORE_REVIEW_CODE` give app store reviewers a sign-in that does not need an
+inbox. A sign-in that starts with this one email sends no email, and its code is `STORE_REVIEW_CODE`
+(8 characters from the sign-in code alphabet). The expiry, the 5 tries and the rate limits stay the
+same, and every other email works as before. Set both or neither: a value that is not a valid email or
+code turns the sign-in off. The account must be a member of the review server only, because each person
+who has the code can sign in to it. Change the code after a review. The encrypted `.env.production`
+has both values, and `scripts/deploy-auth-api.ts` puts them. The CI deploy keeps the values that the
+Worker has.
 
 Use `bun run api:deploy:test` for the isolated `openbot-auth-api-test` Worker
 and the `openbot-auth-test` D1 database.
@@ -431,6 +505,15 @@ on Apple Watch only); a host cannot give the text.
 It has its own key in `LIVE_ACTIVITY_RATE_LIMITER`, and it sends nothing for a device session that
 has ended (`RemoteControlPlane.sessionOpen`), because the host does not learn about the end. The
 alert has "OpenBot" as its only text and `mutable-content`; the app opens the sealed bytes.
+
+`POST /v2/remote/watch/sessions` pairs an Apple Watch with the phone account session that sends it
+(`watch_sessions` in D1). The body is `{ publicKey }`, the raw P-256 key of the watch. The answer is
+`{ watchSessionId, token, expiresAt }`; D1 keeps only the hash of the token. The watch session ends
+after 30 days, or when its phone session ends. The same key again replaces the old session, and an
+account keeps at most 5. `DELETE /v2/remote/watch/sessions/:watchSessionId` revokes one.
+`POST /v2/remote/watch/ticket` takes the watch token and a signed `{ hostId, ts, proof }`, checks the
+membership on the host, and gives an ES256 ticket with `aud: "openbot-watch"` from the remote ticket
+key. `WATCH_TICKET_RATE_LIMITER` limits each watch session to 30 tickets a minute.
 
 The relay is off until `APNS_PRIVATE_KEY` (the `.p8` key text) and `APNS_KEY_ID` are set. Create
 the key in Apple Developer > Keys with the Apple Push Notifications service, then add both to the

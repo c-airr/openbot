@@ -100,7 +100,11 @@ export const messages = {
     "OpenBot はこのサーバーへの接続を開始できませんでした。問題が続く場合は、OpenBot を終了してもう一度開いてください。",
   "error.remote.connectionServiceUnreachable":
     "このコンピューターから OpenBot の接続サービスに接続できません。インターネット接続を確認してください。OpenBot は自動で再接続します。",
+  "error.remote.deviceConnectionServiceUnreachable":
+    "このデバイスから OpenBot の接続サービスに接続できません。インターネット接続と VPN を確認してください。OpenBot は自動で再接続します。",
   "error.remote.serverAnswerTimeout": "サーバーが時間内に応答しませんでした。OpenBot は自動で再接続します。",
+  "error.remote.signInConnectionClosed":
+    "サインイン中にサーバーとの接続が切れました。繰り返し起きる場合は、サーバーとこのデバイスの日付と時刻が正しいか確認してください。",
   "error.remote.connectionCancelled": "リモート接続がキャンセルされました。",
   "error.remote.hostDisconnected":
     "サーバーとの接続が切れました。操作が完了したか確認してから、もう一度お試しください。",

@@ -57,12 +57,13 @@ import {
   type RemoteMemberRole,
   type RemoteTicketClaims,
 } from "@openbot/contracts/signal-protocol/ticket";
+import { WATCH_TICKET_AUDIENCE, type WatchTicketClaims } from "@openbot/contracts/signal-protocol/watch-relay";
 import type { ServerAppearance } from "@openbot/contracts/team-protocol/host-appearance-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { referenceFrom, safeReference } from "@openbot/user-errors";
 import { Deferred, Duration, Effect, Exit, type Layer, Result, Schema, Semaphore } from "effect";
-import { createLocalJWKSet, jwtVerify } from "jose";
+import { createLocalJWKSet, type JWTPayload, jwtVerify } from "jose";
 import { z } from "zod";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { isMissingFileError } from "../backend/file-errors";
@@ -176,6 +177,8 @@ const remoteTicketJwksSchema = z.object({
 });
 
 export type RemoteConnectionBootstrap = RemoteSessionTicket;
+
+export type RelayCaller = { kind: "server"; hostId: string } | { kind: "personal" };
 
 export interface RemoteHostTicketHome {
   readonly failedSignalUrl?: string;
@@ -702,6 +705,35 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     );
   }
 
+  readonly relayFetch = Effect.fn("CentralAuth.relayFetch")(
+    function* (
+      this: CentralAuthManager,
+      caller: RelayCaller,
+      path: string,
+      init: RequestInit,
+    ): Effect.fn.Return<Response, CentralAuthOperationError, CentralAuthTransport> {
+      const headers = yield* this.#relayHeaders(caller, init.headers);
+      return yield* CentralAuthTransport.use((transport) =>
+        transport.fetch(new URL(path, this.#options.apiUrl), { ...init, headers, redirect: "error" }),
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  #relayHeaders(caller: RelayCaller, init: HeadersInit | undefined) {
+    if (caller.kind === "server") return this.#hostHeaders(caller.hostId, init);
+    const token = this.#sessionToken;
+    if (!token)
+      return Effect.fail(
+        new CentralAuthOperationError({
+          cause: new AuthApiError(401, "unauthorized", sourceText("error.auth.signInRequired")),
+        }),
+      );
+    const headers = new Headers(init);
+    headers.set("Authorization", `Bearer ${token}`);
+    return Effect.succeed(headers);
+  }
+
   readonly downloadAsHost = Effect.fn("CentralAuth.downloadAsHost")(
     function* (
       this: CentralAuthManager,
@@ -1092,25 +1124,7 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
       this: CentralAuthManager,
       ticket: string,
     ): Effect.fn.Return<VerifiedRemoteSessionTicket, CentralAuthOperationError, CentralAuthTransport> {
-      const verify = Effect.gen({ self: this }, function* () {
-        if (!this.#remoteTicketJwks)
-          this.#remoteTicketJwks = yield* this.#fetchRemoteTicketJwks().pipe(
-            Effect.cachedWithTTL((exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0)),
-          );
-        const jwks = yield* this.#remoteTicketJwks;
-        const keySet = yield* authDecode(() => createLocalJWKSet(jwks));
-        return yield* authCall(() =>
-          jwtVerify(ticket, keySet, { audience: REMOTE_TICKET_AUDIENCE, algorithms: ["ES256"] }),
-        );
-      });
-      const { payload } = yield* verify.pipe(
-        Effect.catch((failure) => {
-          const error = failure.cause;
-          if (!isDynamicRecord(error) || error.code !== "ERR_JWKS_NO_MATCHING_KEY") return Effect.fail(failure);
-          this.#remoteTicketJwks = null;
-          return verify;
-        }),
-      );
+      const payload = yield* this.#verifyTicketJwt(ticket, REMOTE_TICKET_AUDIENCE);
       if (
         !isString(payload.sessionId) ||
         !isString(payload.hostId) ||
@@ -1140,6 +1154,74 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     },
     (operation) => this.#owned(operation),
   ).bind(this);
+
+  readonly verifyWatchTicket = Effect.fn("CentralAuth.verifyWatchTicket")(
+    function* (
+      this: CentralAuthManager,
+      ticket: string,
+    ): Effect.fn.Return<WatchTicketClaims, CentralAuthOperationError, CentralAuthTransport> {
+      const payload = yield* this.#verifyTicketJwt(ticket, WATCH_TICKET_AUDIENCE);
+      if (
+        payload.aud !== WATCH_TICKET_AUDIENCE ||
+        !isString(payload.jti) ||
+        !isString(payload.watchSessionId) ||
+        !isString(payload.hostId) ||
+        !isString(payload.userId) ||
+        !isString(payload.membershipId) ||
+        (payload.role !== "owner" && payload.role !== "admin" && payload.role !== "member") ||
+        !isNumber(payload.authEpoch) ||
+        !Number.isInteger(payload.authEpoch) ||
+        !isString(payload.clientPublicKey) ||
+        (payload.signal !== undefined && !isString(payload.signal)) ||
+        !isNumber(payload.iat) ||
+        !isNumber(payload.exp)
+      ) {
+        return yield* new CentralAuthOperationError({
+          cause: new Error("The watch ticket has invalid claims."),
+        });
+      }
+      return {
+        aud: WATCH_TICKET_AUDIENCE,
+        jti: payload.jti,
+        watchSessionId: payload.watchSessionId,
+        hostId: payload.hostId,
+        userId: payload.userId,
+        membershipId: payload.membershipId,
+        role: payload.role,
+        authEpoch: payload.authEpoch,
+        clientPublicKey: payload.clientPublicKey,
+        ...(isString(payload.signal) ? { signal: payload.signal } : {}),
+        iat: payload.iat,
+        exp: payload.exp,
+      };
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  readonly #verifyTicketJwt = Effect.fn("CentralAuth.verifyTicketJwt")(function* (
+    this: CentralAuthManager,
+    ticket: string,
+    audience: string,
+  ): Effect.fn.Return<JWTPayload, CentralAuthOperationError, CentralAuthTransport> {
+    const verify = Effect.gen({ self: this }, function* () {
+      if (!this.#remoteTicketJwks)
+        this.#remoteTicketJwks = yield* this.#fetchRemoteTicketJwks().pipe(
+          Effect.cachedWithTTL((exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0)),
+        );
+      const jwks = yield* this.#remoteTicketJwks;
+      const keySet = yield* authDecode(() => createLocalJWKSet(jwks));
+      return yield* authCall(() => jwtVerify(ticket, keySet, { audience, algorithms: ["ES256"] }));
+    });
+    const { payload } = yield* verify.pipe(
+      Effect.catch((failure) => {
+        const error = failure.cause;
+        if (!isDynamicRecord(error) || error.code !== "ERR_JWKS_NO_MATCHING_KEY") return Effect.fail(failure);
+        this.#remoteTicketJwks = null;
+        return verify;
+      }),
+    );
+    return payload;
+  });
 
   readonly #fetchRemoteTicketJwks = Effect.fn("CentralAuth.fetchRemoteTicketJwks")(function* (
     this: CentralAuthManager,
@@ -1312,6 +1394,21 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
       return yield* this.#authorizedRequestEffect(
         `/v2/remote/hosts/${encodeURIComponent(hostId)}/`,
         { method: "DELETE" },
+        decodeVoid,
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  readonly setRemoteHostHidden = Effect.fn("CentralAuth.setRemoteHostHidden")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+      hidden: boolean,
+    ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
+      return yield* this.#authorizedRequestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/hidden`,
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hidden }) },
         decodeVoid,
       );
     },
@@ -2340,17 +2437,25 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     decoder: (value: unknown, response: Response) => T,
     timeoutMs = 10_000,
   ): Effect.fn.Return<T, CentralAuthOperationError, CentralAuthTransport> {
+    const deadline = AbortSignal.timeout(timeoutMs);
     const response = yield* CentralAuthTransport.use((transport) =>
       transport.fetch(new URL(path, this.#options.apiUrl), {
         ...init,
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: deadline,
       }),
     );
     if (!response.ok)
       return yield* new CentralAuthOperationError({
         cause: yield* AuthApiError.fromResponseEffect(response),
       });
-    const value = response.status === 204 ? undefined : yield* authCall(() => response.json());
+    const value =
+      response.status === 204
+        ? undefined
+        : yield* authCall(() => response.json()).pipe(
+            Effect.mapError((failure) =>
+              deadline.aborted ? new CentralAuthOperationError({ cause: deadline.reason }) : failure,
+            ),
+          );
     return yield* authDecode(() => decoder(value, response));
   });
 

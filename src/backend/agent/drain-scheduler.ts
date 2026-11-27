@@ -16,6 +16,7 @@ import {
   ProviderModelLimitedError,
   ProviderModelNotOfferedError,
   ProviderSessionBusyError,
+  ProviderSettingsConflictError,
   ProviderStoppedError,
   ProviderTurnActiveError,
 } from "../agent-client";
@@ -102,13 +103,21 @@ export interface DrainHooks {
   redactMcp(text: string): string;
   tagReferences(agentId: string, threadId: string | null): TagReferenceSource;
   liveVoiceRelayed(deliveryId: string): LiveVoiceRelayed | null;
+  fromChrome(deliveryId: string): boolean;
   requeueChannelDelivery(deliveryId: string, continueWork?: boolean): Effect.Effect<boolean>;
   mayContinueOnBackup(agentId: string): boolean;
   mayFailOver(agentId: string): boolean;
   followUsageLimit(agentId: string): boolean;
   followPendingRuntime(agentId: string): boolean;
+  pendingRuntimeWaits(agentId: string): boolean;
+  settleStaleTaskTurns(agentId: string): void;
   turnEnded(turnId: string): boolean;
-  staleTurnSettlement(agentId: string, threadId: string, turnId: string): Effect.Effect<void> | null;
+  staleTurnSettlement(
+    agentId: string,
+    threadId: string,
+    turnId: string,
+    channelLaneId: string | undefined,
+  ): Effect.Effect<void> | null;
   orphanedDeliveryRecovery(agentId: string): Effect.Effect<void> | null;
   turnRestarting(turnId: string): void;
   deliveriesStarting(deliveryIds: readonly string[], start: DeliveryStart): void;
@@ -205,6 +214,7 @@ export class DrainScheduler {
   readonly #settlingTurns = new Set<string>();
   readonly #recoveringAgents = new Set<string>();
   readonly #drainTasks = new Map<string, Deferred.Deferred<void, DeliveryStartFailed>>();
+  readonly #unconfirmedStarts = new Map<string, Deferred.Deferred<void>>();
   readonly #startRetry = new RoutineStartRetry({
     retry: (deliveryId, agentId, provider) => Effect.runFork(this.#retryRoutineStart(deliveryId, agentId, provider)),
   });
@@ -292,13 +302,8 @@ export class DrainScheduler {
   }
 
   #laneTurnActive(lane: Lane): boolean {
-    if (lane.taskId === null || lane.taskId === MESSAGING_LANE)
-      return this.#ownThreadTurnActive(lane.agentId, lane.taskId === MESSAGING_LANE);
-    const channelId = laneChannelId(lane.taskId);
-    if (channelId !== null)
-      return this.#conversation
-        .workingChannelSnapshots(lane.agentId)
-        .some((snapshot) => this.#conversation.channelForThread(snapshot.threadId) === channelId);
+    if (lane.taskId === null || lane.taskId === MESSAGING_LANE || laneChannelId(lane.taskId) !== null)
+      return this.#heldTurnSnapshot(lane) !== undefined;
     const threadId = this.#tasks.threadId(lane.taskId);
     return this.#conversation
       .workingTaskSnapshots(lane.agentId)
@@ -322,12 +327,22 @@ export class DrainScheduler {
     )?.[1];
   }
 
-  #settleStaleOwnTurn(lane: Lane): void {
-    if (lane.taskId !== null && lane.taskId !== MESSAGING_LANE) return;
-    const snapshot = this.#ownThreadTurn(lane.agentId, lane.taskId === MESSAGING_LANE);
+  #heldTurnSnapshot(lane: Lane) {
+    if (lane.taskId === null || lane.taskId === MESSAGING_LANE)
+      return this.#ownThreadTurn(lane.agentId, lane.taskId === MESSAGING_LANE);
+    const channelId = laneChannelId(lane.taskId);
+    if (channelId === null) return undefined;
+    return this.#conversation
+      .workingChannelSnapshots(lane.agentId)
+      .find((snapshot) => this.#conversation.channelForThread(snapshot.threadId) === channelId);
+  }
+
+  #settleStaleTurn(lane: Lane): void {
+    const snapshot = this.#heldTurnSnapshot(lane);
     const turnId = snapshot?.activeTurnId;
     if (!snapshot?.threadId || !turnId || this.#settlingTurns.has(turnId)) return;
-    const settlement = this.#hooks.staleTurnSettlement(lane.agentId, snapshot.threadId, turnId);
+    const channelLaneId = lane.taskId !== null && laneChannelId(lane.taskId) !== null ? lane.taskId : undefined;
+    const settlement = this.#hooks.staleTurnSettlement(lane.agentId, snapshot.threadId, turnId, channelLaneId);
     if (!settlement) return;
     this.#settlingTurns.add(turnId);
     Effect.runFork(settlement.pipe(Effect.ensuring(Effect.sync(() => this.#settlingTurns.delete(turnId)))));
@@ -419,6 +434,7 @@ export class DrainScheduler {
     if (this.#compactionHolds(lane)) return "compaction";
     if (!this.#routines.mayDrain(agentId)) return "routine";
     if (!this.#usageLimits.mayDrain(agentId) && !this.#usageLimits.mayTry(agentId)) return "usage-limit";
+    if (this.#hooks.pendingRuntimeWaits(agentId)) return "pending-runtime";
     return null;
   }
 
@@ -462,6 +478,7 @@ export class DrainScheduler {
 
   channelTurnFull(agentId: string, channelId: string): boolean {
     const channelLanes = this.#lanesOf(agentId).filter((lane) => laneChannelId(lane.taskId) !== null);
+    for (const lane of channelLanes) if (!this.#mailbox.laneActive(agentId, lane.taskId)) this.#settleStaleTurn(lane);
     return (
       channelLanes.some((lane) => laneChannelId(lane.taskId) === channelId) ||
       channelLanes.length >= this.channelTurnLimit(agentId)
@@ -582,7 +599,8 @@ export class DrainScheduler {
       this.#heldBy(lane) ||
       (this.#heldByMachine(lane) && "machine");
     if (hold) this.#reportHold(lane, hold);
-    if (hold === "active-turn") this.#settleStaleOwnTurn(lane);
+    if (hold === "active-turn") this.#settleStaleTurn(lane);
+    if (hold === "pending-runtime") this.#hooks.settleStaleTaskTurns(lane.agentId);
     if (hold === "machine") this.#recoverIdleLane(lane);
     if (followUsageLimit && hold === "sign-in" && this.#hooks.followPendingRuntime(lane.agentId)) return true;
     if (followUsageLimit && (!hold || hold === "usage-limit") && this.#hooks.followUsageLimit(lane.agentId))
@@ -694,7 +712,8 @@ export class DrainScheduler {
       (this.#heldByMachine(lane) && "machine");
     if (hold) {
       this.#reportHold(lane, hold);
-      if (hold === "active-turn") this.#settleStaleOwnTurn(lane);
+      if (hold === "active-turn") this.#settleStaleTurn(lane);
+      if (hold === "pending-runtime") this.#hooks.settleStaleTaskTurns(agentId);
       if (hold === "machine") this.#recoverIdleLane(lane);
       return;
     }
@@ -973,10 +992,12 @@ export class DrainScheduler {
                   ? this.#routines.timezoneForDelivery(item.delivery.id)
                   : undefined,
               answeredRoutine: this.answeredRoutine(item.delivery),
+              followsUpOwnAnswer: this.#mailbox.followsUpOwnAnswer(item.delivery),
               taskReport: this.taskReport(item),
               taskReportWaiting: this.taskReportWaiting(item),
               tags,
               liveVoice: this.#hooks.liveVoiceRelayed(item.delivery.id),
+              fromChrome: this.#hooks.fromChrome(item.delivery.id),
               externalChat: this.#messaging?.ownsDelivery(item.delivery.id) === true,
               ...(executionText === undefined ? {} : { executionText }),
             });
@@ -1055,9 +1076,18 @@ export class DrainScheduler {
       }
       this.#conversation.emitConversation(snapshot);
 
+      const inOwnChat = (providerThreadId: string) =>
+        planNote === undefined &&
+        taskId === null &&
+        !ownSession &&
+        !channelDelivery &&
+        !messagingDelivery &&
+        batch.every((item) => item.delivery.sender.kind === "user") &&
+        this.#conversation.publicThreadId(agent.id, providerThreadId) === this.#store.get(agent.id)?.threadId;
       const startTurn = (providerThreadId: string) =>
         Effect.gen({ self: this }, function* () {
           yield* drainStep(requireServedModel(this.#providers.configRevision(client)));
+          const sandboxPolicy = yield* codexSandboxPolicy(agent, this.#store.sharedRoot, this.#threads.writeAreas());
           return yield* this.#threads
             .requestWithArchivedThreadRecovery(
               agent,
@@ -1075,13 +1105,17 @@ export class DrainScheduler {
                   ? { clientTurnId: randomUUID() }
                   : {}),
                 answerOptional:
-                  delivery.sender.kind === "agent" && delivery.expectsReply === false && !delivery.replyToMessageId,
+                  delivery.sender.kind === "agent" &&
+                  delivery.expectsReply === false &&
+                  (!delivery.replyToMessageId || this.#mailbox.followsUpOwnAnswer(delivery)),
+                wakeAfterCommands: inOwnChat(providerThreadId),
+                ...this.#threads.writeAreasParam(agent, client),
                 input: inputForThread(providerThreadId),
                 cwd: agent.workspacePath,
                 runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.sharedRoot),
                 approvalPolicy: this.#threads.approvalPolicy(agent),
                 approvalsReviewer: "user",
-                sandboxPolicy: codexSandboxPolicy(agent, this.#store.sharedRoot),
+                sandboxPolicy,
                 ...(client.provider === "codex" || client.provider === "claude"
                   ? this.#serviceTier(agent, client.provider)
                   : {}),
@@ -1172,8 +1206,9 @@ export class DrainScheduler {
           }
           const recipient = this.#store.list().find((candidate) => candidate.id === delivery.recipientAgentId);
           const providerStopped = error instanceof ProviderStoppedError;
+          const settingsConflict = error instanceof ProviderSettingsConflictError;
           const resumeTimedOut =
-            (providerStopped || isRequestTimeout(error, "thread/resume")) &&
+            (providerStopped || settingsConflict || isRequestTimeout(error, "thread/resume")) &&
             this.#mayRetryResume(
               delivery.recipientAgentId,
               laneKey({ agentId: delivery.recipientAgentId, taskId: laneId }),
@@ -1194,7 +1229,9 @@ export class DrainScheduler {
               logger.warn(
                 providerStopped
                   ? "The provider stopped before the turn was sent. Its messages try again."
-                  : "A session did not open in time. Its messages try again.",
+                  : settingsConflict
+                    ? "The provider changed the session while its settings were set. Its messages try again."
+                    : "A session did not open in time. Its messages try again.",
                 { agentId: delivery.recipientAgentId, provider: error.providerName },
               );
             if (error instanceof ProviderSessionBusyError || resumeTimedOut)
@@ -1263,9 +1300,21 @@ export class DrainScheduler {
               delivery.recipientAgentId,
             );
             const ids = batch.map(({ delivery: item }) => item.id);
+            const settleNow = Deferred.makeUnsafe<void>();
+            for (const id of ids) this.#unconfirmedStarts.set(id, settleNow);
             yield* Effect.forkDetach(
-              this.#settleUnstarted(delivery.recipientAgentId, ids, releaseReservation, routineThreadId).pipe(
-                Effect.delay(TURN_START_GRACE_MS),
+              Deferred.await(settleNow).pipe(
+                Effect.as(true),
+                Effect.timeoutOrElse({ duration: TURN_START_GRACE_MS, orElse: () => Effect.succeed(false) }),
+                Effect.flatMap((resumed) =>
+                  this.#settleUnstarted(delivery.recipientAgentId, ids, releaseReservation, routineThreadId, resumed),
+                ),
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    for (const id of ids)
+                      if (this.#unconfirmedStarts.get(id) === settleNow) this.#unconfirmedStarts.delete(id);
+                  }),
+                ),
               ),
             );
             return;
@@ -1464,6 +1513,7 @@ export class DrainScheduler {
       deliveryIds: readonly string[],
       releaseReservation: () => void,
       routineThreadId: string | null,
+      resumed: boolean,
     ) {
       if (this.#hooks.isStopping()) return;
       let settled = false;
@@ -1482,11 +1532,17 @@ export class DrainScheduler {
       if (routineThreadId) yield* this.#threads.closeRoutineThread(routineThreadId);
       releaseReservation();
       this.#mailboxSync.emitQueue(agentId);
-      this.#hooks.emitError("delivery_start_unconfirmed", sourceText("error.backend.turnStartAbandoned"), agentId);
+      if (!resumed)
+        this.#hooks.emitError("delivery_start_unconfirmed", sourceText("error.backend.turnStartAbandoned"), agentId);
       this.scheduleDrain(agentId);
     },
     Effect.catch((failure) => Effect.sync(() => this.#hooks.emitError("delivery_start_unconfirmed", failure.cause))),
   );
+
+  settleUnconfirmedStart(deliveryId: string): Effect.Effect<void> {
+    const settleNow = this.#unconfirmedStarts.get(deliveryId);
+    return settleNow ? Effect.asVoid(Deferred.succeed(settleNow, undefined)) : Effect.void;
+  }
 
   modelForTurn(agentId: string, turnId: string): string | null {
     for (const [key, running] of this.#turnModels)

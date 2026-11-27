@@ -87,7 +87,7 @@ export const messages = {
     "Esto también termina las conexiones remotas activas de la cuenta. El dispositivo puede volver a iniciar sesión.",
   "mobile.settings.sessions.disconnect": "Desconectar",
   "mobile.settings.dictation.footer":
-    "El idioma que hablas al reconocimiento del teléfono, en una conversación de voz y al dictar. «Automático» usa el primer idioma de los ajustes del teléfono que admite.",
+    "El idioma que hablas al reconocimiento del teléfono, en una conversación de voz y al dictar. «Automático» usa el idioma del teclado con el que escribes y, si no, el primer idioma de los ajustes del teléfono que admite.",
   "mobile.settings.dictation.automatic": "Automático",
   "mobile.settings.appearance.title": "Apariencia",
   "mobile.settings.appearance.footer": "«Sistema» sigue la apariencia de tu dispositivo.",
@@ -304,6 +304,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "Enviar fotos en calidad completa",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "Si está desactivado, la app envía una copia más pequeña de cada foto, de hasta 2048 píxeles en el lado largo. Llega antes con una conexión lenta. Actívalo para enviar la foto original.",
+  "mobile.settings.conversations.fullScreenCamera": "Usar la cámara a pantalla completa",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "Si está activado, Cámara abre la cámara del sistema, con zoom y todos los objetivos. Si está desactivado, se abre una cámara pequeña en el chat.",
   "mobile.settings.profile.nameUnsafe": "Elimina los saltos de línea y los caracteres de control de tu nombre.",
   "mobile.settings.profile.nameLength": "Usa entre 3 y 20 caracteres para tu nombre visible.",
   "mobile.settings.profile.saveFailed": "No se pudieron guardar los cambios. Vuelve a intentarlo.",

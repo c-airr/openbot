@@ -99,8 +99,12 @@ export const messages = {
     "OpenBot no pudo iniciar la conexión con este servidor. Si continúa, cierra OpenBot y vuelve a abrirlo.",
   "error.remote.connectionServiceUnreachable":
     "Este ordenador no puede acceder al servicio de conexión de OpenBot. Comprueba su conexión a internet. OpenBot se vuelve a conectar automáticamente.",
+  "error.remote.deviceConnectionServiceUnreachable":
+    "Este dispositivo no puede acceder al servicio de conexión de OpenBot. Comprueba su conexión a internet y la VPN. OpenBot se vuelve a conectar automáticamente.",
   "error.remote.serverAnswerTimeout":
     "El servidor no respondió a tiempo. OpenBot se vuelve a conectar automáticamente.",
+  "error.remote.signInConnectionClosed":
+    "La conexión con el servidor se cerró al iniciar sesión. Si vuelve a pasar, comprueba que la fecha y la hora sean correctas en el servidor y en este dispositivo.",
   "error.remote.connectionCancelled": "Se canceló la conexión remota.",
   "error.remote.hostDisconnected":
     "Se perdió la conexión con el servidor. Comprueba si la acción se completó y vuelve a intentarlo.",

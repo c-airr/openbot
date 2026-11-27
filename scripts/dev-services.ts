@@ -29,6 +29,7 @@ import {
   writeDevStackRecord,
 } from "./dev-automation/stack-registry";
 import { attachSlackTunnels } from "./dev-slack-tunnels";
+import { attachMobileTunnels } from "./dev-tunnels";
 import {
   developmentChildEnvironment,
   developmentSettingsForService,
@@ -196,7 +197,16 @@ function seedDevelopmentProfile(profile: string, environment: NodeJS.ProcessEnv)
   });
 }
 
-const DEVELOPMENT_OPTIONS = ["--dry-run", "--force", "--shared", "--isolated", "--hosting=test", "--slack"] as const;
+const DEVELOPMENT_OPTIONS = [
+  "--dry-run",
+  "--force",
+  "--shared",
+  "--isolated",
+  "--hosting=test",
+  "--slack",
+  "--tunnel",
+  "--foreground",
+] as const;
 const TEST_ACCOUNT_API_URL = "https://openbot-auth-api-test.internal9671.workers.dev";
 
 export interface DevelopmentInvocation {
@@ -206,6 +216,8 @@ export interface DevelopmentInvocation {
   shared: boolean;
   hostingTest: boolean;
   slack: boolean;
+  tunnel: boolean;
+  foreground: boolean;
 }
 
 export function parseDevelopmentTarget(args: string[]): DevelopmentInvocation {
@@ -220,6 +232,9 @@ export function parseDevelopmentTarget(args: string[]): DevelopmentInvocation {
   if (args.includes("--shared") && args.includes("--isolated")) {
     throw new Error("Use --shared or --isolated, not both.");
   }
+  if (args.includes("--tunnel") && (args.includes("--slack") || args.includes("--hosting=test"))) {
+    throw new Error("--tunnel cannot be used with --slack or --hosting=test.");
+  }
   return {
     target,
     dryRun: args.includes("--dry-run"),
@@ -227,6 +242,8 @@ export function parseDevelopmentTarget(args: string[]): DevelopmentInvocation {
     shared: args.includes("--shared"),
     hostingTest: args.includes("--hosting=test"),
     slack: args.includes("--slack"),
+    tunnel: args.includes("--tunnel"),
+    foreground: args.includes("--foreground"),
   };
 }
 
@@ -253,7 +270,9 @@ function prepareVoiceRuntime(): void {
 }
 
 async function main(): Promise<void> {
-  const { target, dryRun, force, shared, hostingTest, slack } = parseDevelopmentTarget(process.argv.slice(2));
+  const { target, dryRun, force, shared, hostingTest, slack, tunnel, foreground } = parseDevelopmentTarget(
+    process.argv.slice(2),
+  );
   if (!dryRun && prepareDevelopmentEnvironment() === "created") {
     logger.info("Prepared local development state.");
   }
@@ -270,6 +289,8 @@ async function main(): Promise<void> {
     logger.info(`The app signs in to the test account Worker: ${TEST_ACCOUNT_API_URL}.`);
   }
   sharedEnvironment.OPENBOT_DEV_STACK_ID = String(process.pid);
+  if (foreground) sharedEnvironment.OPENBOT_DEV_WINDOW_FOCUS = "foreground";
+  else sharedEnvironment.OPENBOT_DEV_WINDOW_FOCUS ??= "background";
 
   const { specs, stack } = await withDevPortAllocation(async (records) => {
     const conflicts = conflictingDevStacks(records, { projectRoot, services });
@@ -313,7 +334,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const closeSlackTunnels = slack ? await attachSlackTunnels(specs, projectRoot) : null;
+  const closeTunnels = slack
+    ? await attachSlackTunnels(specs, projectRoot)
+    : tunnel
+      ? await attachMobileTunnels(specs)
+      : null;
 
   try {
     const seed = developmentProfileToSeed(specs);
@@ -321,7 +346,7 @@ async function main(): Promise<void> {
 
     await runDevelopmentServices(specs, stack);
   } catch (error) {
-    closeSlackTunnels?.();
+    closeTunnels?.();
     throw error;
   }
 }

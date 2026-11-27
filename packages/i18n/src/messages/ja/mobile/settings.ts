@@ -84,7 +84,7 @@ export const messages = {
     "アカウントの有効なリモート接続も終了します。デバイスは再度サインインできます。",
   "mobile.settings.sessions.disconnect": "切断",
   "mobile.settings.dictation.footer":
-    "音声会話や音声入力で、端末の音声認識に話す言語です。「自動」は、スマートフォンの設定の言語のうち、対応している最初の言語を使います。",
+    "音声会話や音声入力で、端末の音声認識に話す言語です。「自動」は、入力に使っているキーボードの言語を使い、なければスマートフォンの設定の言語のうち、対応している最初の言語を使います。",
   "mobile.settings.dictation.automatic": "自動",
   "mobile.settings.appearance.title": "外観",
   "mobile.settings.appearance.footer": "「システム」はデバイスの外観に従います。",
@@ -301,6 +301,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "写真を元の画質で送信",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "オフの場合、アプリは各写真の小さいコピー(長辺 最大 2048 ピクセル)を送信します。遅い接続でも早く届きます。元の写真を送信するにはオンにしてください。",
+  "mobile.settings.conversations.fullScreenCamera": "全画面カメラを使う",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "オンにすると、「カメラ」でシステムのカメラが開き、ズームとすべてのレンズを使えます。オフにすると、チャット内に小さなカメラが開きます。",
   "mobile.settings.profile.nameUnsafe": "名前から改行と制御文字を削除してください。",
   "mobile.settings.profile.nameLength": "表示名は 3〜20 文字にしてください。",
   "mobile.settings.profile.saveFailed": "変更を保存できませんでした。もう一度お試しください。",

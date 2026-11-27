@@ -1,7 +1,8 @@
 import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
+import { resolveCreationModel } from "@openbot/ui/features/agents/agent-creation-model";
 import { FIRST_AGENT_SUGGESTIONS, FirstAgentSetup } from "@openbot/ui/features/agents/FirstAgentSetup";
-import { createEffect, createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo } from "solid-js";
 import { useProviders } from "../../providers";
 import { useAuth } from "../account/account-context";
 import { useCustomAgents } from "../custom-agents/custom-agents-context";
@@ -10,7 +11,6 @@ import { serverCanAdminister } from "../servers/server-capabilities";
 import { useServerSettings } from "../servers/server-settings";
 import { useServers } from "../servers/servers-context";
 import { useAgentActions } from "./agent-actions";
-import { resolveCreationModel } from "./agent-creation-model";
 import { useAgents } from "./agents-context";
 import { withHostAccountUsage } from "./host-provider-accounts";
 
@@ -20,6 +20,8 @@ export function WorkspaceAgentSetup() {
     agentSetupDraft,
     agentSetupKind,
     setAgentSetupDraft,
+    agentSetupModelTouched,
+    setAgentSetupModelTouched,
     agentSetupError,
     creatingAgent,
     cancelAgentSetup,
@@ -56,10 +58,9 @@ export function WorkspaceAgentSetup() {
   const createModelSupported = createMemo(
     () => activeServer()?.kind !== "remote" || activeServerSupportsCapability(TEAM_AGENT_CREATE_MODEL_CAPABILITY),
   );
-  const [modelTouched, setModelTouched] = createSignal(false);
   createEffect(
     () => ({
-      touched: modelTouched(),
+      touched: agentSetupModelTouched(),
       setup: serverSetupChoice() ?? setupState(),
       options: modelOptions(),
       status: agentStatus(),
@@ -117,7 +118,7 @@ export function WorkspaceAgentSetup() {
           next.reasoningEffort !== current.reasoningEffort ||
           next.providerAccountId !== current.providerAccountId
         )
-          setModelTouched(true);
+          setAgentSetupModelTouched(true);
         setAgentSetupDraft(next);
       }}
       onSubmit={agentSetupKind() === "chat" ? startChat : createAgent}

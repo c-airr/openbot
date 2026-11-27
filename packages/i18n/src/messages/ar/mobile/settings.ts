@@ -97,7 +97,7 @@ export const messages = {
     "ينهي هذا أيضًا الاتصالات البعيدة النشطة للحساب. يمكن للجهاز تسجيل الدخول مرة أخرى.",
   "mobile.settings.sessions.disconnect": "قطع الاتصال",
   "mobile.settings.dictation.footer":
-    "اللغة التي تتحدث بها إلى أداة التعرّف في الهاتف، في المحادثة الصوتية وعند الإملاء. يستخدم الخيار التلقائي أول لغة مدعومة في إعدادات هاتفك.",
+    "اللغة التي تتحدث بها إلى أداة التعرّف في الهاتف، في المحادثة الصوتية وعند الإملاء. يستخدم الخيار التلقائي لغة لوحة المفاتيح التي تكتب بها، ثم أول لغة مدعومة في إعدادات هاتفك.",
   "mobile.settings.dictation.automatic": "تلقائي",
   "mobile.settings.appearance.title": "المظهر",
   "mobile.settings.appearance.footer": "يتبع خيار النظام مظهر جهازك.",
@@ -308,6 +308,9 @@ export const messages = {
   "mobile.settings.conversations.fullQualityPhotos": "إرسال الصور بالجودة الكاملة",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "عند إيقاف هذا الخيار، يرسل التطبيق نسخة أصغر من كل صورة، حتى 2048 بكسل في الضلع الأطول. تصل أسرع على اتصال بطيء. فعّل هذا الخيار لإرسال الصورة الأصلية.",
+  "mobile.settings.conversations.fullScreenCamera": "استخدام الكاميرا بملء الشاشة",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "عند التشغيل، يفتح زر الكاميرا كاميرا النظام مع التكبير وجميع العدسات. عند الإيقاف، تفتح كاميرا صغيرة داخل المحادثة.",
   "mobile.settings.profile.nameUnsafe": "أزل فواصل الأسطر وأحرف التحكم من اسمك.",
   "mobile.settings.profile.nameLength": "استخدم من 3 إلى 20 حرفًا لاسم العرض.",
   "mobile.settings.profile.saveFailed": "تعذّر حفظ التغييرات. أعد المحاولة.",

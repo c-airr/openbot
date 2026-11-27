@@ -1,11 +1,6 @@
 import { feedbackSentIssue } from "@openbot/contracts/feedback";
 import { serverInstallEvent } from "@openbot/contracts/hosted-servers";
-import type {
-  ClientAgentSummary,
-  ConversationMessage,
-  ConversationSearchPage,
-  QueueDeliveryStatus,
-} from "@openbot/contracts/ipc";
+import type { ConversationMessage, ConversationSearchPage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
 import {
   AGENT_INSTRUCTIONS_CHANGE_ITEM_TYPE,
   AGENT_WELCOME_ITEM_TYPE,
@@ -17,6 +12,7 @@ import {
   isAgentReasoningCommentary,
   isChannelChangeMarker,
   isContextResetMarker,
+  isNoAnswerNotice,
   isPlanContinuationMarker,
   isSessionImportMarker,
   isVaultChangeMarker,
@@ -32,9 +28,11 @@ import {
   skillConversationEvent,
   skillSuggestionEvent,
 } from "@openbot/contracts/ipc";
-import { markdownImageNames, markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { sourceText as englishSourceText } from "@openbot/i18n/source";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
+
+export { toAgentProfile } from "@openbot/ui/features/agents/agent-profile";
+
 import type {
   AgentDeliveryMarkerStatus,
   AgentMessage,
@@ -54,49 +52,6 @@ function feedbackSentTitle(text: string): string {
     if (text.startsWith(prefix)) return text.slice(prefix.length);
   }
   return "";
-}
-
-export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
-  return {
-    id: stored.id,
-    name: stored.name,
-    title: stored.title,
-    description: stored.description,
-    notifications: stored.notifications,
-    provider: stored.provider,
-    model: stored.model,
-    reasoningEffort: stored.reasoningEffort,
-    ...(stored.providerAccountId === undefined ? {} : { providerAccountId: stored.providerAccountId }),
-    ...(stored.access === undefined ? {} : { access: stored.access }),
-    ...(stored.computerUse === undefined ? {} : { computerUse: stored.computerUse }),
-    ...(stored.allowAutomation === undefined ? {} : { allowAutomation: stored.allowAutomation }),
-    ...(stored.allowNewChat === undefined ? {} : { allowNewChat: stored.allowNewChat }),
-    ...(stored.quickAcknowledgement === undefined ? {} : { quickAcknowledgement: stored.quickAcknowledgement }),
-    ...(stored.memory === undefined ? {} : { memory: stored.memory }),
-    ...(stored.fastMode === undefined ? {} : { fastMode: stored.fastMode }),
-    ...(stored.leanMode === undefined ? {} : { leanMode: stored.leanMode }),
-    ...(stored.ultrafast === undefined ? {} : { ultrafast: stored.ultrafast }),
-    ...(stored.ownBrowserSession === undefined ? {} : { ownBrowserSession: stored.ownBrowserSession }),
-    ...(stored.browserProfileId === undefined ? {} : { browserProfileId: stored.browserProfileId }),
-    ...(stored.busyMessageMode === undefined ? {} : { busyMessageMode: stored.busyMessageMode }),
-    ...(stored.taskLimit === undefined ? {} : { taskLimit: stored.taskLimit }),
-    ...(stored.backupModels === undefined ? {} : { backupModels: stored.backupModels }),
-    ...(stored.additionalFolders === undefined ? {} : { additionalFolders: stored.additionalFolders }),
-    ...(stored.excludedFolders === undefined ? {} : { excludedFolders: stored.excludedFolders }),
-    ...(stored.usageLimitReturn === undefined ? {} : { usageLimitReturn: stored.usageLimitReturn }),
-    ...(stored.pendingRuntime === undefined ? {} : { pendingRuntime: stored.pendingRuntime }),
-    threadId: stored.threadId,
-    workspacePath: stored.workspacePath,
-    avatarSeed: stored.avatarSeed,
-    avatarHue: stored.avatarHue,
-    ...(stored.avatarColor == null ? {} : { avatarColor: stored.avatarColor }),
-    ...(stored.chatColor === undefined ? {} : { chatColor: stored.chatColor }),
-    avatarUrl: stored.avatarUrl,
-    ...(stored.marketplaceSource === undefined ? {} : { marketplaceSource: stored.marketplaceSource }),
-    updatedAt: stored.updatedAt,
-    time: stored.updatedAt ? formatTime(stored.updatedAt) : currentText().t("chat.day.now"),
-    preview: cleanPreview(stored.preview),
-  };
 }
 
 function conversationMessageBody(message: ConversationMessage): string {
@@ -158,15 +113,17 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
     ...(message.itemType === undefined ? {} : { itemType: message.itemType }),
     kind: message.questionPrompt
       ? "question"
-      : actionMarker
-        ? "action-marker"
-        : plan
-          ? "plan"
-          : subagents?.length
-            ? "subagents"
-            : memoryChanges
-              ? "memory-changes"
-              : "text",
+      : message.nearPayment
+        ? "near-payment"
+        : actionMarker
+          ? "action-marker"
+          : plan
+            ? "plan"
+            : subagents?.length
+              ? "subagents"
+              : memoryChanges
+                ? "memory-changes"
+                : "text",
     ...(exchangeSenderId === undefined ? {} : { senderAgentId: exchangeSenderId }),
     ...(senderMember === undefined ? {} : { senderMember }),
     ...(message.replyToMessageId === undefined ? {} : { replyToMessageId: message.replyToMessageId }),
@@ -177,6 +134,7 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
     ...(message.videoGeneration === undefined ? {} : { videoGeneration: message.videoGeneration }),
     ...(message.questionPrompt === undefined ? {} : { questionPrompt: message.questionPrompt }),
     ...(message.uiBlock ? { uiBlock: message.uiBlock } : {}),
+    ...(message.nearPayment ? { nearPayment: message.nearPayment } : {}),
     ...(message.exchange === undefined ? {} : { exchange: message.exchange }),
     ...(message.reaction === undefined ? {} : { reaction: message.reaction }),
     reactions:
@@ -380,6 +338,7 @@ export function agentMessagesEqual(left: AgentMessage, right: AgentMessage): boo
     sameJson(left.imageGeneration, right.imageGeneration) &&
     sameJson(left.videoGeneration, right.videoGeneration) &&
     sameJson(left.uiBlock, right.uiBlock) &&
+    sameJson(left.nearPayment, right.nearPayment) &&
     sameJson(left.memoryChanges, right.memoryChanges) &&
     sameJson(left.trace, right.trace)
   );
@@ -482,6 +441,7 @@ function chatActionMarker(
     return { kind: "session-import", text: message.text, timestamp: message.createdAt };
   if (isPlanContinuationMarker(message))
     return { kind: "plan-continuation", text: message.text, timestamp: message.createdAt };
+  if (isNoAnswerNotice(message)) return { kind: "no-answer", text: message.text, timestamp: message.createdAt };
   const signInProvider = signInFailureProvider(message);
   if (signInProvider)
     return { kind: "sign-in-failure", provider: signInProvider, text: message.text, timestamp: message.createdAt };
@@ -619,23 +579,6 @@ export function withoutAgent<T>(values: Record<string, T>, agentId: string): Rec
   const next = { ...values };
   delete next[agentId];
   return next;
-}
-
-function cleanPreview(preview: string): string {
-  if (!preview.trim()) return currentText().t("app.agent.noMessages");
-  const text = preview.startsWith("Session taken from ") ? currentText().sourceText(preview) : preview;
-  const cleaned = markdownPreviewText(cleanAgentMessageText(text))
-    .replace(/\binbox\s+at\s+zero\b[:,]?\s*/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-  return cleaned || markdownImageNames(text).join(", ");
-}
-
-function formatTime(value: string): string {
-  const date = new Date(value);
-  const { t, format } = currentText();
-  if (Number.isNaN(date.getTime())) return t("chat.day.now");
-  return format.date(date, { hour: "2-digit", minute: "2-digit" });
 }
 
 export function formatMessageTime(value: string): string {

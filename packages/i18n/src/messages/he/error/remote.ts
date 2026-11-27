@@ -94,7 +94,11 @@ export const messages = {
     "OpenBot לא הצליח להתחיל את החיבור לשרת הזה. אם הבעיה נמשכת, צאו מ-OpenBot ופתחו אותו שוב.",
   "error.remote.connectionServiceUnreachable":
     "המחשב הזה לא מצליח להגיע לשירות החיבור של OpenBot. יש לבדוק את החיבור שלו לאינטרנט. OpenBot יתחבר שוב אוטומטית.",
+  "error.remote.deviceConnectionServiceUnreachable":
+    "המכשיר הזה לא מצליח להגיע לשירות החיבור של OpenBot. יש לבדוק את החיבור שלו לאינטרנט ואת ה-VPN. OpenBot יתחבר שוב אוטומטית.",
   "error.remote.serverAnswerTimeout": "השרת לא ענה בזמן. OpenBot יתחבר שוב אוטומטית.",
+  "error.remote.signInConnectionClosed":
+    "החיבור לשרת נסגר במהלך הכניסה. אם זה חוזר, ודאו שהתאריך והשעה נכונים בשרת ובמכשיר הזה.",
   "error.remote.connectionCancelled": "החיבור המרוחק בוטל.",
   "error.remote.hostDisconnected": "החיבור לשרת נותק. יש לבדוק אם הפעולה הושלמה ואז לנסות שוב.",
   "error.remote.eventGap": "ברצף האירועים של המארח יש פער.",

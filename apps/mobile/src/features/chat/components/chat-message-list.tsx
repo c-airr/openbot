@@ -10,6 +10,7 @@ import { Button, Spinner, Typography } from "heroui-native";
 import CircleX from "lucide-react-native/icons/circle-x";
 import CornerUpRight from "lucide-react-native/icons/corner-up-right";
 import GitFork from "lucide-react-native/icons/git-fork";
+import TriangleAlert from "lucide-react-native/icons/triangle-alert";
 import {
   type ComponentProps,
   createContext,
@@ -37,6 +38,7 @@ import { GestureDetector, type PanGesture } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   Extrapolation,
+  FadeIn,
   FadeInDown,
   interpolate,
   Keyframe,
@@ -53,7 +55,7 @@ import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { ChatActivityRow, type ChatActivitySpec } from "@/features/chat/components/chat-activity-row";
 import { ChatAppSuggestion, ChatMcpSignIn } from "@/features/chat/components/chat-app-suggestion";
-import { type ApprovalDecision, approvalTitle, ChatApprovalCard } from "@/features/chat/components/chat-approval-card";
+import { type ApprovalDecision, ChatApprovalCard } from "@/features/chat/components/chat-approval-card";
 import { ChatExchangeGroup, ChatExchangeMarker } from "@/features/chat/components/chat-exchange-marker";
 import { ChatMarkdown, chatMarkdownHasTable } from "@/features/chat/components/chat-markdown";
 import { ChatMemoryChanges } from "@/features/chat/components/chat-memory-changes";
@@ -73,6 +75,7 @@ import { CHAT_ROW_GAP, type ChatMotion } from "@/features/chat/components/use-ch
 import { useFoldScrollAnchor } from "@/features/chat/components/use-fold-scroll-anchor";
 import { useMessageArrivals } from "@/features/chat/components/use-message-arrivals";
 import type { QuestionPromptController } from "@/features/chat/components/use-question-prompt";
+import { approvalTitle } from "@/features/chat/model/approval-text";
 import {
   type ChatBubbleMessage,
   type ChatMarkerGroup,
@@ -116,7 +119,7 @@ import {
   messageChipFileNames,
   messageFileDirectory,
   messageFileTarget,
-  messageLinkFileTarget,
+  messageLinkFileTargets,
   messageTargetFileName,
 } from "../model/message-file-target";
 import { messageTime } from "../model/message-time";
@@ -179,6 +182,9 @@ const FOLLOW_END = { animated: false, on: { dataChange: true, itemLayout: true, 
 const USER_MESSAGE_ENTRANCE = FadeInDown.duration(240)
   .easing(Easing.bezier(0.23, 1, 0.32, 1))
   .withInitialValues({ opacity: 0, transform: [{ translateY: 12 }] })
+  .reduceMotion(ReduceMotion.System);
+const PROGRESS_UPDATE_ENTRANCE = FadeIn.duration(220)
+  .easing(Easing.bezier(0.23, 1, 0.32, 1))
   .reduceMotion(ReduceMotion.System);
 const REPLY_SIZE = { duration: 180, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.System };
 const REPLY_APPEAR = { duration: 220, easing: Easing.bezier(0.23, 1, 0.32, 1), reduceMotion: ReduceMotion.Never };
@@ -666,8 +672,14 @@ const MessageRow = memo(function MessageRow({
         return target ? () => void openFile(target.file, target.written, attachmentOf(target.file)) : null;
       },
       link: (href) => {
-        const target = messageLinkFileTarget(href, fileAgentId);
-        return target ? () => void openFile(target, null, attachmentOf(target)) : null;
+        const target = messageLinkFileTargets(href, fileAgentId);
+        if (!target) return null;
+        return () =>
+          void openFile(
+            target.file,
+            target.written,
+            (target.written && attachmentOf(target.written)) || attachmentOf(target.file),
+          );
       },
     };
   }, [fileBody, fileAgentId, fileAttachments, openFile]);
@@ -705,6 +717,7 @@ const MessageRow = memo(function MessageRow({
     playback,
     animationEnabled: shared.animationActive && arriving,
     align: message.kind === "message" && message.author === "user" ? ("end" as const) : ("start" as const),
+    literalWordStars: message.kind === "message" && message.author === "user",
   };
   const bubbleFor = useCallback(
     (children: ReactNode, key?: string) =>
@@ -773,6 +786,8 @@ const MessageRow = memo(function MessageRow({
       <RoutineRunGroupRow key={message.id} group={message} />
     ) : message.kind === "context-reset" ? (
       <ContextResetMarkerRow key={message.id} muted={muted} />
+    ) : message.kind === "no-answer" ? (
+      <NoAnswerNotice key={message.id} text={message.text} />
     ) : message.kind === "app-suggestion" ? (
       <ChatAppSuggestion key={message.id} serverId={serverId} messageId={message.id} appId={message.appId} />
     ) : message.kind === "mcp-sign-in" ? (
@@ -801,7 +816,13 @@ const MessageRow = memo(function MessageRow({
       <Animated.View
         key={message.id}
         entering={
-          arriving && !isFirstUser ? (message.author === "user" ? USER_MESSAGE_ENTRANCE : undefined) : undefined
+          arriving && !isFirstUser
+            ? message.author === "user"
+              ? USER_MESSAGE_ENTRANCE
+              : message.progress && shared.playbackActive
+                ? PROGRESS_UPDATE_ENTRANCE
+                : undefined
+            : undefined
         }
         className={
           message.author === "user" ? "max-w-full items-end self-end gap-2" : "max-w-full items-start self-start gap-2"
@@ -1303,6 +1324,20 @@ function TurnFailure({ reason }: { reason: string | undefined }) {
       <CircleX size={14} color={String(danger)} strokeWidth={2} style={{ marginTop: 2 }} />
       <Typography.Paragraph type="body-xs" numberOfLines={6} className="shrink text-danger-text">
         {text}
+      </Typography.Paragraph>
+    </View>
+  );
+}
+
+function NoAnswerNotice({ text }: { text: string }) {
+  const { sourceText } = useText();
+  const [warning] = useCSSVariable(["--openbot-warning-text"]);
+  const notice = sourceText(text);
+  return (
+    <View accessible accessibilityLabel={notice} className="flex-row items-start gap-1.5 self-start px-1">
+      <TriangleAlert size={14} color={String(warning)} strokeWidth={2} style={{ marginTop: 2 }} />
+      <Typography.Paragraph type="body-xs" numberOfLines={6} className="shrink text-warning-text">
+        {notice}
       </Typography.Paragraph>
     </View>
   );

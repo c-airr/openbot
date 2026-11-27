@@ -79,6 +79,7 @@ export const messages = {
   "provider.aria.install": "Установить: {name}",
   "provider.aria.signIn": "Войти в {name}",
   "provider.aria.codeFallback": "Войти в {name} по коду",
+  "provider.aria.addressFallback": "Вставить адрес входа для {name}",
   "provider.aria.moreActions": "Другие действия для {name}",
 
   "provider.aria.use": "Использовать {name} в OpenBot",
@@ -109,10 +110,14 @@ export const messages = {
   "provider.codeLogin.pasteExpiresIn": "Ждём вас. Вход прекратится через {time}.",
   "provider.codeLogin.linkTitle": "Вход в {name} на другом устройстве",
   "provider.codeLogin.pageTitle": "Вход в {name}",
+  "provider.codeLogin.addressDescription": "Завершите вход в браузере. Это окно закроется, когда вход будет выполнен.",
   "provider.codeLogin.pageDescription": "Эта страница открыта в браузере на {host}. Войдите здесь.",
   "provider.codeLogin.relayStarting": "Запуск входа в {name} на {host}…",
   "provider.codeLogin.pageOpening": "Открываем страницу входа {name} на {host}…",
   "provider.codeLogin.linkStep": "Войдите в {name}. OpenBot продолжит сам.",
+  "provider.codeLogin.thisComputerDescription":
+    "Откройте эту ссылку в браузере на этом компьютере. OpenBot ждёт здесь.",
+  "provider.codeLogin.copyLink": "Копировать ссылку",
   "provider.codeLogin.chatgptDeviceSetting":
     "В ChatGPT на компьютере откройте настройки безопасности и включите вход по коду устройства для Codex. Для рабочего аккаунта его включает администратор рабочего пространства.",
   "provider.useApp.title": "Подключите {name} в приложении OpenBot",
@@ -249,6 +254,7 @@ export const messages = {
   "provider.account.apiKey": "API-ключ",
   "provider.account.listLabel": "Аккаунты {name}",
   "provider.account.usedBy": "Используют: {agents}",
+  "provider.account.sameEmail": "Тот же адрес эл. почты, что у {name}",
   "provider.account.failed": "Ошибка входа",
   "provider.account.moreActions": "Другие действия для {name}",
   "provider.account.renameLabel": "Имя: {name}",
@@ -276,6 +282,11 @@ export const messages = {
   "provider.account.pool": "Объединить аккаунты",
   "provider.account.poolDescription":
     "Агенты используют один аккаунт, пока он не приблизится к лимиту, а затем аккаунт, чей лимит сбросится раньше всех.",
+  "provider.account.poolStrategy": "Использование аккаунтов",
+  "provider.account.poolFillFirst": "Сначала заполнять",
+  "provider.account.poolSpread": "Распределять",
+  "provider.account.poolSpreadDescription":
+    "Агенты распределяются по аккаунтам, у которых осталось больше всего лимита. Агент меняет аккаунт, только когда у другого аккаунта намного больше запаса.",
   "provider.account.inUse": "Используется",
   "provider.account.notInPool": "Вне пула",
   "provider.account.leaveOutOfPool": "Исключить из пула",

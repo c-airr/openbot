@@ -362,8 +362,12 @@ export class OpenBotDatabase {
     return this.#conversationWrites.appendConversationMessage(input);
   }
 
-  changedConversationMessages(threadId: string, messages: readonly ConversationMessage[]): ConversationMessage[] {
-    return this.#conversationWrites.changedConversationMessages(threadId, messages);
+  changedConversationMessages(
+    threadId: string,
+    messages: readonly ConversationMessage[],
+    known?: ReadonlyMap<string, ConversationMessage>,
+  ): ConversationMessage[] {
+    return this.#conversationWrites.changedConversationMessages(threadId, messages, known);
   }
 
   persistConversationChanges(input: {
@@ -672,8 +676,9 @@ export class OpenBotDatabase {
     changes: MailboxProjectionChanges,
     eventType: string,
     fileDeletions: string[] = [],
+    writeIdempotency = true,
   ): boolean {
-    return this.#mailbox.applyMailboxChanges(commandId, state, changes, eventType, fileDeletions);
+    return this.#mailbox.applyMailboxChanges(commandId, state, changes, eventType, fileDeletions, writeIdempotency);
   }
 
   pendingFileDeletions(): Array<{ id: string; path: string }> {

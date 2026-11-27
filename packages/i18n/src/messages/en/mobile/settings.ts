@@ -156,7 +156,7 @@ export const messages = defineMessages("mobile.settings", {
     "This also ends the account’s active remote connections. The device can sign in again.",
   "mobile.settings.sessions.disconnect": "Disconnect",
   "mobile.settings.dictation.footer":
-    "The language you speak to the phone recognizer, in a voice conversation and when you dictate. Automatic uses the first language in your phone settings that it supports.",
+    "The language you speak to the phone recognizer, in a voice conversation and when you dictate. Automatic uses the language of the keyboard you type with, then the first language in your phone settings that it supports.",
   "mobile.settings.dictation.automatic": "Automatic",
   "mobile.settings.appearance.title": "Appearance",
   "mobile.settings.appearance.footer": "System follows your device’s appearance.",
@@ -370,6 +370,9 @@ export const messages = defineMessages("mobile.settings", {
   "mobile.settings.conversations.fullQualityPhotos": "Send photos at full quality",
   "mobile.settings.conversations.fullQualityPhotosFooter":
     "When this is off, the app sends a smaller copy of each photo, up to 2048 pixels on the long side. It arrives faster on a slow connection. Turn this on to send the original photo.",
+  "mobile.settings.conversations.fullScreenCamera": "Use the full-screen camera",
+  "mobile.settings.conversations.fullScreenCameraFooter":
+    "When this is on, Camera opens the system camera, with zoom and all lenses. When this is off, a small camera opens in the chat.",
   "mobile.settings.profile.nameUnsafe": "Remove line breaks and control characters from your name.",
   "mobile.settings.profile.nameLength": "Use 3–20 characters for your display name.",
   "mobile.settings.profile.saveFailed": "Could not save changes. Try again.",

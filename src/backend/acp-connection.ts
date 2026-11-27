@@ -8,7 +8,7 @@ import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect } from "effect";
 import { AgentProcessExitError, type DiagnosticOrigin } from "./agent-client";
 import { type AgentCliInfo, cliPathEnvironment, cliSpawnTarget } from "./cli";
-import { LineTooLongError, limitLineLength } from "./jsonl";
+import { LineTooLongError, limitLineLength, PROVIDER_LINE_LIMIT_BYTES } from "./jsonl";
 import type { SpawnTarget } from "./process-confinement";
 import {
   type ProviderClientOperationError,
@@ -36,6 +36,7 @@ export interface AcpConnectionOptions {
   env: Record<string, string>;
   extraEnv?: (() => Record<string, string>) | undefined;
   confine?: ((target: SpawnTarget) => SpawnTarget) | undefined;
+  causeLine?: ((message: string) => boolean) | undefined;
   privateTemp?: Omit<ProviderTempOptions, "provider"> | undefined;
   label(): string;
   redact(text: string): string;
@@ -121,6 +122,7 @@ export class AcpConnection {
       Writable.toWeb(child.stdin) as unknown as WritableStream<Uint8Array>,
       // biome-ignore lint/nursery/noUnsafeTypeAssertion: Node and DOM declare the same Web Stream ABI with incompatible generic variance.
       Readable.toWeb(stdout) as unknown as ReadableStream<Uint8Array>,
+      { maxMessageBytes: PROVIDER_LINE_LIMIT_BYTES },
     );
     const peek = this.options.peek;
     const stream = peek
@@ -136,14 +138,20 @@ export class AcpConnection {
           ),
         }
       : lines;
-    this.#connection = new ClientSideConnection(() => this.options.client(), stream);
+    const connection = new ClientSideConnection(() => this.options.client(), stream);
+    this.#connection = connection;
+    connection.signal.addEventListener("abort", () => this.#connectionLost(connection.signal.reason, child), {
+      once: true,
+    });
     let lastDiagnostic: string | null = null;
     let crashDiagnostic: string | null = null;
+    let causeDiagnostic: string | null = null;
     const diagnostics = createDiagnosticStream({
       redact: (text) => this.options.redact(text),
       emit: (message) => {
         lastDiagnostic = message;
         if (crashDiagnostic === null && CRASH_LINE.test(message)) crashDiagnostic = message;
+        if (causeDiagnostic === null && this.options.causeLine?.(message)) causeDiagnostic = message;
         this.options.diagnostic(message, { duringStop: this.#stoppedProcesses.has(child), stderr: true });
       },
     });
@@ -157,7 +165,7 @@ export class AcpConnection {
         ended,
         Effect.succeed({
           ending: signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`,
-          detail: crashDiagnostic ?? lastDiagnostic,
+          detail: crashDiagnostic ?? causeDiagnostic ?? lastDiagnostic,
         }),
       );
     });
@@ -247,6 +255,12 @@ export class AcpConnection {
       null,
       { cause: error },
     );
+  }
+
+  #connectionLost(reason: unknown, child: ChildProcessWithoutNullStreams): void {
+    if (this.#process !== child || child.exitCode !== null || this.#stopping || isClosedConnection(reason)) return;
+    this.#fail(reason instanceof Error ? reason : new Error(String(reason)), child);
+    Effect.runFork(endProcess(child));
   }
 
   #fail(error: Error, child: ChildProcessWithoutNullStreams): void {
